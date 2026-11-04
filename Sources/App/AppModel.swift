@@ -1,6 +1,12 @@
 import Foundation
 import SwiftUI
 import Combine
+import os
+
+enum WheelEventLog {
+    static let logger = Logger(subsystem: "com.ipodclassic.app", category: "wheel")
+    static func log(_ message: String) { logger.notice("\(message, privacy: .public)") }
+}
 
 /// A single click-wheel input. The wheel view produces these; the active
 /// screen on the navigation stack consumes them.
