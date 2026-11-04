@@ -69,6 +69,13 @@ enum Route: Hashable {
     case timer
     case stopwatch
 
+    // Extras
+    case extras
+    case flashlight
+
+    // Search
+    case musicSearch
+
     // Calendar
     case calendar
 
@@ -133,6 +140,9 @@ final class AppModel {
         case "notes": return .notes
         case "clocks": return .clocks
         case "calendar": return .calendar
+        case "extras": return .extras
+        case "flashlight": return .flashlight
+        case "search": return .musicSearch
         case "alarm": return .alarm
         case "timer": return .timer
         case "stopwatch": return .stopwatch

@@ -13,6 +13,7 @@ struct CameraScreen: View {
     @State private var flashOverlay = false
     @State private var savedOverlay = false
     @State private var lastMenuTap = Date.distantPast
+    @State private var recordToast = ""
 
     private var aspect: (label: String, value: CGFloat) {
         AppSettings.aspectRatios[min(settings.cameraAspectIndex, AppSettings.aspectRatios.count - 1)]
@@ -22,14 +23,22 @@ struct CameraScreen: View {
         ZStack {
             if model.camera.deviceAvailable {
                 // Aspect-cropped live preview: resizing with the ratio so
-                // changing 1:1/4:3/16:9 visibly reframes the view.
+                // changing 1:1/4:3/16:9 visibly reframes the view. The chosen
+                // effect tints the preview (and is baked into photos).
                 CameraSessionPreview(session: model.camera.session)
                     .aspectRatio(aspect.value, contentMode: .fit)
+                    .saturation(model.camera.effect.saturation)
+                    .hueRotation(.degrees(model.camera.effect.hueRotation))
+                    .overlay {
+                        if let tint = model.camera.effect.overlayColor {
+                            tint
+                        }
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black)
                     .clipped()
                     .animation(.easeInOut(duration: 0.2), value: aspect.value)
-                controlHints
+                statusOverlay
             } else {
                 PaperBackground()
                 PromptPane(symbol: "camera.fill", text: "Camera is unavailable in the Simulator. Run on a device.")
@@ -47,7 +56,7 @@ struct CameraScreen: View {
             if savedOverlay {
                 VStack {
                     Spacer()
-                    Text("Saved to Photos")
+                    Text(recordToast.isEmpty ? "Saved to Photos" : recordToast)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 10)
@@ -66,28 +75,46 @@ struct CameraScreen: View {
         }
         .onDisappear {
             model.transportClaimedByScreen = false
+            if model.camera.isRecording { model.camera.stopRecording() }
             model.camera.stop()
         }
     }
 
     // MARK: Overlays
 
-    private var controlHints: some View {
+    /// REC indicator (video mode) over the aspect badge.
+    private var statusOverlay: some View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
-                Text(aspect.label)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.white)
+                if model.camera.videoMode {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(model.camera.isRecording ? Color.red : Color.red.opacity(0.35))
+                            .frame(width: 7, height: 7)
+                        Text(model.camera.isRecording ? TimeFormat.mss(Double(model.camera.recordingSeconds)) : "READY")
+                            .font(.system(size: 10, weight: .bold).monospacedDigit())
+                            .foregroundStyle(Color.white)
+                    }
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.55)))
                     .padding(.trailing, 8)
                     .padding(.top, 4)
+                } else {
+                    Text(aspect.label)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.55)))
+                        .padding(.trailing, 8)
+                        .padding(.top, 4)
+                }
             }
             Spacer()
             HStack(spacing: 10) {
-                hint("Center", "Capture")
+                hint("Center", model.camera.videoMode ? (model.camera.isRecording ? "Stop" : "Record") : "Capture")
                 hint("◀ ▶", "Ratio")
                 hint("Hold ◀ ▶", "Flip")
                 hint("MENU", "Options")
@@ -116,6 +143,8 @@ struct CameraScreen: View {
     private var optionsItems: [MenuItem] {
         [
             MenuItem(id: "flash", title: "Flash", detail: flashModes[min(settings.cameraFlash, 2)].0, showsChevron: false),
+            MenuItem(id: "mode", title: "Mode", detail: model.camera.videoMode ? "Video" : "Photo", showsChevron: false),
+            MenuItem(id: "effect", title: "Photo Effect", detail: model.camera.effect.rawValue, showsChevron: false),
             MenuItem(id: "back", title: "Back Camera", detail: settings.cameraFront ? nil : "✓", showsChevron: false),
             MenuItem(id: "front", title: "Selfie Camera", detail: settings.cameraFront ? "✓" : nil, showsChevron: false),
             MenuItem(id: "ratio", title: "Aspect Ratio", detail: aspect.label, showsChevron: false),
@@ -147,6 +176,8 @@ struct CameraScreen: View {
         case .select:
             if optionsOpen {
                 activateOption()
+            } else if model.camera.videoMode {
+                toggleRecording()
             } else {
                 capturePhoto()
             }
@@ -191,6 +222,12 @@ struct CameraScreen: View {
         switch id {
         case "flash":
             settings.cameraFlash = (settings.cameraFlash + 1) % 3
+        case "mode":
+            model.camera.setVideoMode(!model.camera.videoMode)
+        case "effect":
+            let all = CameraEffect.allCases
+            let next = all[(all.firstIndex(of: model.camera.effect) ?? 0 + 1) % all.count]
+            model.camera.effect = next
         case "back":
             if settings.cameraFront { model.camera.setFront(false); settings.cameraFront = false }
         case "front":
@@ -199,6 +236,22 @@ struct CameraScreen: View {
             settings.cameraAspectIndex = (settings.cameraAspectIndex + 1) % AppSettings.aspectRatios.count
         default:
             break
+        }
+    }
+
+    private func toggleRecording() {
+        if model.camera.isRecording {
+            model.camera.stopRecording()
+        } else {
+            model.camera.startRecording { ok in
+                recordToast = ok ? "Video Saved to Photos" : "Recording Failed"
+                withAnimation(.easeOut(duration: 0.2)) { savedOverlay = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                    withAnimation(.easeIn(duration: 0.3)) { savedOverlay = false; recordToast = "" }
+                }
+            }
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 1.0)
         }
     }
 
@@ -212,8 +265,9 @@ struct CameraScreen: View {
         Task {
             guard let raw = await model.camera.capture(flashMode: flash) else { return }
             let cropped = CameraCapture.crop(raw, toRatio: aspect.value)
+            let processed = model.camera.effect.apply(to: cropped)
             do {
-                try await model.photos.saveToLibrary(cropped)
+                try await model.photos.saveToLibrary(processed)
                 withAnimation(.easeOut(duration: 0.2)) { savedOverlay = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     withAnimation(.easeIn(duration: 0.3)) { savedOverlay = false }

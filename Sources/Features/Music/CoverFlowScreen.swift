@@ -2,13 +2,14 @@ import SwiftUI
 import MusicKit
 
 /// Cover Flow: tilted album covers with reflection, alphabet index bar,
-/// artist/album captions, and the classic numbered track overlay on center.
+/// artist/album captions — center click flips the cover like the old iPods
+/// to reveal the track list on its back.
 struct CoverFlowScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
     @State private var index = 0
-    @State private var overlayOpen = false
+    @State private var flipped = false
     @State private var overlaySelection = 0
     @State private var overlayTracks: [Song] = []
 
@@ -19,18 +20,10 @@ struct CoverFlowScreen: View {
     }
 
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                AlphabetBar(albums: albums, index: index)
-                flowArea
-                caption
-            }
-            if overlayOpen {
-                ModalHost {
-                    trackOverlay
-                }
-                .zIndex(2)
-            }
+        VStack(spacing: 0) {
+            AlphabetBar(albums: albums, index: index)
+            flowArea
+            caption
         }
         .onWheel { handle($0) }
         .onAppear {
@@ -53,12 +46,24 @@ struct CoverFlowScreen: View {
                 ForEach(Array(albums.enumerated()), id: \.element.id) { i, album in
                     let offset = Double(i - index)
                     if abs(offset) <= 4 {
-                        FlowCover(album: album, size: coverSize, offset: offset)
-                            .position(
-                                x: w / 2 + CGFloat(offset) * w * (abs(offset) > 0 ? 0.42 : 0.0),
-                                y: h * 0.52
-                            )
-                            .opacity(offset == 0 ? 1 : 0.92)
+                        Group {
+                            if offset == 0 {
+                                FlippableCover(
+                                    album: album,
+                                    size: coverSize,
+                                    flipped: flipped,
+                                    tracks: overlayTracks,
+                                    trackSelection: overlaySelection
+                                )
+                            } else {
+                                FlowCover(album: album, size: coverSize, offset: offset)
+                            }
+                        }
+                        .position(
+                            x: w / 2 + CGFloat(offset) * w * (abs(offset) > 0 ? 0.42 : 0.0),
+                            y: h * 0.52
+                        )
+                        .opacity(offset == 0 ? 1 : 0.92)
                     }
                 }
             }
@@ -83,32 +88,20 @@ struct CoverFlowScreen: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: Track overlay
+    // MARK: Flip
 
-    private var trackOverlay: some View {
-        ModalPanel(title: currentAlbum?.title ?? "", onClose: { closeOverlay() }) {
-            MenuList(
-                items: overlayTracks.enumerated().map { i, s in
-                    MenuItem(id: s.id.rawValue, title: s.title)
-                },
-                selection: overlaySelection, compact: true, numbered: true
-            )
-            .padding(.top, 4)
-        }
-    }
-
-    private func openOverlay() async {
+    private func flip() async {
         guard let album = currentAlbum else { return }
         overlayTracks = model.music.cachedTracks(forAlbum: album)
         if overlayTracks.isEmpty {
             overlayTracks = await model.music.tracks(forAlbum: album)
         }
         overlaySelection = 0
-        withAnimation(.easeOut(duration: 0.2)) { overlayOpen = true }
+        withAnimation(.easeInOut(duration: 0.45)) { flipped = true }
     }
 
-    private func closeOverlay() {
-        withAnimation(.easeIn(duration: 0.15)) { overlayOpen = false }
+    private func unflip() {
+        withAnimation(.easeInOut(duration: 0.4)) { flipped = false }
     }
 
     // MARK: Input
@@ -116,29 +109,111 @@ struct CoverFlowScreen: View {
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            if overlayOpen {
+            if flipped {
                 moveListSelection(&overlaySelection, count: overlayTracks.count, delta: d, settings: settings)
             } else {
                 moveListSelection(&index, count: albums.count, delta: d, settings: settings)
             }
         case .select:
-            if overlayOpen {
+            if flipped {
                 if overlayTracks.indices.contains(overlaySelection) {
                     model.player.play(overlayTracks, startingAt: overlaySelection)
                     model.push(.nowPlaying)
                 }
             } else {
-                Task { await openOverlay() }
+                Task { await flip() }
             }
         case .menu:
-            if overlayOpen {
-                closeOverlay()
+            if flipped {
+                unflip()
             } else {
                 model.pop()
             }
+        case .menuHold:
+            if flipped { unflip() }
+            model.popToRoot()
         default:
             break
         }
+    }
+}
+
+/// Center cover that flips in 3D to show the track list on its back.
+private struct FlippableCover: View {
+    let album: Album
+    let size: CGFloat
+    let flipped: Bool
+    let tracks: [Song]
+    let trackSelection: Int
+
+    var body: some View {
+        ZStack {
+            front
+                .opacity(flipped ? 0 : 1)
+            back
+                .opacity(flipped ? 1 : 0)
+        }
+        .rotation3DEffect(
+            .degrees(flipped ? 180 : 0),
+            axis: (x: 0, y: 1, z: 0),
+            perspective: 0.6
+        )
+        .shadow(color: .black.opacity(0.25), radius: 5, y: 3)
+    }
+
+    private var front: some View {
+        VStack(spacing: 2) {
+            ArtworkView(artwork: album.artwork, width: size, height: size, placeholderSymbol: "square.stack")
+                .frame(width: size, height: size)
+                .overlay(Rectangle().stroke(Color.black.opacity(0.4), lineWidth: 0.7))
+            ArtworkView(artwork: album.artwork, width: size, height: size, placeholderSymbol: "square.stack")
+                .frame(width: size, height: size)
+                .scaleEffect(y: -1)
+                .opacity(0.22)
+                .mask(
+                    LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: size * 0.35)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                )
+                .frame(height: size * 0.22, alignment: .top)
+                .clipped()
+        }
+    }
+
+    /// The "back cover": paper card with the numbered track list.
+    private var back: some View {
+        VStack(spacing: 0) {
+            Text(album.title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .frame(height: 20)
+                .frame(maxWidth: .infinity)
+                .background(BrushedMetal())
+                .overlay(alignment: .bottom) { Rectangle().fill(Theme.barBorder).frame(height: 0.7) }
+
+            if tracks.isEmpty {
+                Spacer()
+                Image(systemName: "music.note")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Theme.inkDim)
+                Spacer()
+            } else {
+                MenuList(
+                    items: tracks.enumerated().map { i, s in
+                        MenuItem(id: s.id.rawValue, title: s.title, showsChevron: false)
+                    },
+                    selection: trackSelection,
+                    compact: true,
+                    numbered: true
+                )
+            }
+        }
+        .frame(width: size, height: size)
+        .background(PaperBackground())
+        .overlay(Rectangle().stroke(Color.black.opacity(0.4), lineWidth: 0.7))
+        .scaleEffect(x: -1) // mirrored: reads correctly once the card is flipped
     }
 }
 

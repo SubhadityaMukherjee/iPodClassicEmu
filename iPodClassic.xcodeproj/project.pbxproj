@@ -37,6 +37,7 @@
 		A467174044A38878D19727C9 /* NotesScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0ED83C7A1A44EB591609791 /* NotesScreens.swift */; };
 		A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA58EF527B138B0EF70E505F /* WheelHaptics.swift */; };
 		AE14F2C8C6963CBBCAE6E874 /* ClocksScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3471A066596E32FEE25ED63B /* ClocksScreens.swift */; };
+		AE5B4F6578F64B17100A878D /* ExtrasScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 366D24A2D067433E923558F7 /* ExtrasScreens.swift */; };
 		AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B37641D1E5AA57A45A02D07 /* TimeFormat.swift */; };
 		BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */; };
 		CCE5269ADD98979ED5F089DB /* ClockFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE0B67D71510C6279340644 /* ClockFace.swift */; };
@@ -82,6 +83,7 @@
 		2803B556B5B7050105E7CFB4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		2FE4F74ACAB7D2FE7FB6BD26 /* TimerStopwatchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerStopwatchModels.swift; sourceTree = "<group>"; };
 		3471A066596E32FEE25ED63B /* ClocksScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClocksScreens.swift; sourceTree = "<group>"; };
+		366D24A2D067433E923558F7 /* ExtrasScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtrasScreens.swift; sourceTree = "<group>"; };
 		38EC3AA5879EA27E592945C2 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		3A54E7E9C330E86065492453 /* CoverFlowScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverFlowScreen.swift; sourceTree = "<group>"; };
 		3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iPodClassic.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -270,6 +272,7 @@
 				B9F9C92B05B4179E0986509A /* Calendar */,
 				FE640033F63E6A463776F655 /* Camera */,
 				462E537FD115E221FFB5BA1B /* Clocks */,
+				BADCD9CB3EEDAAEF1484DFF8 /* Extras */,
 				379833D417235985B4B1C650 /* Home */,
 				C06BA3B35B3878AC2415FFAE /* Music */,
 				78BB416E64B1F2B6F055B8E2 /* Notes */,
@@ -286,6 +289,14 @@
 				CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */,
 			);
 			path = Calendar;
+			sourceTree = "<group>";
+		};
+		BADCD9CB3EEDAAEF1484DFF8 /* Extras */ = {
+			isa = PBXGroup;
+			children = (
+				366D24A2D067433E923558F7 /* ExtrasScreens.swift */,
+			);
+			path = Extras;
 			sourceTree = "<group>";
 		};
 		C06BA3B35B3878AC2415FFAE /* Music */ = {
@@ -490,6 +501,7 @@
 				AE14F2C8C6963CBBCAE6E874 /* ClocksScreens.swift in Sources */,
 				035595170CCC029FAD33B040 /* CoverFlowScreen.swift in Sources */,
 				E2D217A7A044EB9CB4696610 /* DeviceView.swift in Sources */,
+				AE5B4F6578F64B17100A878D /* ExtrasScreens.swift in Sources */,
 				EEB1F20EF65FFEEE9D31DF66 /* HomeScreen.swift in Sources */,
 				E00856FD393CADE5D770BA48 /* MediaVolumeController.swift in Sources */,
 				54710389A162814D393AAE41 /* MenuComponents.swift in Sources */,

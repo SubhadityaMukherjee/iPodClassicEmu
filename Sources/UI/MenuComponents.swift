@@ -74,8 +74,15 @@ struct MenuList: View {
 
     var body: some View {
         GeometryReader { geo in
-            let rowH = rowHeight(for: geo.size.width) * settings.fontMultiplier
-            let visible = max(1, Int((geo.size.height / rowH).rounded(.down)))
+            let m = settings.fontMultiplier
+            let baseRowH: CGFloat = {
+                switch style {
+                case .normal: return compact ? 28 : 33
+                case .twoLine: return compact ? 38 : 43
+                case .thumbnail: return compact ? 40 : 47
+                }
+            }() * m
+            let visible = max(1, Int((geo.size.height / baseRowH).rounded(.down)))
             let start = max(0, min(selection - max(0, visible - 3), max(0, items.count - visible)))
             let slice = items.dropFirst(start).prefix(visible)
 
@@ -83,7 +90,7 @@ struct MenuList: View {
                 VStack(spacing: 0) {
                     ForEach(Array(slice.enumerated()), id: \.element.id) { offset, item in
                         MenuRow(item: item, selected: start + offset == selection, compact: compact, index: numbered ? start + offset + 1 : nil, style: style, thumb: thumbProvider?(item))
-                            .frame(height: rowH)
+                            .frame(height: rowHeight(for: item) * m)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -102,7 +109,11 @@ struct MenuList: View {
 
     var thumbProvider: ((MenuItem) -> Artwork?)? = nil
 
-    private func rowHeight(for width: CGFloat) -> CGFloat {
+    /// Row height for a specific item (action rows stay single-line bands).
+    private func rowHeight(for item: MenuItem) -> CGFloat {
+        if item.isActionRow {
+            return compact ? 28 : 33
+        }
         switch style {
         case .normal: return compact ? 28 : 33
         case .twoLine: return compact ? 38 : 43
@@ -142,13 +153,14 @@ struct MenuRow: View {
 
     var body: some View {
         let m = settings.fontMultiplier
+        let effectiveStyle: MenuRowStyle = item.isActionRow ? .normal : style
         HStack(spacing: 0) {
-            if style == .thumbnail {
+            if effectiveStyle == .thumbnail {
                 thumbnail
                     .padding(.leading, 3)
                     .padding(.trailing, 5)
             }
-            if let index, style != .thumbnail {
+            if let index, effectiveStyle != .thumbnail {
                 Text("\(index)")
                     .font(.system(size: compact ? 12 : 13, weight: .semibold))
                     .foregroundStyle(selected ? Color.white.opacity(0.85) : Theme.inkDim)
@@ -156,10 +168,10 @@ struct MenuRow: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(item.title)
-                    .font(Theme.row((compact ? 16.5 : (style == .normal ? 18.5 : 17)) * m))
+                    .font(Theme.row((compact ? 16.5 : (effectiveStyle == .normal ? 18.5 : 17)) * m))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if item.subtitle != nil && style != .normal {
+                if item.subtitle != nil && effectiveStyle != .normal {
                     Text(item.subtitle!)
                         .font(.system(size: (compact ? 12.5 : 13.5) * m, weight: .medium))
                         .foregroundStyle(selected ? Color.white.opacity(0.82) : Theme.inkDim)
@@ -167,7 +179,7 @@ struct MenuRow: View {
                         .padding(.top, 1)
                 }
             }
-            .padding(.leading, index == nil && style == .normal ? 6 : 2)
+            .padding(.leading, index == nil && effectiveStyle == .normal ? 6 : 2)
             Spacer(minLength: 4)
             if let detail = item.detail {
                 Text(detail)

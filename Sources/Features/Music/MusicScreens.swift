@@ -17,6 +17,7 @@ struct MusicMenuScreen: View {
             MenuItem(id: "songs", title: "Songs"),
             MenuItem(id: "genres", title: "Genres"),
             MenuItem(id: "recent", title: "Recent"),
+            MenuItem(id: "search", title: "Search", symbol: "magnifyingglass", showsChevron: false, isActionRow: true),
             MenuItem(id: "nowplaying", title: "Now Playing"),
         ]
     }
@@ -50,6 +51,7 @@ struct MusicMenuScreen: View {
     private func select() {
         switch items[selection].id {
         case "coverflow": model.push(.coverFlow)
+        case "search": model.push(.musicSearch)
         case "playlists": model.push(.musicPlaylists)
         case "artists": model.push(.musicArtists)
         case "albums": model.push(.musicAlbums)
@@ -175,14 +177,28 @@ struct MusicListScreen: View {
 
     // MARK: Entries (sorted)
 
+    /// Swift's sort isn't stable — without an id tiebreaker, equal-keyed
+    /// rows reshuffled under the selection on every wheel tick, which felt
+    /// like broken scrolling in All Songs.
+    private func sortedBy<T>(_ list: [T], key: (T) -> String, descending: Bool = false) -> [T] {
+        func idOf(_ x: T) -> String {
+            (x as? Song)?.id.rawValue ?? (x as? Album)?.id.rawValue ?? "\(x as? String ?? "")" + String(describing: x)
+        }
+        return list.sorted { a, b in
+            let ka = key(a).lowercased(), kb = key(b).lowercased()
+            if ka == kb { return idOf(a) < idOf(b) }
+            return descending ? ka > kb : ka < kb
+        }
+    }
+
     private var sortedSongs: [Song] {
         let list = model.music.songs
         guard kind == .songs else { return list }
         switch settings.songSort {
-        case 1: return list.sorted { $0.artistName.localizedCaseInsensitiveCompare($1.artistName) == .orderedAscending }
-        case 2: return list.sorted { ($0.duration ?? 0) < ($1.duration ?? 0) }
-        case 3: return list.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
-        default: return list.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case 1: return sortedBy(list, key: { $0.artistName })
+        case 2: return list.sorted { ($0.duration ?? 0) != ($1.duration ?? 0) ? ($0.duration ?? 0) < ($1.duration ?? 0) : $0.id.rawValue < $1.id.rawValue }
+        case 3: return list.sorted { ($0.releaseDate ?? .distantPast) != ($1.releaseDate ?? .distantPast) ? ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) : $0.id.rawValue < $1.id.rawValue }
+        default: return sortedBy(list, key: { $0.title })
         }
     }
 
@@ -190,9 +206,9 @@ struct MusicListScreen: View {
         let list = kind == .recent ? model.music.recentlyAdded : model.music.albums
         guard kind == .albums else { return list }
         switch settings.albumSort {
-        case 1: return list.sorted { $0.artistName.localizedCaseInsensitiveCompare($1.artistName) == .orderedAscending }
-        case 2: return list.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
-        default: return list.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case 1: return sortedBy(list, key: { $0.artistName })
+        case 2: return list.sorted { ($0.releaseDate ?? .distantPast) != ($1.releaseDate ?? .distantPast) ? ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) : $0.id.rawValue < $1.id.rawValue }
+        default: return sortedBy(list, key: { $0.title })
         }
     }
 
@@ -200,19 +216,19 @@ struct MusicListScreen: View {
         switch kind {
         case .artists:
             return model.music.artists
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                .sorted { $0.name.lowercased() != $1.name.lowercased() ? $0.name.lowercased() < $1.name.lowercased() : $0.id.rawValue < $1.id.rawValue }
                 .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
         case .albums:
             return sortedAlbums.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
         case .songs:
-            return sortedSongs.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
+            return sortedSongs.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName, showsChevron: false) }
         case .genres:
             return model.music.genres
-                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                .sorted { $0.lowercased() != $1.lowercased() ? $0.lowercased() < $1.lowercased() : $0 < $1 }
                 .map { MenuItem(id: $0, title: $0) }
         case .playlists:
             return model.music.playlists
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                .sorted { $0.name.lowercased() != $1.name.lowercased() ? $0.name.lowercased() < $1.name.lowercased() : $0.id.rawValue < $1.id.rawValue }
                 .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
         case .recent:
             return model.music.recentlyAdded.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
@@ -507,7 +523,7 @@ struct AlbumDetailScreen: View {
 
     private var trackItems: [MenuItem] {
         tracks.enumerated().map { i, s in
-            MenuItem(id: "track.\(s.id.rawValue)", title: s.title, subtitle: s.artistName)
+            MenuItem(id: "track.\(s.id.rawValue)", title: s.title, subtitle: s.artistName, showsChevron: false)
         }
     }
 
@@ -603,7 +619,7 @@ struct PlaylistDetailScreen: View {
     var body: some View {
         MenuList(
             items: headerItems + tracks.enumerated().map { i, s in
-                MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.artistName)
+                MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.artistName, showsChevron: false)
             },
             selection: selection, emptyText: "No Songs", style: .twoLine
         )

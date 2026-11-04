@@ -15,9 +15,9 @@ struct HomeScreen: View {
             MenuItem(id: "camera", title: "Camera"),
             MenuItem(id: "memos", title: "Voice Memos"),
             MenuItem(id: "notes", title: "Notes"),
-            MenuItem(id: "clocks", title: "Clocks"),
-            MenuItem(id: "calendar", title: "Calendar"),
+            MenuItem(id: "extras", title: "Extras"),
             MenuItem(id: "settings", title: "Settings"),
+            MenuItem(id: "shuffleAll", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
             MenuItem(id: "nowplaying", title: "Now Playing"),
         ]
     }
@@ -50,9 +50,13 @@ struct HomeScreen: View {
         case "camera": model.push(.camera)
         case "memos": model.push(.recorder)
         case "notes": model.push(.notes)
-        case "clocks": model.push(.clocks)
-        case "calendar": model.push(.calendar)
+        case "extras": model.push(.extras)
         case "settings": model.push(.settings)
+        case "shuffleAll":
+            let songs = model.music.songs
+            guard !songs.isEmpty else { return }
+            model.player.shufflePlay(songs)
+            model.push(.nowPlaying)
         case "nowplaying": model.push(.nowPlaying)
         default: break
         }
@@ -88,8 +92,10 @@ struct HomeScreen: View {
             glyph("square.and.pencil")
         case "clocks":
             LiveClockPreview()
-        case "calendar":
-            glyph("calendar")
+        case "extras":
+            glyph("sparkles")
+        case "shuffleAll":
+            glyph("shuffle")
         case "settings":
             glyph("gearshape.fill")
         case "nowplaying":

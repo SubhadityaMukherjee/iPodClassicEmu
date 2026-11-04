@@ -53,7 +53,7 @@ struct TitleBarView: View {
 
             playGlyph
 
-            BatteryIcon(level: model.batteryLevel)
+            BatteryIcon(level: model.batteryLevel, charging: model.batteryCharging)
         }
         .padding(.horizontal, 7)
         .frame(height: 23)
@@ -99,9 +99,10 @@ struct PlayTriangle: View {
     }
 }
 
-/// Blue-fill battery, classic style.
+/// Blue-fill battery, classic style (bolt overlay while charging).
 struct BatteryIcon: View {
     let level: Double  // 0…1; < 0 = unknown
+    var charging = false
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -115,11 +116,18 @@ struct BatteryIcon: View {
             Group {
                 if level >= 0 {
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(level <= 0.2 ? Color(red: 0.9, green: 0.25, blue: 0.2) : Color(red: 0.30, green: 0.62, blue: 0.24))
+                        .fill(charging ? Color(red: 0.20, green: 0.68, blue: 0.30) : level <= 0.2 ? Color(red: 0.9, green: 0.25, blue: 0.2) : Color(red: 0.30, green: 0.62, blue: 0.24))
                         .frame(width: max(1.5, 20 * level), height: 8)
                 }
             }
             .padding(.leading, 1)
+            if charging {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 7.5, weight: .black))
+                    .foregroundStyle(Color(white: 0.95))
+                    .shadow(color: .black.opacity(0.5), radius: 0.5)
+                    .frame(width: 22, alignment: .center)
+            }
         }
     }
 }

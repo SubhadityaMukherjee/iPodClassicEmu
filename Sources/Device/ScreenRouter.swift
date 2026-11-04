@@ -9,7 +9,7 @@ struct ScreenRouter: View {
 
     static func title(for model: AppModel) -> String {
         switch model.stack.last {
-        case .home: return "iPodClassic"
+        case .home: return "iPod"
         case .music: return "Music"
         case .musicArtists: return "Artists"
         case .musicAlbums: return "Albums"
@@ -32,7 +32,10 @@ struct ScreenRouter: View {
         case .notes: return "Notes"
         case .noteEditor: return "Edit Note"
         case .clocks: return "Clocks"
+        case .extras: return "Extras"
+        case .flashlight: return "Flashlight"
         case .calendar: return "Calendar"
+        case .musicSearch: return "Search"
         case .alarm: return "Alarm Clock"
         case .timer: return "Timer"
         case .stopwatch: return "Stopwatch"
@@ -41,7 +44,7 @@ struct ScreenRouter: View {
         case .settingsDisplay: return "Display"
         case .settingsPlayback: return "Playback"
         case .settingsAbout: return "About"
-        case nil: return "iPodClassic"
+        case nil: return "iPod"
         }
     }
 
@@ -95,6 +98,9 @@ struct ScreenRouter: View {
         case .noteEditor(let name): NoteEditorScreen(fileName: name)
         // Clocks
         case .clocks: ClocksMenuScreen()
+        case .extras: ExtrasScreen()
+        case .flashlight: FlashlightScreen()
+        case .musicSearch: MusicSearchScreen()
         case .calendar: CalendarScreen()
         case .alarm: AlarmScreen()
         case .timer: TimerScreen()
@@ -113,5 +119,13 @@ extension AppModel {
     var batteryLevel: Double {
         let l = UIDevice.current.batteryLevel
         return l >= 0 ? Double(l) : 1.0
+    }
+
+    /// True while the device is plugged in and charging.
+    var batteryCharging: Bool {
+        switch UIDevice.current.batteryState {
+        case .charging, .full: return true
+        default: return false
+        }
     }
 }
