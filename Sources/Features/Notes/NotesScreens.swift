@@ -100,6 +100,7 @@ struct NoteEditorScreen: View {
     var body: some View {
         TextEditor(text: $text)
             .font(.system(size: 14))
+            .foregroundStyle(Theme.ink)
             .scrollContentBackground(.hidden)
             .background(PaperBackground())
             .padding(.horizontal, 4)

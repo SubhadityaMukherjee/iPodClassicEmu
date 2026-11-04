@@ -40,13 +40,11 @@ struct ClocksMenuScreen: View {
 /// segments cycled with the wheel, center advances to the next segment.
 struct AlarmScreen: View {
     @Environment(AppModel.self) private var model
-    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var alarm: AlarmStore
 
     enum Segment: Int, CaseIterable { case hour, minute, ampm, toggle }
 
     @State private var segment: Segment = .hour
-
-    private var alarm: AlarmStore { model.alarms }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -179,15 +177,6 @@ struct TimerScreen: View {
 
             controls
                 .padding(.horizontal, 22)
-
-            if editingDuration {
-                Text("Wheel: adjust · Center: next · MENU: done")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Theme.inkDim)
-                    .padding(.bottom, 6)
-            } else {
-                Spacer(minLength: 0)
-            }
         }
         .onWheel { handle($0) }
     }
@@ -209,11 +198,31 @@ struct TimerScreen: View {
 
     private var controls: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 0) {
-                controlRow(text: running ? "Pause" : (model.timer.remaining < model.timer.total && model.timer.remaining > 0 ? "Resume" : "Start"), selected: segment == .startStop, leading: true)
-                controlRow(text: "Reset", selected: segment == .reset, leading: false)
-            }
-            if !editingDuration {
+            // Duration sits above the buttons so it's always in view.
+            if editingDuration {
+                HStack(spacing: 4) {
+                    durSegment(label: "h", value: model.timer.durationHours, selected: durationSegment == .hour)
+                    Text(":").font(.system(size: 17, weight: .semibold))
+                    durSegment(label: "m", value: model.timer.durationMinutes, selected: durationSegment == .minute)
+                    Text(":").font(.system(size: 17, weight: .semibold))
+                    durSegment(label: "s", value: model.timer.durationSeconds, selected: durationSegment == .second)
+                }
+                Text("Wheel: adjust · Center: next · MENU: done")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Theme.inkDim)
+            } else {
+                HStack(spacing: 3) {
+                    Image(systemName: "timer")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("\(model.timer.durationHours > 0 ? String(format: "%d:", model.timer.durationHours) : "")\(String(format: "%02d:%02d", model.timer.durationMinutes, model.timer.durationSeconds))")
+                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(Theme.inkDim)
+                HStack(spacing: 0) {
+                    controlRow(text: running ? "Pause" : (model.timer.remaining < model.timer.total && model.timer.remaining > 0 ? "Resume" : "Start"), selected: segment == .startStop, leading: true)
+                    controlRow(text: "Reset", selected: segment == .reset, leading: false)
+                }
                 HStack {
                     Text("Set Duration")
                         .font(.system(size: 16, weight: .semibold))
@@ -221,14 +230,6 @@ struct TimerScreen: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
                         .background(RoundedRectangle(cornerRadius: 4).fill(segment == .setDuration ? AnyShapeStyle(SelectionGradient()) : AnyShapeStyle(Color.clear)))
-                }
-            } else {
-                HStack(spacing: 4) {
-                    durSegment(label: "h", value: model.timer.durationHours, selected: durationSegment == .hour)
-                    Text(":").font(.system(size: 17, weight: .semibold))
-                    durSegment(label: "m", value: model.timer.durationMinutes, selected: durationSegment == .minute)
-                    Text(":").font(.system(size: 17, weight: .semibold))
-                    durSegment(label: "s", value: model.timer.durationSeconds, selected: durationSegment == .second)
                 }
             }
         }
@@ -314,7 +315,13 @@ struct TimerScreen: View {
         WheelHaptics.shared.ensureRunning()
         WheelHaptics.shared.buttonPress(strength: 0.8)
         if editingDuration {
-            durationSegment = DurationSegment(rawValue: durationSegment.rawValue + 1) ?? .hour
+            // Last segment: finish editing and return to the buttons.
+            if durationSegment == .second {
+                editingDuration = false
+                segment = .startStop
+            } else {
+                durationSegment = DurationSegment(rawValue: durationSegment.rawValue + 1) ?? .hour
+            }
             return
         }
         switch segment {

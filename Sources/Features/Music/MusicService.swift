@@ -114,7 +114,7 @@ final class MusicService {
     /// Album tracks via the album relation (correct order, includes guests).
     func tracks(forAlbum album: Album) async -> [Song] {
         if let detailed = try? await album.with([.tracks]) {
-            let list = detailed.tracks?.compactMap { $0 as? Song } ?? []
+            let list = Self.songs(from: detailed.tracks)
             if !list.isEmpty { return list }
         }
         // Fallback: filter the cached song list by album title.
@@ -124,9 +124,26 @@ final class MusicService {
 
     func tracks(forPlaylist playlist: Playlist) async -> [Song] {
         if let detailed = try? await playlist.with([.tracks]) {
-            return detailed.tracks?.compactMap { $0 as? Song } ?? []
+            let list = Self.songs(from: detailed.tracks)
+            if !list.isEmpty { return list }
+        }
+        // Fallback: re-fetch from the library with tracks included.
+        var req = MusicLibraryRequest<Playlist>()
+        req.filter(matching: \.id, equalTo: playlist.id)
+        if let found = try? await req.response().items.first,
+           let detailed = try? await found.with([.tracks]) {
+            return Self.songs(from: detailed.tracks)
         }
         return []
+    }
+
+    /// Playlist.Track / Album.Track is an enum (song | musicVideo) — the
+    /// `as? Song` cast NEVER matches; pattern-match instead.
+    private static func songs(from tracks: MusicItemCollection<Track>?) -> [Song] {
+        tracks?.compactMap { track in
+            if case let .song(song) = track { return song }
+            return nil
+        } ?? []
     }
 
     /// Songs of an album from the cached library (used by Cover Flow overlay).

@@ -108,8 +108,7 @@ final class AppModel {
     let ringerBus = PassthroughSubject<ControlEvent, Never>()
 
     init() {
-        // QA hook: launch with SIMCTL_CHILD_START_ROUTE=alarm etc. to open
-        // a specific screen first.
+        // QA hook: START_ROUTE opens a specific screen first (UI tests).
         if let name = ProcessInfo.processInfo.environment["START_ROUTE"],
            let route = Self.route(named: name) {
             stack = [route]
@@ -134,6 +133,9 @@ final class AppModel {
         case "timer": return .timer
         case "stopwatch": return .stopwatch
         case "settings": return .settings
+        case "clickwheel": return .settingsClickwheel
+        case "display": return .settingsDisplay
+        case "playback": return .settingsPlayback
         default: return nil
         }
     }

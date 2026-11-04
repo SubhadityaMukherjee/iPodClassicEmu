@@ -345,7 +345,7 @@ final class WheelCoordinator {
 enum WheelFeedback {
     static func tick(dir: Int) {
         let s = AppSettings.shared
-        let intensities = [0.0, 0.3, 0.55, 0.85]
+        let intensities = [0.0, 0.4, 0.7, 1.0]
         let level = s.hapticsEnabled ? intensities[min(s.scrollingHaptics, 3)] : 0
         WheelHaptics.shared.ensureRunning()
         WheelHaptics.shared.tick(intensity: level)
