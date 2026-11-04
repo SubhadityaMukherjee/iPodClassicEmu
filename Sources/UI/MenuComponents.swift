@@ -76,11 +76,11 @@ struct MenuList: View {
         GeometryReader { geo in
             let m = settings.fontMultiplier
             // Exact fit: only whole rows render (a partially clipped row at
-            // the bottom looks broken). Row heights vary (compact headers
-            // vs. tall entries), so the count comes from accumulating the
-            // real heights of the rows we would show.
-            let start = windowStart(selection: selection, height: geo.size.height, m: m)
-            let visible = visibleRows(from: start, height: geo.size.height, m: m)
+            // the bottom looks broken). The window persists across ticks and
+            // steps one row at a time, like the classic.
+            let visible = visibleRows(from: windowIndex, height: geo.size.height, m: m)
+            let tail = max(0, items.count - visibleRows(from: max(0, items.count - 1), height: geo.size.height, m: m))
+            let start = min(max(0, windowIndex), tail)
             let slice = items.dropFirst(start).prefix(visible)
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -93,6 +93,16 @@ struct MenuList: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(width: geo.size.width)
+            .onChange(of: selection) { old, new in
+                let n = visibleRows(from: start, height: geo.size.height, m: m)
+                let end = start + n
+                if new >= end {
+                    windowIndex = start + (new - end) + 1
+                } else if new < start {
+                    windowIndex = new
+                }
+            }
+            .onChange(of: items.count) { _, _ in windowIndex = 0 }
         }
         .overlay {
             if items.isEmpty {
@@ -141,27 +151,7 @@ struct MenuList: View {
         return max(1, n)
     }
 
-    /// Window origin so the selection stays visible, scrolling one row at a
-    /// time like the classic (selection never reaches the very edge).
-    private func windowStart(selection: Int, height: CGFloat, m: CGFloat) -> Int {
-        var start = max(0, min(selection, max(0, items.count - 1)))
-        for _ in 0..<4 {
-            let n = visibleRows(from: start, height: height, m: m)
-            let end = start + n
-            if selection >= end {
-                // Below the window: scroll so the selection sits one above
-                // the bottom edge.
-                start = max(0, min(selection - (n - 1) + 1, max(0, items.count - 1)))
-            } else if selection < start {
-                start = selection
-            } else {
-                break
-            }
-        }
-        // Never leave blank space where rows should be at the very end.
-        let tail = max(0, items.count - visibleRows(from: max(0, items.count - 1), height: height, m: m))
-        return min(start, tail)
-    }
+    @State private var windowIndex = 0
 }
 
 /// Grey band behind action rows (Play All / Shuffle All / Sort By), like the
