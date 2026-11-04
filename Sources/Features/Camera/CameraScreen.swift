@@ -50,7 +50,7 @@ struct CameraScreen: View {
                 .transition(.opacity)
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .onAppear {
             model.transportClaimedByScreen = true
             model.camera.configureIfNeeded()

@@ -14,7 +14,7 @@ struct ClocksMenuScreen: View {
 
     var body: some View {
         MenuList(items: rows, selection: selection)
-            .onReceive(model.controlBus) { handle($0) }
+            .onWheel { handle($0) }
     }
 
     private func handle(_ event: ControlEvent) {
@@ -64,7 +64,7 @@ struct AlarmScreen: View {
             alarmToggle
                 .padding(.bottom, 8)
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private var segmentTitle: String {
@@ -189,7 +189,7 @@ struct TimerScreen: View {
                 Spacer(minLength: 0)
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private var dial: some View {
@@ -403,7 +403,7 @@ struct StopwatchScreen: View {
             .padding(.horizontal, 22)
             .padding(.bottom, 8)
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private var lapList: some View {

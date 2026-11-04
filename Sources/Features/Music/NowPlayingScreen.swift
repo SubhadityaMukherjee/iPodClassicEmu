@@ -46,7 +46,7 @@ struct NowPlayingScreen: View {
                     .padding(.bottom, 8)
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     // MARK: Pieces

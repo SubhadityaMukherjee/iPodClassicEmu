@@ -29,6 +29,7 @@ final class AppSettings: ObservableObject {
         static let cameraFlash = "camera.flash"       // 0 off 1 on 2 auto
         static let cameraAspect = "camera.aspect"     // index into aspect list
         static let cameraLens = "camera.lens"         // 0 back 1 front
+        static let fontScale = "display.fontScale"    // 0 small 1 standard 2 large
     }
 
     // MARK: Display
@@ -64,8 +65,9 @@ final class AppSettings: ObservableObject {
         get { bool(K.tickSounds, true) } set { objectWillChange.send(); store(newValue, K.tickSounds) }
     }
     /// Allow the wheel to keep ticking past the end of a list (list wraps).
+    /// Off by default: lists stop at the ends like a real iPod.
     var infiniteTick: Bool {
-        get { bool(K.infiniteTick, true) } set { objectWillChange.send(); store(newValue, K.infiniteTick) }
+        get { bool(K.infiniteTick, false) } set { objectWillChange.send(); store(newValue, K.infiniteTick) }
     }
     /// Play the rubber-band sound when ticking past the end of a list.
     var rubberBandTick: Bool {
@@ -105,4 +107,16 @@ final class AppSettings: ObservableObject {
     static let aspectRatios: [(label: String, value: CGFloat)] = [
         ("1:1", 1), ("4:3", 4.0 / 3.0), ("16:9", 16.0 / 9.0),
     ]
+
+    // MARK: Text size
+
+    /// 0 small, 1 standard, 2 large — scales menu text and row heights.
+    var fontScale: Int {
+        get { int(K.fontScale, 1) } set { objectWillChange.send(); store(min(2, max(0, newValue)), K.fontScale) }
+    }
+    static let fontLabels = ["Small", "Standard", "Large"]
+    static let fontScales: [CGFloat] = [0.85, 1.0, 1.18]
+    var fontMultiplier: CGFloat {
+        Self.fontScales[min(max(0, fontScale), Self.fontScales.count - 1)]
+    }
 }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		00FA551F0D6D7CFE806DF647 /* RubberBand.caf in Resources */ = {isa = PBXBuildFile; fileRef = 674DFC06B8F7A1B1F904D34D /* RubberBand.caf */; };
 		035595170CCC029FAD33B040 /* CoverFlowScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A54E7E9C330E86065492453 /* CoverFlowScreen.swift */; };
+		0ADDDACB18BA7302F69083ED /* WheelInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6461E37C6B4E93CC838424E /* WheelInput.swift */; };
 		10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE4F74ACAB7D2FE7FB6BD26 /* TimerStopwatchModels.swift */; };
 		183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06464256EE519A5BD50EA73F /* iPodClassicApp.swift */; };
 		19DEF858E4721571709A6227 /* Tick.caf in Resources */ = {isa = PBXBuildFile; fileRef = B7CEBDD3E18661EEC5335B6E /* Tick.caf */; };
@@ -104,6 +105,7 @@
 		BA58EF527B138B0EF70E505F /* WheelHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelHaptics.swift; sourceTree = "<group>"; };
 		BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingScreen.swift; sourceTree = "<group>"; };
 		C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRouter.swift; sourceTree = "<group>"; };
+		C6461E37C6B4E93CC838424E /* WheelInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelInput.swift; sourceTree = "<group>"; };
 		D0ED83C7A1A44EB591609791 /* NotesScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesScreens.swift; sourceTree = "<group>"; };
 		D17DE565AD80520CFE579A08 /* PhotosScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosScreens.swift; sourceTree = "<group>"; };
 		D6FF7E771867E7BE0B289EE5 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -301,6 +303,7 @@
 				F0A7AB9F78390A8680299570 /* ClickWheelView.swift */,
 				A16CC36E7096FECFA8123BA8 /* TickSounds.swift */,
 				BA58EF527B138B0EF70E505F /* WheelHaptics.swift */,
+				C6461E37C6B4E93CC838424E /* WheelInput.swift */,
 			);
 			path = Wheel;
 			sourceTree = "<group>";
@@ -492,6 +495,7 @@
 				AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */,
 				10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */,
 				A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */,
+				0ADDDACB18BA7302F69083ED /* WheelInput.swift in Sources */,
 				183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

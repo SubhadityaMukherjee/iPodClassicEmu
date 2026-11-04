@@ -19,7 +19,7 @@ struct NotesListScreen: View {
                     .zIndex(2)
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .onAppear { model.notes.loadNotes() }
     }
 
@@ -103,7 +103,7 @@ struct NoteEditorScreen: View {
             .scrollContentBackground(.hidden)
             .background(PaperBackground())
             .padding(.horizontal, 4)
-            .onReceive(model.controlBus) { handle($0) }
+            .onWheel { handle($0) }
             .onChange(of: text) { _, newValue in
                 if loaded {
                     model.notes.saveDebounced(fileName, newValue)

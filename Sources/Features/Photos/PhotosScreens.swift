@@ -18,7 +18,7 @@ struct PhotosGridScreen: View {
                 PromptPane(symbol: "photo.on.rectangle", text: "Allow photo access to see your gallery.")
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .onAppear {
             if !model.photos.loaded { Task { await model.photos.requestAccess() } }
         }
@@ -134,7 +134,7 @@ struct PhotoDetailScreen: View {
                 ProgressView().tint(.white)
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .task(id: selection) { await load() }
         .onAppear { selection = index }
     }

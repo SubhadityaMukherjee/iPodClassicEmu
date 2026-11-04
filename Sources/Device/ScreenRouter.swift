@@ -49,6 +49,7 @@ struct ScreenRouter: View {
             ForEach(Array(model.stack.enumerated()), id: \.element) { index, route in
                 screen(for: route)
                     .background(PaperBackground())  // opaque: covers the screens below it
+                    .environment(\.acceptsWheelInput, index == model.stack.count - 1)
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
                         removal: .move(edge: .trailing).combined(with: .opacity)

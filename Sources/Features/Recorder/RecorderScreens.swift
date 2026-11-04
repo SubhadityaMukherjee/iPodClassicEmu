@@ -25,7 +25,7 @@ struct RecorderScreen: View {
             controls
             Spacer(minLength: 0)
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .onAppear {
             recorder.loadRecordings()
             recorder.observeInterruptions()
@@ -126,7 +126,7 @@ struct RecordingsListScreen: View {
                     .zIndex(2)
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .onAppear { model.recorder.loadRecordings() }
     }
 
@@ -210,7 +210,7 @@ struct RecordingDetailScreen: View {
                 .padding(.top, 6)
             Spacer(minLength: 0)
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .sheet(item: Binding(
             get: { shareItem.map { ShareTarget(url: $0) } },
             set: { shareItem = $0?.url }
