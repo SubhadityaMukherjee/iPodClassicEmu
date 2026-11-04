@@ -12,19 +12,23 @@ struct MenuItem: Identifiable, Equatable {
     /// Trailing SF Symbol replacing the chevron (Shuffle, Cover Flow…).
     var symbol: String? = nil
     var showsChevron: Bool = true
+    /// Action rows (Play All, Shuffle All, Sort By) sit on a grey band.
+    var isActionRow: Bool = false
 
-    init(id: String, title: String, subtitle: String? = nil, detail: String? = nil, symbol: String? = nil, showsChevron: Bool = true) {
+    init(id: String, title: String, subtitle: String? = nil, detail: String? = nil, symbol: String? = nil, showsChevron: Bool = true, isActionRow: Bool = false) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
         self.detail = detail
         self.symbol = symbol
         self.showsChevron = showsChevron
+        self.isActionRow = isActionRow
     }
 
     static func == (lhs: MenuItem, rhs: MenuItem) -> Bool {
         lhs.id == rhs.id && lhs.title == rhs.title && lhs.subtitle == rhs.subtitle
             && lhs.detail == rhs.detail && lhs.symbol == rhs.symbol && lhs.showsChevron == rhs.showsChevron
+            && lhs.isActionRow == rhs.isActionRow
     }
 }
 
@@ -100,10 +104,28 @@ struct MenuList: View {
 
     private func rowHeight(for width: CGFloat) -> CGFloat {
         switch style {
-        case .normal: return compact ? 26 : 30.5
-        case .twoLine: return compact ? 36 : 40
-        case .thumbnail: return compact ? 38 : 44
+        case .normal: return compact ? 28 : 33
+        case .twoLine: return compact ? 38 : 43
+        case .thumbnail: return compact ? 40 : 47
         }
+    }
+}
+
+/// Grey band behind action rows (Play All / Shuffle All / Sort By), like the
+/// original iPod's album action strip.
+struct ActionBand: View {
+    var body: some View {
+        LinearGradient(
+            colors: [Color(white: 0.85), Color(white: 0.79)],
+            startPoint: .top, endPoint: .bottom
+        )
+        .overlay(
+            VStack(spacing: 0) {
+                Rectangle().fill(Color.black.opacity(0.10)).frame(height: 0.7)
+                Spacer()
+                Rectangle().fill(Color.black.opacity(0.10)).frame(height: 0.7)
+            }
+        )
     }
 }
 
@@ -134,12 +156,12 @@ struct MenuRow: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(item.title)
-                    .font(Theme.row((compact ? 15 : (style == .normal ? 17 : 15.5)) * m))
+                    .font(Theme.row((compact ? 16.5 : (style == .normal ? 18.5 : 17)) * m))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if item.subtitle != nil && style != .normal {
                     Text(item.subtitle!)
-                        .font(.system(size: (compact ? 11.5 : 12.5) * m, weight: .medium))
+                        .font(.system(size: (compact ? 12.5 : 13.5) * m, weight: .medium))
                         .foregroundStyle(selected ? Color.white.opacity(0.82) : Theme.inkDim)
                         .lineLimit(1)
                         .padding(.top, 1)
@@ -149,26 +171,31 @@ struct MenuRow: View {
             Spacer(minLength: 4)
             if let detail = item.detail {
                 Text(detail)
-                    .font(Theme.row((compact ? 14 : 16) * m))
+                    .font(Theme.row((compact ? 15 : 17.5) * m))
                     .lineLimit(1)
                     .padding(.trailing, 6)
             }
             if let symbol = item.symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: compact ? 13 : 15, weight: .semibold))
+                    .font(.system(size: compact ? 14 : 16, weight: .semibold))
                     .padding(.trailing, 4)
             }
             if item.showsChevron && item.symbol == nil {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: compact ? 11 : 13, weight: .bold))
+                    .font(.system(size: compact ? 12 : 14, weight: .bold))
                     .padding(.trailing, 5)
             }
         }
         .foregroundStyle(selected ? Color.white : Theme.ink)
         .background {
-            if selected {
-                SelectionGradient()
-                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.selEdge.opacity(0.9), lineWidth: 0.7))
+            ZStack {
+                if item.isActionRow {
+                    ActionBand()
+                }
+                if selected {
+                    SelectionGradient()
+                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.selEdge.opacity(0.9), lineWidth: 0.7))
+                }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 3))
@@ -263,6 +290,6 @@ struct ModalHost<Panel: View>: View {
                 .padding(.horizontal, 22)
                 .padding(.vertical, 16)
         }
-        .transition(.opacity)
+        .transition(.opacity.combined(with: .scale(scale: 0.94)))
     }
 }

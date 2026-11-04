@@ -42,6 +42,7 @@ targets:
         NSMicrophoneUsageDescription: Voice Memos records audio with the microphone.
         NSPhotoLibraryUsageDescription: Photos shows your photo library and saves pictures you take.
         NSPhotoLibraryAddUsageDescription: Photos you take with the iPodClassic camera are saved to your photo library.
+        NSCalendarsUsageDescription: Calendar shows your events for the selected day.
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes:
           - audio

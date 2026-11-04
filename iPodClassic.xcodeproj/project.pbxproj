@@ -16,6 +16,7 @@
 		248C4E3AF18DF139E23AF446 /* TickSoft.caf in Resources */ = {isa = PBXBuildFile; fileRef = B9E142990608C64F576307AC /* TickSoft.caf */; };
 		24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC3AA5879EA27E592945C2 /* AppSettings.swift */; };
 		2A24788AE5C41023F1FB9BA4 /* ScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */; };
+		37973EB02E0F882BFF436B15 /* CameraShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = E06640F863889753F8AADBCC /* CameraShortcut.swift */; };
 		3F918DA5FAD2C48FFAD5F7C5 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DA368CF25B19FEF8CE837C /* NotesStore.swift */; };
 		48A1D433ED95B265BA9FFF8E /* MusicService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC998CD72BCE921ABFBE36B /* MusicService.swift */; };
 		49DCC1994A75C4D092BFC6F3 /* SettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B937A3043FF83416A501A21 /* SettingsScreens.swift */; };
@@ -42,6 +43,7 @@
 		CE6E87EC8A810CF7BF7AA62F /* AlarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8919784990F005864723A97 /* AlarmStore.swift */; };
 		CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9168F602DF28123A3C7389 /* RecorderModel.swift */; };
 		CF5321B4390A5BE161626910 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 90462DBBAE1970378F420CEE /* Assets.xcassets */; };
+		D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */; };
 		E00856FD393CADE5D770BA48 /* MediaVolumeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */; };
 		E2D217A7A044EB9CB4696610 /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E080A36D7C3483C01ABF12C1 /* DeviceView.swift */; };
 		E821E9DB1EEC0479B053A20F /* AlarmRingerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */; };
@@ -106,12 +108,14 @@
 		BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingScreen.swift; sourceTree = "<group>"; };
 		C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRouter.swift; sourceTree = "<group>"; };
 		C6461E37C6B4E93CC838424E /* WheelInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelInput.swift; sourceTree = "<group>"; };
+		CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
 		D0ED83C7A1A44EB591609791 /* NotesScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesScreens.swift; sourceTree = "<group>"; };
 		D17DE565AD80520CFE579A08 /* PhotosScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosScreens.swift; sourceTree = "<group>"; };
 		D6FF7E771867E7BE0B289EE5 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		D8919784990F005864723A97 /* AlarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmStore.swift; sourceTree = "<group>"; };
 		D9362F34A0BC5DC660638C04 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
 		DAA84631978E21F3027590F4 /* ArtworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkView.swift; sourceTree = "<group>"; };
+		E06640F863889753F8AADBCC /* CameraShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraShortcut.swift; sourceTree = "<group>"; };
 		E080A36D7C3483C01ABF12C1 /* DeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceView.swift; sourceTree = "<group>"; };
 		E6386B4A55E1B30CAE0EA14D /* PhotoLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryModel.swift; sourceTree = "<group>"; };
 		E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaVolumeController.swift; sourceTree = "<group>"; };
@@ -159,6 +163,7 @@
 			children = (
 				D6FF7E771867E7BE0B289EE5 /* AppModel.swift */,
 				38EC3AA5879EA27E592945C2 /* AppSettings.swift */,
+				E06640F863889753F8AADBCC /* CameraShortcut.swift */,
 				06464256EE519A5BD50EA73F /* iPodClassicApp.swift */,
 			);
 			path = App;
@@ -262,6 +267,7 @@
 		A705D0A6E3EFB21A909D7913 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				B9F9C92B05B4179E0986509A /* Calendar */,
 				FE640033F63E6A463776F655 /* Camera */,
 				462E537FD115E221FFB5BA1B /* Clocks */,
 				379833D417235985B4B1C650 /* Home */,
@@ -272,6 +278,14 @@
 				09DEE4921A132571CEB56C35 /* Settings */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		B9F9C92B05B4179E0986509A /* Calendar */ = {
+			isa = PBXGroup;
+			children = (
+				CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */,
+			);
+			path = Calendar;
 			sourceTree = "<group>";
 		};
 		C06BA3B35B3878AC2415FFAE /* Music */ = {
@@ -467,8 +481,10 @@
 				24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */,
 				58033FFEF60260FBB8E71E00 /* ArtworkView.swift in Sources */,
 				82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */,
+				D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */,
 				7F8ADF4FC8E0E7C16628F2EA /* CameraModel.swift in Sources */,
 				BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */,
+				37973EB02E0F882BFF436B15 /* CameraShortcut.swift in Sources */,
 				5B255760AE753977C0205906 /* ClickWheelView.swift in Sources */,
 				CCE5269ADD98979ED5F089DB /* ClockFace.swift in Sources */,
 				AE14F2C8C6963CBBCAE6E874 /* ClocksScreens.swift in Sources */,

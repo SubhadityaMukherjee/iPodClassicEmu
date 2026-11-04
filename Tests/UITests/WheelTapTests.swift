@@ -72,8 +72,8 @@ final class WheelTapTests: XCTestCase {
                 .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
         }
 
-        // Home → Settings (6 ticks down), open it.
-        for _ in 0..<6 { tick() }
+        // Home → Settings (7 ticks down; Calendar sits before Settings), open it.
+        for _ in 0..<7 { tick() }
         center.tap()
         XCTAssertTrue(app.staticTexts["Clickwheel"].waitForExistence(timeout: 3), "Settings menu did not open")
 

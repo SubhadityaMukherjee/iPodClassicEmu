@@ -31,32 +31,32 @@ struct TitleBarView: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(title)
-                .font(Theme.barTitle(15.5))
+                .font(Theme.barTitle(16.5))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            if model.holdActive {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(Color(red: 0.55, green: 0.30, blue: 0.10))
+                    .padding(.trailing, 6)
+            }
+
             Text(TimeFormat.clock(now))
-                .font(Theme.barClock(13.5))
+                .font(Theme.barClock(14))
                 .foregroundStyle(Theme.ink)
                 .monospacedDigit()
 
             Spacer(minLength: 10)
 
-            if model.player.isPlaying {
-                HStack(spacing: 1.5) {
-                    Capsule().frame(width: 2, height: 8)
-                    Capsule().frame(width: 2, height: 5)
-                }
-                .foregroundStyle(Color(red: 0.18, green: 0.38, blue: 0.80))
-                .padding(.trailing, 5)
-            }
+            playGlyph
 
             BatteryIcon(level: model.batteryLevel)
         }
         .padding(.horizontal, 7)
-        .frame(height: 22)
+        .frame(height: 23)
         .background(BrushedMetal())
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.barBorder).frame(height: 0.7)
@@ -64,7 +64,39 @@ struct TitleBarView: View {
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 
+    /// Classic status glyphs: ▶ while playing, ❙❙ when paused mid-song.
+    @ViewBuilder
+    private var playGlyph: some View {
+        if model.player.isPlaying {
+            PlayTriangle()
+                .foregroundStyle(Color(red: 0.18, green: 0.38, blue: 0.80))
+                .padding(.trailing, 5)
+        } else if model.player.currentSong != nil {
+            HStack(spacing: 1.5) {
+                Capsule().frame(width: 2.5, height: 9)
+                Capsule().frame(width: 2.5, height: 9)
+            }
+            .foregroundStyle(Color(red: 0.18, green: 0.38, blue: 0.80))
+            .padding(.trailing, 5)
+        }
+    }
+
     private var title: String { ScreenRouter.title(for: model) }
+}
+
+/// Equilateral play triangle for the title bar.
+struct PlayTriangle: View {
+    var body: some View {
+        Canvas { ctx, size in
+            var path = Path()
+            path.move(to: CGPoint(x: 0, y: 0))
+            path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+            path.addLine(to: CGPoint(x: 0, y: size.height))
+            path.closeSubpath()
+            ctx.fill(path, with: .color(Theme.ink))
+        }
+        .frame(width: 9, height: 10)
+    }
 }
 
 /// Blue-fill battery, classic style.

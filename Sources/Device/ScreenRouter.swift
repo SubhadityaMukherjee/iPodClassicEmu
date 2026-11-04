@@ -32,6 +32,7 @@ struct ScreenRouter: View {
         case .notes: return "Notes"
         case .noteEditor: return "Edit Note"
         case .clocks: return "Clocks"
+        case .calendar: return "Calendar"
         case .alarm: return "Alarm Clock"
         case .timer: return "Timer"
         case .stopwatch: return "Stopwatch"
@@ -94,6 +95,7 @@ struct ScreenRouter: View {
         case .noteEditor(let name): NoteEditorScreen(fileName: name)
         // Clocks
         case .clocks: ClocksMenuScreen()
+        case .calendar: CalendarScreen()
         case .alarm: AlarmScreen()
         case .timer: TimerScreen()
         case .stopwatch: StopwatchScreen()
