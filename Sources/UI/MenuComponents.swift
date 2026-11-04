@@ -22,7 +22,10 @@ struct MenuItem: Identifiable, Equatable {
         self.showsChevron = showsChevron
     }
 
-    static func == (lhs: MenuItem, rhs: MenuItem) -> Bool { lhs.id == rhs.id }
+    static func == (lhs: MenuItem, rhs: MenuItem) -> Bool {
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.subtitle == rhs.subtitle
+            && lhs.detail == rhs.detail && lhs.symbol == rhs.symbol && lhs.showsChevron == rhs.showsChevron
+    }
 }
 
 /// Row height for two-line or thumbnail rows.
@@ -48,7 +51,7 @@ func moveListSelection(_ selection: inout Int, count: Int, delta: Int, settings:
         WheelFeedback.tick(dir: delta)
         return true
     }
-    WheelFeedback.rubberBand()
+    // End of list: stop silently (no overscroll sound).
     return false
 }
 

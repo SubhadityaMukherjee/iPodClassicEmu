@@ -161,7 +161,8 @@ enum MusicListKind {
     case artists, albums, songs, genres, playlists, recent
 }
 
-/// Wheel-driven list over one library section.
+/// Wheel-driven list over one library section. Header rows (Play All,
+/// Shuffle All, Sort By) sit full-width on top, like the album page.
 struct MusicListScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
@@ -169,74 +170,120 @@ struct MusicListScreen: View {
 
     @State private var selection = 0
 
-    var body: some View {
-        listBody
-            .onWheel { handle($0) }
+    private static let songSortLabels = ["Title", "Artist", "Duration", "Recently Added"]
+    private static let albumSortLabels = ["Title", "Artist", "Recently Added"]
+
+    // MARK: Entries (sorted)
+
+    private var sortedSongs: [Song] {
+        let list = model.music.songs
+        guard kind == .songs else { return list }
+        switch settings.songSort {
+        case 1: return list.sorted { $0.artistName.localizedCaseInsensitiveCompare($1.artistName) == .orderedAscending }
+        case 2: return list.sorted { ($0.duration ?? 0) < ($1.duration ?? 0) }
+        case 3: return list.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
+        default: return list.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        }
     }
 
-    @ViewBuilder
-    private var listBody: some View {
+    private var sortedAlbums: [Album] {
+        let list = kind == .recent ? model.music.recentlyAdded : model.music.albums
+        guard kind == .albums else { return list }
+        switch settings.albumSort {
+        case 1: return list.sorted { $0.artistName.localizedCaseInsensitiveCompare($1.artistName) == .orderedAscending }
+        case 2: return list.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
+        default: return list.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        }
+    }
+
+    private var entryItems: [MenuItem] {
         switch kind {
         case .artists:
-            MenuList(
-                items: model.music.artists.map { MenuItem(id: $0.id.rawValue, title: $0.name) },
-                selection: selection, compact: false, style: .normal
-            )
+            return model.music.artists
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
         case .albums:
-            MenuList(
-                items: model.music.albums.map { al in
-                    MenuItem(id: al.id.rawValue, title: al.title, subtitle: al.artistName)
-                },
-                selection: selection, style: .thumbnail
-            ) { item in
-                model.music.album(item.id)?.artwork
-            }
+            return sortedAlbums.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
         case .songs:
-            MenuList(
-                items: model.music.songs.map { s in
-                    MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.artistName)
-                },
-                selection: selection, style: .twoLine
-            )
+            return sortedSongs.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
         case .genres:
-            MenuList(
-                items: model.music.genres.map { MenuItem(id: $0, title: $0) },
-                selection: selection, style: .normal
-            )
+            return model.music.genres
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                .map { MenuItem(id: $0, title: $0) }
         case .playlists:
-            MenuList(
-                items: model.music.playlists.map { MenuItem(id: $0.id.rawValue, title: $0.name) },
-                selection: selection, style: .normal
-            )
+            return model.music.playlists
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
         case .recent:
-            MenuList(
-                items: model.music.recentlyAdded.map { al in
-                    MenuItem(id: al.id.rawValue, title: al.title, subtitle: al.artistName)
-                },
-                selection: selection, style: .thumbnail
-            ) { item in
-                model.music.album(item.id)?.artwork
-            }
+            return model.music.recentlyAdded.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
         }
     }
 
-    private var count: Int {
+    // MARK: Headers
+
+    private var headerItems: [MenuItem] {
+        var h = [
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+        ]
+        if sortLabels != nil {
+            h.append(MenuItem(id: "hdr.sort", title: "Sort By", detail: sortLabels![sortIndex], showsChevron: false))
+        }
+        return h
+    }
+
+    private var sortLabels: [String]? {
         switch kind {
-        case .artists: return model.music.artists.count
-        case .albums: return model.music.albums.count
-        case .songs: return model.music.songs.count
-        case .genres: return model.music.genres.count
-        case .playlists: return model.music.playlists.count
-        case .recent: return model.music.recentlyAdded.count
+        case .songs: return Self.songSortLabels
+        case .albums: return Self.albumSortLabels
+        default: return nil
         }
     }
+
+    private var sortIndex: Int {
+        kind == .songs ? settings.songSort : settings.albumSort
+    }
+
+    private var allItems: [MenuItem] { headerItems + entryItems }
+
+    var body: some View {
+        MenuList(
+            items: allItems,
+            selection: selection,
+            style: listStyle
+        ) { item in
+            // Thumbnails resolve by album id; only thumbnail-style lists render them.
+            model.music.album(item.id)?.artwork
+        }
+        .onWheel { handle($0) }
+    }
+
+    private var listStyle: MenuRowStyle {
+        switch kind {
+        case .albums, .recent: return .thumbnail
+        case .songs: return .twoLine
+        default: return .normal
+        }
+    }
+
+    private var thumbStyle: Bool { kind == .albums || kind == .recent }
+
+    private func thumbProvider(_ item: MenuItem) -> Artwork? {
+        model.music.album(item.id)?.artwork
+    }
+
+    // MARK: Input
 
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            moveListSelection(&selection, count: count, delta: d, settings: settings)
+            moveListSelection(&selection, count: allItems.count, delta: d, settings: settings)
         case .select:
-            selectCurrent()
+            if selection < headerItems.count {
+                activateHeader(headerItems[selection].id)
+            } else {
+                selectEntry(at: selection - headerItems.count)
+            }
         case .menu:
             model.pop()
         default:
@@ -244,30 +291,76 @@ struct MusicListScreen: View {
         }
     }
 
-    private func selectCurrent() {
-        guard count > 0 else { return }
-        let idx = selection
+    /// Songs this list can play in full: the sorted list itself for Songs,
+    /// album-ordered library for album/recent, the whole library otherwise.
+    private var allSongs: [Song] {
+        switch kind {
+        case .songs: return sortedSongs
+        case .albums, .recent:
+            return model.music.songs.sorted {
+                ($0.albumTitle ?? "") == ($1.albumTitle ?? "")
+                    ? ($0.trackNumber ?? 0) < ($1.trackNumber ?? 0)
+                    : ($0.albumTitle ?? "").localizedCaseInsensitiveCompare($1.albumTitle ?? "") == .orderedAscending
+            }
+        default: return model.music.songs
+        }
+    }
+
+    private func activateHeader(_ id: String) {
+        switch id {
+        case "hdr.play":
+            guard !allSongs.isEmpty else { return }
+            model.player.play(allSongs)
+            model.push(.nowPlaying)
+        case "hdr.shuffle":
+            guard !allSongs.isEmpty else { return }
+            model.player.shufflePlay(allSongs)
+            model.push(.nowPlaying)
+        case "hdr.sort":
+            if kind == .songs {
+                settings.songSort = (settings.songSort + 1) % Self.songSortLabels.count
+            } else if kind == .albums {
+                settings.albumSort = (settings.albumSort + 1) % Self.albumSortLabels.count
+            }
+            WheelHaptics.shared.buttonPress(strength: 0.6)
+        default:
+            break
+        }
+    }
+
+    private func selectEntry(at idx: Int) {
+        guard idx >= 0 else { return }
         switch kind {
         case .artists:
-            let artist = model.music.artists[idx]
-            model.push(.artistDetail(artist.id.rawValue))
-        case .albums, .recent:
-            let album = kind == .albums ? model.music.albums[idx] : model.music.recentlyAdded[idx]
-            model.push(.albumDetail(album.id.rawValue))
+            let artists = model.music.artists.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            guard artists.indices.contains(idx) else { return }
+            model.push(.artistDetail(artists[idx].id.rawValue))
+        case .albums:
+            let albums = sortedAlbums
+            guard albums.indices.contains(idx) else { return }
+            model.push(.albumDetail(albums[idx].id.rawValue))
         case .songs:
-            let songs = model.music.songs
+            let songs = sortedSongs
+            guard songs.indices.contains(idx) else { return }
             model.player.play(songs, startingAt: idx)
             model.push(.nowPlaying)
         case .genres:
-            model.push(.genreAlbums(model.music.genres[idx]))
+            let genres = model.music.genres.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            guard genres.indices.contains(idx) else { return }
+            model.push(.genreAlbums(genres[idx]))
         case .playlists:
-            let pl = model.music.playlists[idx]
-            model.push(.playlistDetail(pl.id.rawValue))
+            let playlists = model.music.playlists.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            guard playlists.indices.contains(idx) else { return }
+            model.push(.playlistDetail(playlists[idx].id.rawValue))
+        case .recent:
+            let albums = model.music.recentlyAdded
+            guard albums.indices.contains(idx) else { return }
+            model.push(.albumDetail(albums[idx].id.rawValue))
         }
     }
 }
 
-/// Albums by one artist.
+/// Albums by one artist, with full-width Play/Shuffle headers.
 struct ArtistDetailScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
@@ -279,10 +372,20 @@ struct ArtistDetailScreen: View {
         guard let artist else { return [] }
         return model.music.albums(byArtist: artist)
     }
+    private var headerItems: [MenuItem] {
+        [
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+        ]
+    }
+    private var totalRows: Int { headerItems.count + albums.count }
+    private var artistSongs: [Song] {
+        albums.flatMap { model.music.cachedTracks(forAlbum: $0) }
+    }
 
     var body: some View {
         MenuList(
-            items: albums.map { al in MenuItem(id: al.id.rawValue, title: al.title, subtitle: "\(al.trackCount) Songs") },
+            items: headerItems + albums.map { al in MenuItem(id: al.id.rawValue, title: al.title, subtitle: "\(al.trackCount) Songs") },
             selection: selection, style: .thumbnail
         ) { item in
             model.music.album(item.id)?.artwork
@@ -293,10 +396,21 @@ struct ArtistDetailScreen: View {
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            moveListSelection(&selection, count: albums.count, delta: d, settings: settings)
+            moveListSelection(&selection, count: totalRows, delta: d, settings: settings)
         case .select:
-            if albums.indices.contains(selection) {
-                model.push(.albumDetail(albums[selection].id.rawValue))
+            if selection == 0 {
+                guard !artistSongs.isEmpty else { return }
+                model.player.play(artistSongs)
+                model.push(.nowPlaying)
+            } else if selection == 1 {
+                guard !artistSongs.isEmpty else { return }
+                model.player.shufflePlay(artistSongs)
+                model.push(.nowPlaying)
+            } else {
+                let idx = selection - headerItems.count
+                if albums.indices.contains(idx) {
+                    model.push(.albumDetail(albums[idx].id.rawValue))
+                }
             }
         case .menu:
             model.pop()
@@ -306,7 +420,7 @@ struct ArtistDetailScreen: View {
     }
 }
 
-/// Albums in one genre.
+/// Albums in one genre, with full-width Play/Shuffle headers.
 struct GenreAlbumsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
@@ -314,10 +428,19 @@ struct GenreAlbumsScreen: View {
     @State private var selection = 0
 
     private var albums: [Album] { model.music.albums(inGenre: genre) }
+    private var headerItems: [MenuItem] {
+        [
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+        ]
+    }
+    private var genreSongs: [Song] {
+        albums.flatMap { model.music.cachedTracks(forAlbum: $0) }
+    }
 
     var body: some View {
         MenuList(
-            items: albums.map { al in MenuItem(id: al.id.rawValue, title: al.title, subtitle: al.artistName) },
+            items: headerItems + albums.map { al in MenuItem(id: al.id.rawValue, title: al.title, subtitle: al.artistName) },
             selection: selection, style: .thumbnail
         ) { item in
             model.music.album(item.id)?.artwork
@@ -328,10 +451,21 @@ struct GenreAlbumsScreen: View {
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            moveListSelection(&selection, count: albums.count, delta: d, settings: settings)
+            moveListSelection(&selection, count: headerItems.count + albums.count, delta: d, settings: settings)
         case .select:
-            if albums.indices.contains(selection) {
-                model.push(.albumDetail(albums[selection].id.rawValue))
+            if selection == 0 {
+                guard !genreSongs.isEmpty else { return }
+                model.player.play(genreSongs)
+                model.push(.nowPlaying)
+            } else if selection == 1 {
+                guard !genreSongs.isEmpty else { return }
+                model.player.shufflePlay(genreSongs)
+                model.push(.nowPlaying)
+            } else {
+                let idx = selection - headerItems.count
+                if albums.indices.contains(idx) {
+                    model.push(.albumDetail(albums[idx].id.rawValue))
+                }
             }
         case .menu:
             model.pop()
@@ -366,6 +500,7 @@ struct AlbumDetailScreen: View {
     private var headerItems: [MenuItem] {
         [
             MenuItem(id: "header.coverflow", title: "View in Cover Flow", symbol: "rectangle.stack", showsChevron: false),
+            MenuItem(id: "header.play", title: "Play All", symbol: "play.fill", showsChevron: false),
             MenuItem(id: "header.shuffle", title: "Shuffle Songs", symbol: "shuffle", showsChevron: false),
         ]
     }
@@ -426,14 +561,18 @@ struct AlbumDetailScreen: View {
 
     private func activateCurrent() {
         guard let album else { return }
-        if selection == 0 {
+        switch selection {
+        case 0:
             CoverFlowLaunch.shared.pendingAlbumID = albumID
             model.push(.coverFlow)
-        } else if selection == 1 {
+        case 1:
+            model.player.play(tracks.isEmpty ? model.music.songs : tracks)
+            model.push(.nowPlaying)
+        case 2:
             model.player.shufflePlay(tracks.isEmpty ? model.music.songs : tracks)
             model.push(.nowPlaying)
-        } else {
-            let idx = selection - 2
+        default:
+            let idx = selection - headerItems.count
             if tracks.indices.contains(idx) {
                 model.player.play(tracks, startingAt: idx)
                 model.push(.nowPlaying)
@@ -453,9 +592,17 @@ struct PlaylistDetailScreen: View {
 
     private var playlist: Playlist? { model.music.playlist(playlistID) }
 
+    private var headerItems: [MenuItem] {
+        [
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+        ]
+    }
+    private var totalRows: Int { headerItems.count + tracks.count }
+
     var body: some View {
         MenuList(
-            items: tracks.enumerated().map { i, s in
+            items: headerItems + tracks.enumerated().map { i, s in
                 MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.artistName)
             },
             selection: selection, emptyText: "No Songs", style: .twoLine
@@ -471,11 +618,22 @@ struct PlaylistDetailScreen: View {
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            moveListSelection(&selection, count: tracks.count, delta: d, settings: settings)
+            moveListSelection(&selection, count: totalRows, delta: d, settings: settings)
         case .select:
-            if tracks.indices.contains(selection) {
-                model.player.play(tracks, startingAt: selection)
+            if selection == 0 {
+                guard !tracks.isEmpty else { return }
+                model.player.play(tracks)
                 model.push(.nowPlaying)
+            } else if selection == 1 {
+                guard !tracks.isEmpty else { return }
+                model.player.shufflePlay(tracks)
+                model.push(.nowPlaying)
+            } else {
+                let idx = selection - headerItems.count
+                if tracks.indices.contains(idx) {
+                    model.player.play(tracks, startingAt: idx)
+                    model.push(.nowPlaying)
+                }
             }
         case .menu:
             model.pop()

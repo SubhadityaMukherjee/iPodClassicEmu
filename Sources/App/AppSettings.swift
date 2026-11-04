@@ -30,6 +30,8 @@ final class AppSettings: ObservableObject {
         static let cameraAspect = "camera.aspect"     // index into aspect list
         static let cameraLens = "camera.lens"         // 0 back 1 front
         static let fontScale = "display.fontScale"    // 0 small 1 standard 2 large
+        static let songSort = "music.sort.songs"      // 0 title 1 artist 2 duration 3 recent
+        static let albumSort = "music.sort.albums"    // 0 title 1 artist 2 recent
     }
 
     // MARK: Display
@@ -118,5 +120,16 @@ final class AppSettings: ObservableObject {
     static let fontScales: [CGFloat] = [0.85, 1.0, 1.18]
     var fontMultiplier: CGFloat {
         Self.fontScales[min(max(0, fontScale), Self.fontScales.count - 1)]
+    }
+
+    // MARK: Music sorting
+
+    /// Sort order for the Songs list: 0 Title, 1 Artist, 2 Duration, 3 Recently Added.
+    var songSort: Int {
+        get { int(K.songSort, 0) } set { objectWillChange.send(); store(min(3, max(0, newValue)), K.songSort) }
+    }
+    /// Sort order for the Albums list: 0 Title, 1 Artist, 2 Recently Added.
+    var albumSort: Int {
+        get { int(K.albumSort, 0) } set { objectWillChange.send(); store(min(2, max(0, newValue)), K.albumSort) }
     }
 }

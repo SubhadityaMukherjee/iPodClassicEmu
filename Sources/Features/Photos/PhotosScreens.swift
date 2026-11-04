@@ -28,8 +28,10 @@ struct PhotosGridScreen: View {
         GeometryReader { geo in
             let cell = (geo.size.width - 5) / CGFloat(columns)
             let rows = (model.photos.count + columns - 1) / columns
-            let visibleRows = max(1, Int((geo.size.height / (cell + 1)).rounded(.down)))
-            let startRow = max(0, min(selection / columns - max(0, visibleRows - 3), max(0, rows - visibleRows)))
+            // Round UP: the next row peeks in at the bottom edge so the grid
+            // always fills the screen (no white bar below).
+            let visibleRows = max(1, Int(ceil(geo.size.height / (cell + 1))))
+            let startRow = max(0, min(selection / columns - max(0, visibleRows - 4), max(0, rows - visibleRows)))
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 1) {

@@ -12,6 +12,7 @@ struct CameraScreen: View {
     @State private var optionsSelection = 0
     @State private var flashOverlay = false
     @State private var savedOverlay = false
+    @State private var lastMenuTap = Date.distantPast
 
     private var aspect: (label: String, value: CGFloat) {
         AppSettings.aspectRatios[min(settings.cameraAspectIndex, AppSettings.aspectRatios.count - 1)]
@@ -20,7 +21,14 @@ struct CameraScreen: View {
     var body: some View {
         ZStack {
             if model.camera.deviceAvailable {
-                CameraSessionPreview(session: model.camera.session, aspect: aspect.value)
+                // Aspect-cropped live preview: resizing with the ratio so
+                // changing 1:1/4:3/16:9 visibly reframes the view.
+                CameraSessionPreview(session: model.camera.session)
+                    .aspectRatio(aspect.value, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+                    .clipped()
+                    .animation(.easeInOut(duration: 0.2), value: aspect.value)
                 controlHints
             } else {
                 PaperBackground()
@@ -143,8 +151,17 @@ struct CameraScreen: View {
                 capturePhoto()
             }
         case .menu:
-            optionsOpen.toggle()
-            optionsSelection = 0
+            // Double-tap MENU (within 0.65 s) exits the camera; a single tap
+            // toggles the options panel.
+            if Date().timeIntervalSince(lastMenuTap) < 0.65 {
+                lastMenuTap = .distantPast
+                optionsOpen = false
+                model.pop()
+            } else {
+                lastMenuTap = Date()
+                optionsOpen.toggle()
+                optionsSelection = 0
+            }
         case .prev:
             if !optionsOpen {
                 settings.cameraAspectIndex = (settings.cameraAspectIndex + AppSettings.aspectRatios.count - 1) % AppSettings.aspectRatios.count
@@ -206,10 +223,9 @@ struct CameraScreen: View {
     }
 }
 
-/// AVCaptureVideoPreviewLayer host, aspect-cropped to the current ratio.
+/// AVCaptureVideoPreviewLayer host; sized by the parent to the aspect ratio.
 private struct CameraSessionPreview: UIViewRepresentable {
     let session: AVCaptureSession
-    let aspect: CGFloat
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }

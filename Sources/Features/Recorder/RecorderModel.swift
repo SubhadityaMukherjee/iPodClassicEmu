@@ -58,7 +58,7 @@ final class RecorderModel {
             return
         }
 
-        let name = "Recording \(TimeFormat.recordingStamp()).m4a"
+        let name = uniqueRecordingName()
         let url = recordingsURL.appendingPathComponent(name)
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -161,6 +161,19 @@ final class RecorderModel {
 
     // MARK: Files
 
+    /// "Recording 2026-11-04 14-05-37.m4a", with a numeric suffix if a file
+    /// with that exact name already exists (never overwrite a recording).
+    private func uniqueRecordingName() -> String {
+        let base = "Recording \(TimeFormat.recordingStamp())"
+        var candidate = recordingsURL.appendingPathComponent("\(base).m4a")
+        var n = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = recordingsURL.appendingPathComponent("\(base)-\(n).m4a")
+            n += 1
+        }
+        return candidate.lastPathComponent
+    }
+
     func loadRecordings() {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(at: recordingsURL, includingPropertiesForKeys: [.creationDateKey, .fileSizeKey]) else { return }
@@ -182,19 +195,17 @@ final class RecorderModel {
     }
 
     private static func date(fromName name: String) -> Date? {
-        // "Recording 2026-11-04 14-05"
-        let pattern = #"(\d{4})-(\d{2})-(\d{2}) (\d{2})-(\d{2})"#
+        // "Recording 2026-11-04 14-05-37" (seconds optional for old files)
+        let pattern = #"(\d{4})-(\d{2})-(\d{2}) (\d{2})-(\d{2})(?:-(\d{2}))?"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let match = regex.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)),
-              match.numberOfRanges == 6,
+              match.numberOfRanges >= 6,
               let range = Range(match.range(at: 1), in: name) else { return nil }
         let ns = name as NSString
+        func group(_ i: Int) -> Int? { match.range(at: i).location != NSNotFound ? Int(ns.substring(with: match.range(at: i))) : nil }
         let comps = DateComponents(
-            year: Int(ns.substring(with: match.range(at: 1))),
-            month: Int(ns.substring(with: match.range(at: 2))),
-            day: Int(ns.substring(with: match.range(at: 3))),
-            hour: Int(ns.substring(with: match.range(at: 4))),
-            minute: Int(ns.substring(with: match.range(at: 5)))
+            year: group(1), month: group(2), day: group(3),
+            hour: group(4), minute: group(5)
         )
         return Calendar.current.date(from: comps)
     }

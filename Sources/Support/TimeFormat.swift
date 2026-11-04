@@ -36,10 +36,10 @@ enum TimeFormat {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
-    /// File-ish timestamp for recordings: "2026-11-04 14-05".
+    /// File-ish timestamp for recordings: "2026-11-04 14-05-37".
     static func recordingStamp(_ date: Date = Date()) -> String {
         let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd HH-mm"
+        f.dateFormat = "yyyy-MM-dd HH-mm-ss"
         return f.string(from: date)
     }
 

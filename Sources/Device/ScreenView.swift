@@ -10,6 +10,9 @@ struct ScreenView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(PaperBackground())
+        // The LCD is always light — force it so system text (TextEditor,
+        // .primary labels in panels) can never render white-on-white.
+        .environment(\.colorScheme, .light)
         .overlay(CRTOverlay())
         .overlay(
             RoundedRectangle(cornerRadius: 2)

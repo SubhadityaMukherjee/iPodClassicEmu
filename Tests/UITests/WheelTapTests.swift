@@ -39,6 +39,63 @@ final class WheelTapTests: XCTestCase {
     }
 
     @MainActor
+    func testAlarmWheelAdjustsHour() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["START_ROUTE"] = "alarm"
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Set Hour"].waitForExistence(timeout: 5), "Alarm screen did not open")
+        XCTAssertTrue(app.staticTexts["07"].waitForExistence(timeout: 2), "Default alarm hour 07 missing")
+
+        // One clockwise tick on the scroll sector: hour 07 → 08.
+        let wheel = app.otherElements["clickwheel"]
+        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        origin.withOffset(CGVector(dx: 64, dy: 64))
+            .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
+
+        XCTAssertTrue(app.staticTexts["08"].waitForExistence(timeout: 3), "Wheel tick did not adjust the alarm hour")
+    }
+
+    @MainActor
+    func testSettingsSubmenuScrollsAndSelects() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launch()
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let center = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+
+        func tick() {
+            origin.withOffset(CGVector(dx: 64, dy: 64))
+                .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
+        }
+
+        // Home → Settings (6 ticks down), open it.
+        for _ in 0..<6 { tick() }
+        center.tap()
+        XCTAssertTrue(app.staticTexts["Clickwheel"].waitForExistence(timeout: 3), "Settings menu did not open")
+
+        // Tick to the Clickwheel row and open it.
+        tick()
+        center.tap()
+        XCTAssertTrue(app.staticTexts["Haptics"].waitForExistence(timeout: 3), "Clickwheel settings did not open")
+
+        // The wheel must MOVE the selection (not cycle values): row 0
+        // "Haptics" → row 1 "Scrolling Haptics". Center now cycles its value
+        // Medium → Strong, which only exists if the selection really moved.
+        // SwiftUI merges row texts into one a11y element, so match loosely.
+        tick()
+        center.tap()
+        let strong = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "Strong")
+        ).firstMatch
+        XCTAssertTrue(strong.waitForExistence(timeout: 3),
+                      "Settings depth-2: wheel did not move the selection or value cycle failed")
+    }
+
+    @MainActor
     func testWheelOnlyAffectsTopScreen() throws {
         let app = launchApp()
         let wheel = app.otherElements["clickwheel"]

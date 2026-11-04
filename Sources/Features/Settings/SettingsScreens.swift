@@ -92,7 +92,9 @@ struct ValueSettingsScreen: View {
 
     var body: some View {
         MenuList(
-            items: rows.map { MenuItem(id: $0.id, title: $0.title, detail: $0.value()) },
+            // Key each row by its current value so a cycled value rebuilds
+            // the row (MenuItem identity alone wouldn't refresh the text).
+            items: rows.map { MenuItem(id: "\($0.id).\($0.value())", title: $0.title, detail: $0.value()) },
             selection: selection
         )
         .onWheel { handle($0) }
@@ -102,17 +104,14 @@ struct ValueSettingsScreen: View {
         let row = rows[min(selection, rows.count - 1)]
         switch event {
         case .tick(let d):
-            if row.cycle != nil {
-                row.cycle?()
-                WheelFeedback.tick(dir: d)
-            } else {
-                moveListSelection(&selection, count: rows.count, delta: d, settings: settings)
-            }
+            // The wheel always moves between rows; values change on center.
+            moveListSelection(&selection, count: rows.count, delta: d, settings: settings)
         case .select:
             if let route = row.route {
                 model.push(route)
             } else if let cycle = row.cycle {
                 cycle()
+                WheelHaptics.shared.buttonPress(strength: 0.6)
             }
         case .menu:
             model.pop()
@@ -148,9 +147,6 @@ struct ClickwheelSettingsScreen: View {
                 },
                 .init(id: "infinite", title: "Infinite Tick", value: { settings.infiniteTick ? "On" : "Off" }) {
                     settings.infiniteTick.toggle()
-                },
-                .init(id: "rubber", title: "Rubber Band Tick", value: { settings.rubberBandTick ? "On" : "Off" }) {
-                    settings.rubberBandTick.toggle()
                 },
                 .init(id: "type", title: "Tick Type", value: { settings.softTick ? "Soft Tick" : "Classic Tick" }) {
                     settings.softTick.toggle()
