@@ -75,16 +75,13 @@ struct MenuList: View {
     var body: some View {
         GeometryReader { geo in
             let m = settings.fontMultiplier
-            // Render enough rows to fill the screen even when mixed with
-            // shorter compact (header) rows, but keep the selection inside
-            // the rows that ACTUALLY fit (tallest row height), so the tail
-            // of the list never scrolls the selection off-screen.
-            let minRowH: CGFloat = 28 * m
-            let maxRowH = styleMaxRowHeight * m
-            let visibleFill = max(1, Int((geo.size.height / minRowH).rounded(.up)))
-            let visibleReal = max(1, Int((geo.size.height / maxRowH).rounded(.down)))
-            let start = windowStart(selection: selection, count: items.count, visibleReal: visibleReal, visibleFill: visibleFill)
-            let slice = items.dropFirst(start).prefix(visibleFill)
+            // Exact fit: only whole rows render (a partially clipped row at
+            // the bottom looks broken). Row heights vary (compact headers
+            // vs. tall entries), so the count comes from accumulating the
+            // real heights of the rows we would show.
+            let start = windowStart(selection: selection, height: geo.size.height, m: m)
+            let visible = visibleRows(from: start, height: geo.size.height, m: m)
+            let slice = items.dropFirst(start).prefix(visible)
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
@@ -129,12 +126,41 @@ struct MenuList: View {
         }
     }
 
-    /// Window origin: fill the screen (visibleFill rows rendered) while
-    /// keeping the selection within the rows that truly fit (visibleReal).
-    private func windowStart(selection: Int, count: Int, visibleReal: Int, visibleFill: Int) -> Int {
-        var start = max(0, selection - max(0, visibleReal - 2))
-        if selection < start { start = selection }
-        return min(start, max(0, count - visibleFill))
+    /// How many whole rows starting at `start` fit in `height`.
+    private func visibleRows(from start: Int, height: CGFloat, m: CGFloat) -> Int {
+        var total: CGFloat = 0
+        var n = 0
+        var i = max(0, start)
+        while i < items.count {
+            let h = rowHeight(for: items[i]) * m
+            if total + h > height + 0.5 { break }
+            total += h
+            n += 1
+            i += 1
+        }
+        return max(1, n)
+    }
+
+    /// Window origin so the selection stays visible, scrolling one row at a
+    /// time like the classic (selection never reaches the very edge).
+    private func windowStart(selection: Int, height: CGFloat, m: CGFloat) -> Int {
+        var start = max(0, min(selection, max(0, items.count - 1)))
+        for _ in 0..<4 {
+            let n = visibleRows(from: start, height: height, m: m)
+            let end = start + n
+            if selection >= end {
+                // Below the window: scroll so the selection sits one above
+                // the bottom edge.
+                start = max(0, min(selection - (n - 1) + 1, max(0, items.count - 1)))
+            } else if selection < start {
+                start = selection
+            } else {
+                break
+            }
+        }
+        // Never leave blank space where rows should be at the very end.
+        let tail = max(0, items.count - visibleRows(from: max(0, items.count - 1), height: height, m: m))
+        return min(start, tail)
     }
 }
 

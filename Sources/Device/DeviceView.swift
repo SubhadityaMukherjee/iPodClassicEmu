@@ -38,8 +38,9 @@ struct DeviceView: View {
                         .shadow(color: .black.opacity(0.35), radius: 5, x: 0, y: 1)
                         .padding(.top, 2)
 
+                    // Wheel centered in the space below the screen: equal
+                    // flexible spacers above and below.
                     Spacer(minLength: 0)
-                        .frame(height: h * 0.028)
 
                     ClickWheelView()
                         .frame(width: w * 0.66, height: w * 0.66)
@@ -54,7 +55,7 @@ struct DeviceView: View {
                         )
 
                     Spacer(minLength: 0)
-                        .frame(height: h * 0.075)
+                        .frame(height: h * 0.01)
                 }
             }
         }
