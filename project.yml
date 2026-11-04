@@ -1,0 +1,79 @@
+name: iPodClassic
+options:
+  bundleIdPrefix: com.ipodclassic
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    DEVELOPMENT_TEAM: 46655DQD2X
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  iPodClassic:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Sources
+      - path: Resources
+        excludes:
+          - "Info.plist"
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: iPodClassic
+        CFBundleName: iPodClassic
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSAppleMusicUsageDescription: iPodClassic plays your synced Apple Music library and needs access to your music.
+        NSCameraUsageDescription: The iPodClassic camera needs the camera to take photos.
+        NSMicrophoneUsageDescription: Voice Memos records audio with the microphone.
+        NSPhotoLibraryUsageDescription: Photos shows your photo library and saves pictures you take.
+        NSPhotoLibraryAddUsageDescription: Photos you take with the iPodClassic camera are saved to your photo library.
+        UIBackgroundModes:
+          - audio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ipodclassic.app
+        PRODUCT_NAME: iPodClassic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: "NO"
+
+  iPodClassicTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ipodclassic.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+    dependencies:
+      - target: iPodClassic
+
+schemes:
+  iPodClassic:
+    build:
+      targets:
+        iPodClassic: all
+        iPodClassicTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - iPodClassicTests
