@@ -26,7 +26,12 @@ struct MusicMenuScreen: View {
             preview
         }
         .onReceive(model.controlBus) { handle($0) }
-        .onAppear { model.music.refreshStatus() }
+        .onAppear {
+            model.music.refreshStatus()
+            if model.music.isAuthorized && !model.music.loaded && !model.music.loading {
+                Task { await model.music.loadLibrary() }
+            }
+        }
     }
 
     private func handle(_ event: ControlEvent) {
