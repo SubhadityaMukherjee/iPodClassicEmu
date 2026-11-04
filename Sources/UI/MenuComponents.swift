@@ -75,14 +75,11 @@ struct MenuList: View {
     var body: some View {
         GeometryReader { geo in
             let m = settings.fontMultiplier
-            let baseRowH: CGFloat = {
-                switch style {
-                case .normal: return compact ? 28 : 33
-                case .twoLine: return compact ? 38 : 43
-                case .thumbnail: return compact ? 40 : 47
-                }
-            }() * m
-            let visible = max(1, Int((geo.size.height / baseRowH).rounded(.down)))
+            // Window sized by the smallest row height so the screen always
+            // fills — mixed compact (header) + tall rows would otherwise
+            // leave a blank band at the bottom of All Songs.
+            let minRowH: CGFloat = 28 * m
+            let visible = max(1, Int((geo.size.height / minRowH).rounded(.up)))
             let start = max(0, min(selection - max(0, visible - 3), max(0, items.count - visible)))
             let slice = items.dropFirst(start).prefix(visible)
 
@@ -236,6 +233,8 @@ struct SplitMenuLayout<Preview: View>: View {
     let selection: Int
     @ViewBuilder var preview: () -> Preview
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         GeometryReader { geo in
             let menuW = geo.size.width * 0.52
@@ -246,11 +245,26 @@ struct SplitMenuLayout<Preview: View>: View {
                     .fill(Color.black.opacity(0.16))
                     .frame(width: 1, height: geo.size.height)
                 ZStack {
+                    // Silver theme: the preview pane reads as recessed grey.
+                    if settings.theme == 1 {
+                        LinearGradient(
+                            colors: [Color(white: 0.80), Color(white: 0.74)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                    }
                     PaperBackground()
                     preview()
                 }
                 .frame(maxWidth: .infinity, maxHeight: geo.size.height)
                 .clipped()
+                .overlay(alignment: .leading) {
+                    // Drop shadow cast from the menu onto the pane.
+                    Rectangle()
+                        .fill(Color.black.opacity(settings.theme == 1 ? 0.22 : 0.0))
+                        .frame(width: 7)
+                        .blur(radius: 4)
+                        .allowsHitTesting(false)
+                }
             }
         }
     }

@@ -29,6 +29,7 @@ final class AppSettings: ObservableObject {
         static let cameraFlash = "camera.flash"       // 0 off 1 on 2 auto
         static let cameraAspect = "camera.aspect"     // index into aspect list
         static let cameraLens = "camera.lens"         // 0 back 1 front
+        static let theme = "device.theme"             // 0 black 1 silver
         static let fontScale = "display.fontScale"    // 0 small 1 standard 2 large
         static let songSort = "music.sort.songs"      // 0 title 1 artist 2 duration 3 recent
         static let albumSort = "music.sort.albums"    // 0 title 1 artist 2 recent
@@ -131,5 +132,10 @@ final class AppSettings: ObservableObject {
     /// Sort order for the Albums list: 0 Title, 1 Artist, 2 Recently Added.
     var albumSort: Int {
         get { int(K.albumSort, 0) } set { objectWillChange.send(); store(min(2, max(0, newValue)), K.albumSort) }
+    }
+
+    /// Device theme: 0 black, 1 silver.
+    var theme: Int {
+        get { int(K.theme, 0) } set { objectWillChange.send(); store(min(1, max(0, newValue)), K.theme) }
     }
 }

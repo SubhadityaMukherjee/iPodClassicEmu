@@ -42,13 +42,15 @@ struct ClickWheelView: View {
 
 private struct WheelFace: View {
     let pressed: WheelZone?
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
+        let t = settings.theme
         ZStack {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [Theme.wheelEdge, Theme.wheelFace, Theme.wheelFace, Theme.wheelEdge.opacity(0.9)],
+                        colors: [Theme.wheelEdge(t), Theme.wheelFace(t), Theme.wheelFace(t), Theme.wheelEdge(t).opacity(0.9)],
                         center: .center, startRadius: 0, endRadius: 500
                     )
                 )
@@ -58,7 +60,7 @@ private struct WheelFace: View {
             GeometryReader { geo in
                 let d = min(geo.size.width, geo.size.height)
                 Circle()
-                    .fill(RadialGradient(colors: [Theme.wheelCenter, .black], center: .center, startRadius: 0, endRadius: d / 3))
+                    .fill(RadialGradient(colors: [Theme.wheelCenter(t), t == 1 ? Color(white: 0.72) : .black], center: .center, startRadius: 0, endRadius: d / 3))
                     .frame(width: d * 0.365, height: d * 0.365)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
                     .overlay(
@@ -95,7 +97,7 @@ private struct WheelFace: View {
     @ViewBuilder
     private func zoneLabel<Content: View>(_ zone: WheelZone, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .foregroundStyle(pressed == zone ? Theme.wheelLabelLit : Theme.wheelLabel)
+            .foregroundStyle(pressed == zone ? Theme.wheelLabelLit(settings.theme) : Theme.wheelLabel(settings.theme))
             .animation(.easeOut(duration: 0.08), value: pressed)
             .offset(zoneOffset(zone))
     }

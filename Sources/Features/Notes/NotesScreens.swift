@@ -12,7 +12,9 @@ struct NotesListScreen: View {
         ZStack {
             MenuList(
                 items: listItems,
-                selection: selection, emptyText: "No Notes"
+                selection: selection,
+                emptyText: "No Notes",
+                style: .twoLine
             )
             if deleteCandidate != nil {
                 ModalHost { deletePanel }
@@ -26,7 +28,7 @@ struct NotesListScreen: View {
     private var listItems: [MenuItem] {
         var items = [MenuItem(id: "__new__", title: "New Note", symbol: "plus.square", showsChevron: false)]
         items.append(contentsOf: model.notes.notes.map { note in
-            MenuItem(id: note.id, title: note.name, detail: TimeFormat.friendly(note.date))
+            MenuItem(id: note.id, title: note.name, subtitle: note.preview.isEmpty ? nil : note.preview, detail: TimeFormat.friendly(note.date), showsChevron: true)
         })
         return items
     }

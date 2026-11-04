@@ -111,12 +111,13 @@ final class CameraModel: NSObject {
         }
     }
 
-    /// Toggles photo/video; reconfigures the session.
+    /// Toggles photo/video; the flag flips on main so SwiftUI sees it
+    /// immediately, the session reconfigures on its queue.
     func setVideoMode(_ on: Bool) {
+        if isRecording { stopRecording() }
+        videoMode = on
         sessionQueue.async { [weak self] in
-            guard let self, self.videoMode != on else { return }
-            if self.isRecording { self.stopRecordingInternal() }
-            self.videoMode = on
+            guard let self else { return }
             self.configureSession(isFront: self.isFront)
         }
     }
@@ -167,9 +168,12 @@ final class CameraModel: NSObject {
                 .appendingPathComponent("REC-\(Int(Date().timeIntervalSince1970)).mov")
             self.movieOutput.startRecording(to: url, recordingDelegate: self)
             self.isRecording = true
-            DispatchQueue.main.async { self.recordingSeconds = 0 }
-            self.recordTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { t in
-                DispatchQueue.main.async { self.recordingSeconds += 1 }
+            // Timer must live on a runloop — the session queue has none.
+            DispatchQueue.main.async {
+                self.recordingSeconds = 0
+                self.recordTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                    self.recordingSeconds += 1
+                }
             }
         }
     }

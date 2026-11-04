@@ -13,7 +13,7 @@ struct DeviceView: View {
             let w = geo.size.width
             let h = geo.size.height
             ZStack {
-                Theme.bodyColor.ignoresSafeArea()
+                Theme.body(settings.theme).ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     HoldSwitchView()
@@ -27,6 +27,13 @@ struct DeviceView: View {
                             // wordmark, like turning on the real thing.
                             if !booted {
                                 BootSplash()
+                                    .transition(.opacity)
+                            }
+                        }
+                        .overlay {
+                            // Hold: LCD fades out, playing art centered.
+                            if model.holdActive {
+                                HoldScreenOverlay()
                                     .transition(.opacity)
                             }
                         }
@@ -109,11 +116,39 @@ struct BootSplash: View {
     }
 }
 
-/// Small padlock switch at the top of the body (the Hold switch).
-struct HoldSwitchView: View {
+/// Hold screen: display fades to near-black with the playing album art as a
+/// big centered square (or a lock when nothing is playing).
+struct HoldScreenOverlay: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Color.black.opacity(0.88)
+                if let aw = model.player.currentSong?.artwork {
+                    ArtworkView(artwork: aw, width: 500, height: 500)
+                        .frame(width: geo.size.height * 0.66, height: geo.size.height * 0.66)
+                        .clipShape(RoundedRectangle(cornerRadius: 2))
+                        .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.5), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.45), radius: 10, y: 4)
+                } else {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 58))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+/// Small padlock switch at the top of the body (the Hold switch).
+struct HoldSwitchView: View {
+    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        let silver = settings.theme == 1
         HStack {
             Spacer()
             Button {
@@ -125,10 +160,10 @@ struct HoldSwitchView: View {
                     Capsule()
                         .fill(
                             LinearGradient(
-                                colors: [
-                                    Color(red: 0.30, green: 0.30, blue: 0.31),
-                                    Color(red: 0.16, green: 0.16, blue: 0.17),
-                                ],
+                                colors: silver
+                                    ? [Color(white: 0.66), Color(white: 0.52)]
+                                    : [Color(red: 0.30, green: 0.30, blue: 0.31),
+                                       Color(red: 0.16, green: 0.16, blue: 0.17)],
                                 startPoint: .top, endPoint: .bottom
                             )
                         )
@@ -142,7 +177,7 @@ struct HoldSwitchView: View {
                     }
                     Image(systemName: model.holdActive ? "lock.fill" : "lock.open.fill")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color(white: 0.72))
+                        .foregroundStyle(silver ? Color(white: 0.15) : Color(white: 0.72))
                         .frame(maxWidth: .infinity, alignment: model.holdActive ? .trailing : .leading)
                         .padding(.horizontal, 4)
                 }

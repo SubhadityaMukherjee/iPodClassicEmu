@@ -36,6 +36,29 @@ enum Theme {
     static let wheelLabel = Color(red: 0.560, green: 0.560, blue: 0.575)
     static let wheelLabelLit = Color(red: 0.92, green: 0.92, blue: 0.93)
 
+    // MARK: Device themes (0 = classic black, 1 = silver)
+
+    static let themeNames = ["Black", "Silver"]
+
+    static func body(_ theme: Int) -> Color {
+        theme == 1 ? Color(red: 0.82, green: 0.82, blue: 0.83) : bodyColor
+    }
+    static func wheelFace(_ theme: Int) -> Color {
+        theme == 1 ? Color(white: 0.88) : wheelFace
+    }
+    static func wheelCenter(_ theme: Int) -> Color {
+        theme == 1 ? Color(white: 0.80) : wheelCenter
+    }
+    static func wheelEdge(_ theme: Int) -> Color {
+        theme == 1 ? Color(white: 0.66) : wheelEdge
+    }
+    static func wheelLabel(_ theme: Int) -> Color {
+        theme == 1 ? Color(white: 0.22) : wheelLabel
+    }
+    static func wheelLabelLit(_ theme: Int) -> Color {
+        theme == 1 ? Color(white: 0.10) : wheelLabelLit
+    }
+
     // MARK: Fonts
 
     static func row(_ size: CGFloat = 18.5) -> Font {
