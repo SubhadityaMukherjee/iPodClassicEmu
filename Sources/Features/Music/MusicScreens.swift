@@ -25,7 +25,7 @@ struct MusicMenuScreen: View {
         SplitMenuLayout(items: items, selection: selection) {
             preview
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .onAppear {
             model.music.refreshStatus()
             if model.music.isAuthorized && !model.music.loaded && !model.music.loading {
@@ -171,7 +171,7 @@ struct MusicListScreen: View {
 
     var body: some View {
         listBody
-            .onReceive(model.controlBus) { handle($0) }
+            .onWheel { handle($0) }
     }
 
     @ViewBuilder
@@ -287,7 +287,7 @@ struct ArtistDetailScreen: View {
         ) { item in
             model.music.album(item.id)?.artwork
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private func handle(_ event: ControlEvent) {
@@ -322,7 +322,7 @@ struct GenreAlbumsScreen: View {
         ) { item in
             model.music.album(item.id)?.artwork
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private func handle(_ event: ControlEvent) {
@@ -355,7 +355,7 @@ struct AlbumDetailScreen: View {
 
     var body: some View {
         list
-            .onReceive(model.controlBus) { handle($0) }
+            .onWheel { handle($0) }
             .task(id: albumID) {
                 if let album {
                     tracks = await model.music.tracks(forAlbum: album)
@@ -460,7 +460,7 @@ struct PlaylistDetailScreen: View {
             },
             selection: selection, emptyText: "No Songs", style: .twoLine
         )
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .task(id: playlistID) {
             if let playlist {
                 tracks = await model.music.tracks(forPlaylist: playlist)

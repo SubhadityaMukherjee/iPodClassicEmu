@@ -63,9 +63,11 @@ struct MenuList: View {
     var numbered = false
     var style: MenuRowStyle = .normal
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         GeometryReader { geo in
-            let rowH = rowHeight(for: geo.size.width)
+            let rowH = rowHeight(for: geo.size.width) * settings.fontMultiplier
             let visible = max(1, Int((geo.size.height / rowH).rounded(.down)))
             let start = max(0, min(selection - max(0, visible - 3), max(0, items.count - visible)))
             let slice = items.dropFirst(start).prefix(visible)
@@ -111,7 +113,10 @@ struct MenuRow: View {
     var style: MenuRowStyle = .normal
     var thumb: Artwork? = nil
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
+        let m = settings.fontMultiplier
         HStack(spacing: 0) {
             if style == .thumbnail {
                 thumbnail
@@ -126,12 +131,12 @@ struct MenuRow: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(item.title)
-                    .font(Theme.row(compact ? 15 : (style == .normal ? 17 : 15.5)))
+                    .font(Theme.row((compact ? 15 : (style == .normal ? 17 : 15.5)) * m))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if item.subtitle != nil && style != .normal {
                     Text(item.subtitle!)
-                        .font(.system(size: compact ? 11.5 : 12.5, weight: .medium))
+                        .font(.system(size: (compact ? 11.5 : 12.5) * m, weight: .medium))
                         .foregroundStyle(selected ? Color.white.opacity(0.82) : Theme.inkDim)
                         .lineLimit(1)
                         .padding(.top, 1)
@@ -141,7 +146,7 @@ struct MenuRow: View {
             Spacer(minLength: 4)
             if let detail = item.detail {
                 Text(detail)
-                    .font(Theme.row(compact ? 14 : 16))
+                    .font(Theme.row((compact ? 14 : 16) * m))
                     .lineLimit(1)
                     .padding(.trailing, 6)
             }
@@ -192,17 +197,18 @@ struct SplitMenuLayout<Preview: View>: View {
     var body: some View {
         GeometryReader { geo in
             let menuW = geo.size.width * 0.52
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
                 MenuList(items: items, selection: selection, compact: true)
-                    .frame(width: menuW)
+                    .frame(width: menuW, height: geo.size.height)
                 Rectangle()
                     .fill(Color.black.opacity(0.16))
-                    .frame(width: 1)
+                    .frame(width: 1, height: geo.size.height)
                 ZStack {
                     PaperBackground()
                     preview()
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: geo.size.height)
+                .clipped()
             }
         }
     }

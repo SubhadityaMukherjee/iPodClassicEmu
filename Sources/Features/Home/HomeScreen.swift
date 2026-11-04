@@ -25,7 +25,7 @@ struct HomeScreen: View {
         SplitMenuLayout(items: items, selection: selection) {
             preview
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private func handle(_ event: ControlEvent) {

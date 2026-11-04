@@ -32,7 +32,7 @@ struct CoverFlowScreen: View {
                 .zIndex(2)
             }
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
         .onAppear {
             if let pending = CoverFlowLaunch.shared.pendingAlbumID,
                let i = albums.firstIndex(where: { $0.id.rawValue == pending }) {
@@ -55,7 +55,7 @@ struct CoverFlowScreen: View {
                     if abs(offset) <= 4 {
                         FlowCover(album: album, size: coverSize, offset: offset)
                             .position(
-                                x: w / 2 + CGFloat(offset) * w * (abs(offset) > 0 ? 0.30 : 0.0),
+                                x: w / 2 + CGFloat(offset) * w * (abs(offset) > 0 ? 0.42 : 0.0),
                                 y: h * 0.44
                             )
                             .opacity(offset == 0 ? 1 : 0.92)

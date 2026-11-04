@@ -39,6 +39,33 @@ final class WheelTapTests: XCTestCase {
     }
 
     @MainActor
+    func testWheelOnlyAffectsTopScreen() throws {
+        let app = launchApp()
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let center = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+
+        // Home → Photos (one tick down on the NE diagonal), open it.
+        origin.withOffset(CGVector(dx: 64, dy: 64))
+            .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
+        center.tap()
+        XCTAssertTrue(app.staticTexts["No Photos"].waitForExistence(timeout: 3)
+                      || app.staticTexts["Allow photo access to see your gallery."].exists,
+                      "Photos screen did not open")
+
+        // Center again on the Photos screen (empty library → no-op). If a
+        // buried screen still listened, home would push a duplicate Photos.
+        center.tap()
+
+        // MENU pops exactly one level: we must land back on HOME (its rows
+        // visible), not on another Photos screen.
+        origin.withOffset(CGVector(dx: 0, dy: -96)).tap()
+        XCTAssertTrue(app.staticTexts["Now Playing"].waitForExistence(timeout: 3),
+                      "MENU did not return home — a buried screen likely pushed a duplicate")
+    }
+
+    @MainActor
     func testScrollTickMovesSelection() throws {
         let app = launchApp()
         let wheel = app.otherElements["clickwheel"]

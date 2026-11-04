@@ -27,7 +27,7 @@ struct SettingsScreen: View {
 
     var body: some View {
         MenuList(items: items, selection: selection)
-            .onReceive(model.controlBus) { handle($0) }
+            .onWheel { handle($0) }
             .onAppear { model.music.refreshStatus() }
     }
 
@@ -95,7 +95,7 @@ struct ValueSettingsScreen: View {
             items: rows.map { MenuItem(id: $0.id, title: $0.title, detail: $0.value()) },
             selection: selection
         )
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private func handle(_ event: ControlEvent) {
@@ -167,6 +167,7 @@ struct DisplaySettingsScreen: View {
 
     private static let scanLabels = ["Off", "Subtle", "Medium", "Strong"]
     private static let dimLabels: [(String, Int)] = [("Off", 0), ("15 sec", 15), ("30 sec", 30), ("1 min", 60), ("5 min", 300)]
+    private static let fontLabels = AppSettings.fontLabels
 
     var body: some View {
         ValueSettingsScreen(
@@ -184,6 +185,9 @@ struct DisplaySettingsScreen: View {
                 .init(id: "dim", title: "Dim After", value: { Self.dimLabels.first(where: { $0.1 == settings.dimAfterSeconds })?.0 ?? "Off" }) {
                     let idx = Self.dimLabels.firstIndex(where: { $0.1 == settings.dimAfterSeconds }) ?? 0
                     settings.dimAfterSeconds = Self.dimLabels[(idx + 1) % Self.dimLabels.count].1
+                },
+                .init(id: "fontsize", title: "Font Size", value: { Self.fontLabels[min(settings.fontScale, 2)] }) {
+                    settings.fontScale = (settings.fontScale + 1) % 3
                 },
             ]
         )
@@ -237,7 +241,7 @@ struct AboutScreen: View {
                 .multilineTextAlignment(.center)
             Spacer()
         }
-        .onReceive(model.controlBus) { handle($0) }
+        .onWheel { handle($0) }
     }
 
     private func handle(_ event: ControlEvent) {
