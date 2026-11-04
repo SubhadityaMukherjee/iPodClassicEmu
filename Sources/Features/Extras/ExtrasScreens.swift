@@ -138,16 +138,27 @@ struct MusicSearchScreen: View {
     @State private var selection = 0
     @FocusState private var focused: Bool
 
+    /// Ranked matches: title-starts-with > title-contains > artist > album.
     private var results: [Song] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard q.count >= 2 else { return [] }
-        return model.music.songs
-            .filter {
-                $0.title.localizedCaseInsensitiveContains(q)
-                    || $0.artistName.localizedCaseInsensitiveContains(q)
-                    || ($0.albumTitle ?? "").localizedCaseInsensitiveContains(q)
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return [] }
+        var titleStart: [Song] = []
+        var titleContains: [Song] = []
+        var artistMatch: [Song] = []
+        var albumMatch: [Song] = []
+        for s in model.music.songs {
+            let t = s.title.lowercased()
+            if t.hasPrefix(q) {
+                titleStart.append(s)
+            } else if t.contains(q) {
+                titleContains.append(s)
+            } else if s.artistName.lowercased().contains(q) {
+                artistMatch.append(s)
+            } else if (s.albumTitle ?? "").lowercased().contains(q) {
+                albumMatch.append(s)
             }
-            .sorted { $0.title.lowercased() != $1.title.lowercased() ? $0.title.lowercased() < $1.title.lowercased() : $0.id.rawValue < $1.id.rawValue }
+        }
+        return titleStart + titleContains + artistMatch + albumMatch
     }
 
     var body: some View {
@@ -184,13 +195,20 @@ struct MusicSearchScreen: View {
             )
             .padding(.horizontal, 6)
             .onTapGesture { focused = true }
+            // Keep the selection inside the shrinking result list, or the
+            // wheel would be stuck at an out-of-range index (could not scroll).
+            .onChange(of: query) {
+                if selection >= results.count {
+                    selection = max(0, results.count - 1)
+                }
+            }
 
             MenuList(
                 items: results.map { s in
                     MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.artistName, showsChevron: false)
                 },
                 selection: selection,
-                emptyText: query.count >= 2 ? "No Results" : "Type to search",
+                emptyText: query.isEmpty ? "Type to search" : "No Results",
                 style: .twoLine
             )
             .frame(maxHeight: .infinity)

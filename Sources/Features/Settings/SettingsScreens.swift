@@ -164,11 +164,15 @@ struct DisplaySettingsScreen: View {
     private static let scanLabels = ["Off", "Subtle", "Medium", "Strong"]
     private static let dimLabels: [(String, Int)] = [("Off", 0), ("15 sec", 15), ("30 sec", 30), ("1 min", 60), ("5 min", 300)]
     private static let fontLabels = AppSettings.fontLabels
+    private static let themeLabels = Theme.themeNames
 
     var body: some View {
         ValueSettingsScreen(
             title: "Display",
             rows: [
+                .init(id: "theme", title: "Theme", value: { Self.themeLabels[min(settings.theme, 1)] }) {
+                    settings.theme = (settings.theme + 1) % 2
+                },
                 .init(id: "crt", title: "CRT Effect", value: { settings.crtEnabled ? "On" : "Off" }) {
                     settings.crtEnabled.toggle()
                 },

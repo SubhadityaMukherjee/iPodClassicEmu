@@ -8,6 +8,7 @@ final class NotesStore {
     struct Note: Identifiable, Equatable {
         let name: String       // without extension
         let date: Date
+        var preview: String = ""  // first few words, for the list
         var id: String { name }
     }
 
@@ -26,7 +27,10 @@ final class NotesStore {
         notes = files.filter { $0.pathExtension.lowercased() == "txt" }
             .map { url -> Note in
                 let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
-                return Note(name: url.deletingPathExtension().lastPathComponent, date: date)
+                let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                let preview = body.split(separator: "\n").joined(separator: " ")
+                let words = preview.split(separator: " ").prefix(7).joined(separator: " ")
+                return Note(name: url.deletingPathExtension().lastPathComponent, date: date, preview: words)
             }
             .sorted { $0.date > $1.date }
     }

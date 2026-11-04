@@ -226,8 +226,8 @@ struct CameraScreen: View {
             model.camera.setVideoMode(!model.camera.videoMode)
         case "effect":
             let all = CameraEffect.allCases
-            let next = all[(all.firstIndex(of: model.camera.effect) ?? 0 + 1) % all.count]
-            model.camera.effect = next
+            let idx = all.firstIndex(of: model.camera.effect) ?? 0
+            model.camera.effect = all[(idx + 1) % all.count]
         case "back":
             if settings.cameraFront { model.camera.setFront(false); settings.cameraFront = false }
         case "front":
@@ -244,7 +244,7 @@ struct CameraScreen: View {
             model.camera.stopRecording()
         } else {
             model.camera.startRecording { ok in
-                recordToast = ok ? "Video Saved to Photos" : "Recording Failed"
+                recordToast = ok ? "Video saved" : "Recording Failed"
                 withAnimation(.easeOut(duration: 0.2)) { savedOverlay = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                     withAnimation(.easeIn(duration: 0.3)) { savedOverlay = false; recordToast = "" }
@@ -268,9 +268,10 @@ struct CameraScreen: View {
             let processed = model.camera.effect.apply(to: cropped)
             do {
                 try await model.photos.saveToLibrary(processed)
+                recordToast = model.camera.effect == .none ? "Saved to Photos" : "Saved · \(model.camera.effect.rawValue)"
                 withAnimation(.easeOut(duration: 0.2)) { savedOverlay = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                    withAnimation(.easeIn(duration: 0.3)) { savedOverlay = false }
+                    withAnimation(.easeIn(duration: 0.3)) { savedOverlay = false; recordToast = "" }
                 }
             } catch {
                 // Saving failed (likely missing photo permission); photo lost silently.
