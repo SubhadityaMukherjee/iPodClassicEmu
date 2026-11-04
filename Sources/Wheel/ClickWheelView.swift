@@ -33,6 +33,8 @@ struct ClickWheelView: View {
             coordinator.send = { model.handle($0) }
             coordinator.onZoneChange = { pressedZone = $0 }
         }
+        .accessibilityElement()
+        .accessibilityIdentifier("clickwheel")
     }
 }
 
@@ -152,7 +154,9 @@ final class WheelCoordinator {
         let angle = atan2(dy, dx) * 180 / .pi  // 0° = east, positive clockwise
 
         guard mode != nil else {
-            beginTouch(angle: angle, r: r, radius: radius, at: value.time)
+            // NOTE: never use value.time here — it is not a wall-clock Date on
+            // all platforms (huge offsets), which broke every tap. Date() only.
+            beginTouch(angle: angle, r: r, radius: radius, at: Date())
             return
         }
 
@@ -247,16 +251,17 @@ final class WheelCoordinator {
         }
     }
 
-    /// Quadrants centered at N (MENU), E (NEXT), S (PLAY), W (PREV).
-    /// Angle: 0° = east, positive clockwise.
+    /// Button arcs: ±32° around each label (N/E/S/W), like the real wheel's
+    /// narrow button zones. The diagonal sectors between them are scroll
+    /// areas. Angle: 0° = east, positive clockwise.
     static func quadrantZone(_ angle: Double) -> WheelZone? {
         let a = normalize(angle)
         switch a {
-        case 315..<360, 0..<45: return .next
-        case 45..<135: return .play
-        case 135..<225: return .prev
-        case 225..<315: return .menu
-        default: return nil
+        case 328..<360, 0..<32: return .next
+        case 58..<122: return .play
+        case 148..<212: return .prev
+        case 238..<302: return .menu
+        default: return nil  // diagonal scroll sector
         }
     }
 

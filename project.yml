@@ -59,9 +59,24 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: Tests
+        excludes:
+          - "UITests"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ipodclassic.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+    dependencies:
+      - target: iPodClassic
+
+  iPodClassicUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Tests/UITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ipodclassic.uitests
         GENERATE_INFOPLIST_FILE: "YES"
     dependencies:
       - target: iPodClassic
@@ -78,3 +93,4 @@ schemes:
       config: Debug
       targets:
         - iPodClassicTests
+        - iPodClassicUITests

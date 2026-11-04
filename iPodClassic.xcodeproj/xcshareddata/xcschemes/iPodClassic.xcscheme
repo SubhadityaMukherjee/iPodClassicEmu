@@ -64,6 +64,17 @@
                ReferencedContainer = "container:iPodClassic.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "CEE6AE9F4BEB6E7AD6D19E4C"
+               BuildableName = "iPodClassicUITests.xctest"
+               BlueprintName = "iPodClassicUITests"
+               ReferencedContainer = "container:iPodClassic.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
