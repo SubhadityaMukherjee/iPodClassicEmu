@@ -39,6 +39,7 @@ struct DeviceView: View {
                         .padding(.top, 2)
 
                     Spacer(minLength: 0)
+                        .frame(height: h * 0.028)
 
                     ClickWheelView()
                         .frame(width: w * 0.66, height: w * 0.66)
@@ -53,7 +54,7 @@ struct DeviceView: View {
                         )
 
                     Spacer(minLength: 0)
-                        .frame(height: h * 0.045)
+                        .frame(height: h * 0.075)
                 }
             }
         }

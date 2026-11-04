@@ -21,7 +21,12 @@ struct PhotosGridScreen: View {
         }
         .onWheel { handle($0) }
         .onAppear {
-            if !model.photos.loaded { Task { await model.photos.requestAccess() } }
+            if !model.photos.loaded {
+                Task { await model.photos.requestAccess() }
+            } else {
+                // Pick up photos taken since the last visit.
+                model.photos.reload()
+            }
         }
         .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
             if let img = shareImage {
@@ -60,7 +65,7 @@ struct PhotosGridScreen: View {
         .overlay {
             if model.photos.count == 0 {
                 Text("No Photos")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Theme.font(16, .semibold))
                     .foregroundStyle(Theme.inkDim)
             }
         }
@@ -188,7 +193,7 @@ struct PhotoDetailScreen: View {
                 VStack {
                     Spacer()
                     Text("Pinch to zoom · drag to pan")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(Theme.font(11, .semibold))
                         .foregroundStyle(Color.white.opacity(0.85))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)

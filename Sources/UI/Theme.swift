@@ -61,6 +61,12 @@ enum Theme {
 
     // MARK: Fonts
 
+    /// Settings-scaled font for feature screens, so the Font Size setting
+    /// applies consistently everywhere.
+    static func font(_ size: CGFloat, _ weight: Font.Weight = .regular, settings: AppSettings = .shared) -> Font {
+        .system(size: (size * settings.fontMultiplier).rounded(), weight: weight)
+    }
+
     static func row(_ size: CGFloat = 18.5) -> Font {
         .system(size: size, weight: .semibold, design: .default)
     }

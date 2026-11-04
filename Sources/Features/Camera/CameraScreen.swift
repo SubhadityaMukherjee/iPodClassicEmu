@@ -57,7 +57,7 @@ struct CameraScreen: View {
                 VStack {
                     Spacer()
                     Text(recordToast.isEmpty ? "Saved to Photos" : recordToast)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(Theme.font(12, .bold))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -93,7 +93,7 @@ struct CameraScreen: View {
                             .fill(model.camera.isRecording ? Color.red : Color.red.opacity(0.35))
                             .frame(width: 7, height: 7)
                         Text(model.camera.isRecording ? TimeFormat.mss(Double(model.camera.recordingSeconds)) : "READY")
-                            .font(.system(size: 10, weight: .bold).monospacedDigit())
+                            .font(Theme.font(10, .bold).monospacedDigit())
                             .foregroundStyle(Color.white)
                     }
                     .padding(.horizontal, 7)
@@ -103,7 +103,7 @@ struct CameraScreen: View {
                     .padding(.top, 4)
                 } else {
                     Text(aspect.label)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(Theme.font(11, .bold))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -129,9 +129,9 @@ struct CameraScreen: View {
     private func hint(_ key: String, _ action: String) -> some View {
         HStack(spacing: 3) {
             Text(key)
-                .font(.system(size: 9.5, weight: .bold))
+                .font(Theme.font(9.5, .bold))
             Text(action)
-                .font(.system(size: 9.5, weight: .medium))
+                .font(Theme.font(9.5, .medium))
         }
         .foregroundStyle(Color.white.opacity(0.92))
     }

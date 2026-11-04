@@ -75,11 +75,11 @@ struct CoverFlowScreen: View {
     private var caption: some View {
         VStack(spacing: 1) {
             Text(currentAlbum?.artistName ?? "")
-                .font(.system(size: 12.5, weight: .medium))
+                .font(Theme.font(12.5, .medium))
                 .foregroundStyle(Theme.inkDim)
                 .lineLimit(1)
             Text(currentAlbum?.title ?? "")
-                .font(.system(size: 15.5, weight: .bold))
+                .font(Theme.font(15.5, .bold))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
         }
@@ -184,7 +184,7 @@ private struct FlippableCover: View {
     private var back: some View {
         VStack(spacing: 0) {
             Text(album.title)
-                .font(.system(size: 12, weight: .bold))
+                .font(Theme.font(12, .bold))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
                 .padding(.horizontal, 6)
@@ -196,7 +196,7 @@ private struct FlippableCover: View {
             if tracks.isEmpty {
                 Spacer()
                 Image(systemName: "music.note")
-                    .font(.system(size: 22))
+                    .font(Theme.font(22))
                     .foregroundStyle(Theme.inkDim)
                 Spacer()
             } else {
@@ -278,7 +278,7 @@ private struct AlphabetBar: View {
         HStack(spacing: 0) {
             ForEach(Self.letters, id: \.self) { letter in
                 Text(letter)
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(Theme.font(10.5, .semibold))
                     .frame(maxWidth: .infinity)
                     .foregroundStyle(
                         letter == currentLetter ? Color.white : Theme.inkDim

@@ -35,7 +35,7 @@ struct CalendarScreen: View {
             Button {
                 selected = cal.date(byAdding: .month, value: -1, to: selected) ?? selected
             } label: {
-                Image(systemName: "chevron.left").font(.system(size: 12, weight: .bold))
+                Image(systemName: "chevron.left").font(Theme.font(12, .bold))
             }
             .buttonStyle(.plain)
 
@@ -47,7 +47,7 @@ struct CalendarScreen: View {
             Button {
                 selected = cal.date(byAdding: .month, value: 1, to: selected) ?? selected
             } label: {
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold))
+                Image(systemName: "chevron.right").font(Theme.font(12, .bold))
             }
             .buttonStyle(.plain)
         }
@@ -64,7 +64,7 @@ struct CalendarScreen: View {
         HStack(spacing: 0) {
             ForEach(["S", "M", "T", "W", "T", "F", "S"].indices, id: \.self) { i in
                 Text(["S", "M", "T", "W", "T", "F", "S"][i])
-                    .font(.system(size: 10.5, weight: .bold))
+                    .font(Theme.font(10.5, .bold))
                     .foregroundStyle(Theme.inkDim)
                     .frame(maxWidth: .infinity)
             }
@@ -94,7 +94,7 @@ struct CalendarScreen: View {
         let isSelected = cal.isDate(day, inSameDayAs: selected)
         let isToday = cal.isDateInToday(day)
         return Text("\(num)")
-            .font(.system(size: 13, weight: isSelected ? .bold : .medium))
+            .font(Theme.font(13, isSelected ? .bold : .medium))
             .foregroundStyle(isSelected ? Color.white : (isToday ? Theme.selMid : Theme.ink))
             .frame(maxWidth: .infinity, minHeight: 22)
             .background(
@@ -116,25 +116,25 @@ struct CalendarScreen: View {
             Rectangle().fill(Color.black.opacity(0.12)).frame(height: 0.7).padding(.horizontal, 2)
             if accessDenied {
                 Text("Allow calendar access in Settings to see events.")
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(Theme.font(11.5, .medium))
                     .foregroundStyle(Theme.inkDim)
             } else if events.isEmpty {
                 Text("No events")
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(Theme.font(11.5, .medium))
                     .foregroundStyle(Theme.inkDim)
             } else {
                 ForEach(events.prefix(3), id: \.eventIdentifier) { e in
                     HStack(spacing: 5) {
                         Circle().fill(Color(cgColor: e.calendar.cgColor)).frame(width: 6, height: 6)
                         Text(eventText(e))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Theme.font(12, .semibold))
                             .foregroundStyle(Theme.ink)
                             .lineLimit(1)
                     }
                 }
                 if events.count > 3 {
                     Text("+ \(events.count - 3) more")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(Theme.font(11, .medium))
                         .foregroundStyle(Theme.inkDim)
                 }
             }

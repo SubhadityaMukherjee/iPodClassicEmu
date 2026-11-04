@@ -112,7 +112,7 @@ struct HomeScreen: View {
 
     private func glyph(_ symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 40))
+            .font(Theme.font(40))
             .foregroundStyle(Theme.inkDim.opacity(0.55))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

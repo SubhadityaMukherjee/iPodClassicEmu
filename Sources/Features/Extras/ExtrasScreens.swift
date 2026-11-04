@@ -58,7 +58,7 @@ struct FlashlightScreen: View {
                         .fill(on ? AnyShapeStyle(SelectionGradient()) : AnyShapeStyle(Color(white: 0.82)))
                         .frame(width: 120, height: 120)
                     Image(systemName: on ? "flashlight.on.fill" : "flashlight.off.fill")
-                        .font(.system(size: 56))
+                        .font(Theme.font(56))
                         .foregroundStyle(on ? Color.white : Theme.inkDim)
                 }
             }
@@ -73,7 +73,7 @@ struct FlashlightScreen: View {
                 }
                 .frame(width: 150)
                 Text(on ? "Level \(Int(level * 100))%" : "Center: on · Wheel: level")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Theme.font(12, .semibold))
                     .foregroundStyle(Theme.inkDim)
             }
         }
@@ -165,11 +165,11 @@ struct MusicSearchScreen: View {
         VStack(spacing: 4) {
             HStack(spacing: 5) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Theme.font(13, .semibold))
                     .foregroundStyle(Theme.inkDim)
                 TextField("Search songs, artists, albums", text: $query)
                     .focused($focused)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(Theme.font(15, .medium))
                     .foregroundStyle(Theme.ink)
                     .submitLabel(.search)
                     .padding(.vertical, 4)
@@ -181,7 +181,7 @@ struct MusicSearchScreen: View {
                         query = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
+                            .font(Theme.font(13))
                             .foregroundStyle(Theme.inkDim)
                     }
                     .buttonStyle(.plain)

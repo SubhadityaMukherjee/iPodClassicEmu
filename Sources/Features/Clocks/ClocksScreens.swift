@@ -49,7 +49,7 @@ struct AlarmScreen: View {
     var body: some View {
         VStack(spacing: 6) {
             Text(segmentTitle)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(Theme.font(12.5, .semibold))
                 .foregroundStyle(Theme.inkDim)
                 .padding(.top, 4)
 
@@ -77,7 +77,7 @@ struct AlarmScreen: View {
     private var timeRow: some View {
         HStack(spacing: 4) {
             timeSegment(text: String(format: "%02d", alarm.hour), selected: segment == .hour, width: 34)
-            Text(":").font(.system(size: 22, weight: .semibold))
+            Text(":").font(Theme.font(22, .semibold))
             timeSegment(text: String(format: "%02d", alarm.minute), selected: segment == .minute, width: 34)
             timeSegment(text: alarm.isPM ? "PM" : "AM", selected: segment == .ampm, width: 30, fontSize: 13)
         }
@@ -98,9 +98,9 @@ struct AlarmScreen: View {
     private var alarmToggle: some View {
         HStack(spacing: 5) {
             Image(systemName: "alarm.clock")
-                .font(.system(size: 13, weight: .semibold))
+                .font(Theme.font(13, .semibold))
             Text(alarm.enabled ? "Alarm On" : "Alarm Off")
-                .font(.system(size: 15, weight: .semibold))
+                .font(Theme.font(15, .semibold))
         }
         .foregroundStyle(segment == .toggle ? Color.white : Theme.inkDim)
         .padding(.horizontal, 12)
@@ -202,18 +202,18 @@ struct TimerScreen: View {
             if editingDuration {
                 HStack(spacing: 4) {
                     durSegment(label: "h", value: model.timer.durationHours, selected: durationSegment == .hour)
-                    Text(":").font(.system(size: 17, weight: .semibold))
+                    Text(":").font(Theme.font(17, .semibold))
                     durSegment(label: "m", value: model.timer.durationMinutes, selected: durationSegment == .minute)
-                    Text(":").font(.system(size: 17, weight: .semibold))
+                    Text(":").font(Theme.font(17, .semibold))
                     durSegment(label: "s", value: model.timer.durationSeconds, selected: durationSegment == .second)
                 }
                 Text("Wheel: adjust · Center: next · MENU: done")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(Theme.font(10, .medium))
                     .foregroundStyle(Theme.inkDim)
             } else {
                 HStack(spacing: 3) {
                     Image(systemName: "timer")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Theme.font(12, .semibold))
                     Text("\(model.timer.durationHours > 0 ? String(format: "%d:", model.timer.durationHours) : "")\(String(format: "%02d:%02d", model.timer.durationMinutes, model.timer.durationSeconds))")
                         .font(.system(size: 15, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
@@ -225,7 +225,7 @@ struct TimerScreen: View {
                 }
                 HStack {
                     Text("Set Duration")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Theme.font(16, .semibold))
                         .foregroundStyle(segment == .setDuration ? Color.white : Theme.ink)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
@@ -239,7 +239,7 @@ struct TimerScreen: View {
 
     private func controlRow(text: String, selected: Bool, leading: Bool) -> some View {
         Text(text)
-            .font(.system(size: 16, weight: .semibold))
+            .font(Theme.font(16, .semibold))
             .foregroundStyle(selected ? Color.white : Theme.ink)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 5)
@@ -258,10 +258,10 @@ struct TimerScreen: View {
     private func durSegment(label: String, value: Int, selected: Bool) -> some View {
         HStack(spacing: 2) {
             Text(String(format: "%02d", value))
-                .font(.system(size: 17, weight: .semibold))
+                .font(Theme.font(17, .semibold))
                 .monospacedDigit()
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(Theme.font(10, .medium))
                 .foregroundStyle(Theme.inkDim)
         }
         .padding(.horizontal, 6)
@@ -419,7 +419,7 @@ struct StopwatchScreen: View {
                 ForEach(Array(model.stopwatch.laps.enumerated().reversed()), id: \.offset) { i, lap in
                     HStack {
                         Text("Lap \(i + 1)")
-                            .font(.system(size: 12.5, weight: .semibold))
+                            .font(Theme.font(12.5, .semibold))
                             .foregroundStyle(Theme.inkDim)
                         Spacer()
                         Text(TimeFormat.stopwatch(lap))

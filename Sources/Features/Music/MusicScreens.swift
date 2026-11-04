@@ -73,10 +73,10 @@ struct MusicMenuScreen: View {
         } else if model.music.loading {
             VStack(spacing: 6) {
                 Image(systemName: "music.note")
-                    .font(.system(size: 30))
+                    .font(Theme.font(30))
                     .foregroundStyle(Theme.inkDim)
                 Text("Loading Library…")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Theme.font(13, .semibold))
                     .foregroundStyle(Theme.inkDim)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -130,7 +130,7 @@ struct MusicMenuScreen: View {
 
     private func fallback(_ symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 34))
+            .font(Theme.font(34))
             .foregroundStyle(Theme.inkDim.opacity(0.6))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -144,10 +144,10 @@ struct PromptPane: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 30))
+                .font(Theme.font(30))
                 .foregroundStyle(Theme.inkDim)
             Text(text)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(Theme.font(12.5, .semibold))
                 .foregroundStyle(Theme.inkDim)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 14)

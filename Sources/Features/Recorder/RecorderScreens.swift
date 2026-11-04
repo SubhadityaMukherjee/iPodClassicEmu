@@ -40,13 +40,13 @@ struct RecorderScreen: View {
                         .fill(recorder.isPaused ? Color(red: 0.95, green: 0.75, blue: 0.1) : Color.red)
                         .frame(width: 10, height: 10)
                     Text(recorder.isPaused ? "PAUSED" : "RECORDING")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(Theme.font(11, .bold))
                         .tracking(1)
                         .foregroundStyle(Theme.inkDim)
                 }
             } else {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 22))
+                    .font(Theme.font(22))
                     .foregroundStyle(Theme.inkDim)
             }
             Text(TimeFormat.hms(recorder.elapsed))
@@ -55,7 +55,7 @@ struct RecorderScreen: View {
                 .foregroundStyle(recorder.isRecording ? Theme.ink : Theme.inkDim)
             if recorder.isPaused {
                 Text("Recording continues in the background")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(Theme.font(10.5, .medium))
                     .foregroundStyle(Theme.inkDim)
             }
         }
@@ -125,9 +125,18 @@ struct RecordingsListScreen: View {
                 ModalHost { deletePanel }
                     .zIndex(2)
             }
+            if holdItem != nil {
+                ModalHost { holdPanel }
+                    .zIndex(3)
+            }
         }
         .onWheel { handle($0) }
         .onAppear { model.recorder.loadRecordings() }
+        .sheet(isPresented: Binding(get: { shareItem != nil }, set: { if !$0 { shareItem = nil } })) {
+            if let url = shareItem {
+                ActivityView(items: [url])
+            }
+        }
     }
 
     private var deletePanel: some View {
@@ -143,6 +152,24 @@ struct RecordingsListScreen: View {
     }
 
     private func handle(_ event: ControlEvent) {
+        if holdItem != nil {
+            switch event {
+            case .tick(let d):
+                holdSelection = min(2, max(0, holdSelection + (d > 0 ? 1 : -1)))
+                WheelFeedback.tick(dir: d)
+            case .select:
+                switch holdSelection {
+                case 0: shareItem = holdItem?.url; holdItem = nil
+                case 1: deleteCandidate = holdItem; deleteSelection = 1; holdItem = nil
+                default: holdItem = nil
+                }
+            case .menu, .menuHold:
+                holdItem = nil
+            default:
+                break
+            }
+            return
+        }
         if deleteCandidate != nil {
             switch event {
             case .tick(let d):
@@ -173,13 +200,43 @@ struct RecordingsListScreen: View {
             }
         case .centerHold:
             if model.recorder.recordings.indices.contains(selection) {
-                deleteCandidate = model.recorder.recordings[selection]
-                deleteSelection = 1
+                holdItem = model.recorder.recordings[selection]
+                holdSelection = 0
             }
         case .menu:
             model.pop()
         default:
             break
+        }
+    }
+
+    @State private var holdItem: RecordingFile?
+    @State private var holdSelection = 0
+    @State private var shareItem: URL?
+
+    private var holdPanel: some View {
+        ModalPanel(title: "Recording Options", onClose: { holdItem = nil }) {
+            VStack(spacing: 0) {
+                MenuRow(item: MenuItem(id: "h.share", title: "Share", showsChevron: false), selected: holdSelection == 0)
+                    .frame(height: 30.5)
+                    .onTapGesture {
+                        shareItem = holdItem?.url
+                        holdItem = nil
+                    }
+                MenuRow(item: MenuItem(id: "h.delete", title: "Delete", showsChevron: false), selected: holdSelection == 1)
+                    .frame(height: 30.5)
+                    .onTapGesture {
+                        deleteCandidate = holdItem
+                        deleteSelection = 1
+                        holdItem = nil
+                    }
+                MenuRow(item: MenuItem(id: "h.cancel", title: "Cancel", showsChevron: false), selected: holdSelection == 2)
+                    .frame(height: 30.5)
+                    .onTapGesture {
+                        holdItem = nil
+                    }
+            }
+            .padding(.top, 2)
         }
     }
 }
@@ -227,14 +284,14 @@ struct RecordingDetailScreen: View {
     private var playbackHeader: some View {
         VStack(spacing: 5) {
             Text(file?.name.replacingOccurrences(of: "Recording ", with: "") ?? "Recording")
-                .font(.system(size: 13, weight: .bold))
+                .font(Theme.font(13, .bold))
                 .lineLimit(1)
                 .padding(.horizontal, 8)
             Text(TimeFormat.hms(model.recorder.playTime))
                 .font(.system(size: 26, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
             Text("of \(TimeFormat.duration(file?.duration ?? 0))")
-                .font(.system(size: 11, weight: .medium))
+                .font(Theme.font(11, .medium))
                 .foregroundStyle(Theme.inkDim)
         }
     }
