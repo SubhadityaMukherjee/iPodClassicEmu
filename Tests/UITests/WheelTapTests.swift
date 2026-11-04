@@ -74,13 +74,17 @@ final class WheelTapTests: XCTestCase {
             origin.withOffset(CGVector(dx: 64, dy: 64))
                 .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
         }
-        // 3 ticks pass the headers; 10 more walk deep into the songs —
-        // the visible window must slide along with the selection.
-        for _ in 0..<13 { tick() }
+        // 3 ticks pass the headers; 40 more walk very deep into the songs —
+        // the visible window must slide along with the selection and never
+        // clip rows at the tail.
+        for _ in 0..<43 { tick() }
 
-        // Song 010 sits at selection index 13; it must now be on screen.
-        XCTAssertTrue(app.staticTexts["Song 010"].waitForExistence(timeout: 4),
+        // Song 040 sits at selection index 43; it must now be on screen.
+        XCTAssertTrue(app.staticTexts["Song 040"].waitForExistence(timeout: 4),
                       "All Songs window did not slide with the selection")
+        // The row after the selection must also be rendered whole (no tail cut-off).
+        XCTAssertTrue(app.staticTexts["Song 041"].exists || app.staticTexts["Song 039"].exists,
+                      "Rows around the selection are missing at depth")
     }
 
     @MainActor
