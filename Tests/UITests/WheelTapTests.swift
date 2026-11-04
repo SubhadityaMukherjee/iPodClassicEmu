@@ -58,6 +58,32 @@ final class WheelTapTests: XCTestCase {
     }
 
     @MainActor
+    func testAllSongsListScrolls() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launchEnvironment["FAKE_LIBRARY"] = "1"
+        app.launchEnvironment["START_ROUTE"] = "songs"
+        app.launch()
+
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Song 000"].waitForExistence(timeout: 5), "Fake songs list did not load")
+
+        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        func tick() {
+            origin.withOffset(CGVector(dx: 64, dy: 64))
+                .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
+        }
+        // 3 ticks pass the headers; 10 more walk deep into the songs —
+        // the visible window must slide along with the selection.
+        for _ in 0..<13 { tick() }
+
+        // Song 010 sits at selection index 13; it must now be on screen.
+        XCTAssertTrue(app.staticTexts["Song 010"].waitForExistence(timeout: 4),
+                      "All Songs window did not slide with the selection")
+    }
+
+    @MainActor
     func testSettingsSubmenuScrollsAndSelects() throws {
         let app = XCUIApplication()
         app.launchEnvironment["RESET_DEFAULTS"] = "1"

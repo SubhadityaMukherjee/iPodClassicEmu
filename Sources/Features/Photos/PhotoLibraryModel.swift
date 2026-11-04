@@ -6,19 +6,20 @@ import SwiftUI
 
 /// Photo library access: one fetch of all image assets (newest first),
 /// thumbnail caching, and full-size loading for the detail screen.
+/// NOTE: never touch PHAsset/PHPhotoLibrary APIs before the user opens
+/// Photos — an early fetch would trigger the permission prompt at launch.
 @Observable
 final class PhotoLibraryModel {
-    private(set) var assets: PHFetchResult<PHAsset> = PHAsset.fetchAssets(with: .none)
+    private(set) var assets: PHFetchResult<PHAsset>?
     private(set) var authorized = PHPhotoLibrary.authorizationStatus(for: .readWrite) == .authorized || PHPhotoLibrary.authorizationStatus(for: .readWrite) == .limited
     private(set) var loaded = false
-
     private let imageManager = PHCachingImageManager()
     private var thumbnails: [String: UIImage] = [:]
 
-    var count: Int { assets.count }
+    var count: Int { assets?.count ?? 0 }
 
     func asset(at index: Int) -> PHAsset? {
-        guard index >= 0 && index < assets.count else { return nil }
+        guard let assets, index >= 0 && index < assets.count else { return nil }
         return assets[index]
     }
 
@@ -77,7 +78,7 @@ final class PhotoLibraryModel {
 
     // Home preview
     var latestThumbnail: UIImage? {
-        guard count > 0 else { return nil }
+        guard let assets, assets.count > 0 else { return nil }
         return thumbnail(for: assets[0], size: CGSize(width: 300, height: 300))
     }
 }

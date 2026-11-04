@@ -10,6 +10,7 @@ struct MusicMenuScreen: View {
 
     private var items: [MenuItem] {
         [
+            MenuItem(id: "search", title: "Search", symbol: "magnifyingglass", showsChevron: false, isActionRow: true),
             MenuItem(id: "coverflow", title: "Cover Flow"),
             MenuItem(id: "playlists", title: "Playlists"),
             MenuItem(id: "artists", title: "Artists"),
@@ -17,7 +18,6 @@ struct MusicMenuScreen: View {
             MenuItem(id: "songs", title: "Songs"),
             MenuItem(id: "genres", title: "Genres"),
             MenuItem(id: "recent", title: "Recent"),
-            MenuItem(id: "search", title: "Search", symbol: "magnifyingglass", showsChevron: false, isActionRow: true),
             MenuItem(id: "nowplaying", title: "Now Playing"),
         ]
     }
@@ -175,63 +175,36 @@ struct MusicListScreen: View {
     private static let songSortLabels = ["Title", "Artist", "Duration", "Recently Added"]
     private static let albumSortLabels = ["Title", "Artist", "Recently Added"]
 
-    // MARK: Entries (sorted)
-
-    /// Swift's sort isn't stable — without an id tiebreaker, equal-keyed
-    /// rows reshuffled under the selection on every wheel tick, which felt
-    /// like broken scrolling in All Songs.
-    private func sortedBy<T>(_ list: [T], key: (T) -> String, descending: Bool = false) -> [T] {
-        func idOf(_ x: T) -> String {
-            (x as? Song)?.id.rawValue ?? (x as? Album)?.id.rawValue ?? "\(x as? String ?? "")" + String(describing: x)
-        }
-        return list.sorted { a, b in
-            let ka = key(a).lowercased(), kb = key(b).lowercased()
-            if ka == kb { return idOf(a) < idOf(b) }
-            return descending ? ka > kb : ka < kb
-        }
-    }
+    // MARK: Entries (sorted) — cached in MusicService; see songsMenuItems.
 
     private var sortedSongs: [Song] {
-        let list = model.music.songs
-        guard kind == .songs else { return list }
-        switch settings.songSort {
-        case 1: return sortedBy(list, key: { $0.artistName })
-        case 2: return list.sorted { ($0.duration ?? 0) != ($1.duration ?? 0) ? ($0.duration ?? 0) < ($1.duration ?? 0) : $0.id.rawValue < $1.id.rawValue }
-        case 3: return list.sorted { ($0.releaseDate ?? .distantPast) != ($1.releaseDate ?? .distantPast) ? ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) : $0.id.rawValue < $1.id.rawValue }
-        default: return sortedBy(list, key: { $0.title })
-        }
+        guard kind == .songs else { return model.music.songs }
+        return model.music.songsSorted(by: settings.songSort)
     }
 
     private var sortedAlbums: [Album] {
         let list = kind == .recent ? model.music.recentlyAdded : model.music.albums
         guard kind == .albums else { return list }
-        switch settings.albumSort {
-        case 1: return sortedBy(list, key: { $0.artistName })
-        case 2: return list.sorted { ($0.releaseDate ?? .distantPast) != ($1.releaseDate ?? .distantPast) ? ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) : $0.id.rawValue < $1.id.rawValue }
-        default: return sortedBy(list, key: { $0.title })
-        }
+        return model.music.albumsSorted(by: settings.albumSort)
     }
 
     private var entryItems: [MenuItem] {
         switch kind {
         case .artists:
-            return model.music.artists
-                .sorted { $0.name.lowercased() != $1.name.lowercased() ? $0.name.lowercased() < $1.name.lowercased() : $0.id.rawValue < $1.id.rawValue }
-                .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
+            return model.music.artistsMenuItems()
         case .albums:
-            return sortedAlbums.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
+            return model.music.albumsMenuItems(sort: settings.albumSort)
         case .songs:
-            return sortedSongs.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName, showsChevron: false) }
+            if QASeed.active {
+                return QASeed.songs.map { MenuItem(id: $0.id, title: $0.title, subtitle: $0.artist, showsChevron: false) }
+            }
+            return model.music.songsMenuItems(sort: settings.songSort)
         case .genres:
-            return model.music.genres
-                .sorted { $0.lowercased() != $1.lowercased() ? $0.lowercased() < $1.lowercased() : $0 < $1 }
-                .map { MenuItem(id: $0, title: $0) }
+            return model.music.genresMenuItems()
         case .playlists:
-            return model.music.playlists
-                .sorted { $0.name.lowercased() != $1.name.lowercased() ? $0.name.lowercased() < $1.name.lowercased() : $0.id.rawValue < $1.id.rawValue }
-                .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
+            return model.music.playlistsMenuItems()
         case .recent:
-            return model.music.recentlyAdded.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
+            return model.music.recentMenuItems()
         }
     }
 
@@ -260,7 +233,12 @@ struct MusicListScreen: View {
         kind == .songs ? settings.songSort : settings.albumSort
     }
 
-    private var allItems: [MenuItem] { headerItems + entryItems }
+    private var allItems: [MenuItem] {
+        // Read `loaded` so the list re-renders when the async library load
+        // completes (the QA seed path touches no observable otherwise).
+        _ = model.music.loaded
+        return headerItems + entryItems
+    }
 
     var body: some View {
         MenuList(
@@ -272,6 +250,11 @@ struct MusicListScreen: View {
             model.music.album(item.id)?.artwork
         }
         .onWheel { handle($0) }
+        .onAppear {
+            if !model.music.loaded && !model.music.loading {
+                Task { await model.music.loadLibrary() }
+            }
+        }
     }
 
     private var listStyle: MenuRowStyle {
@@ -310,6 +293,7 @@ struct MusicListScreen: View {
     /// Songs this list can play in full: the sorted list itself for Songs,
     /// album-ordered library for album/recent, the whole library otherwise.
     private var allSongs: [Song] {
+        if QASeed.active { return [] }
         switch kind {
         case .songs: return sortedSongs
         case .albums, .recent:
