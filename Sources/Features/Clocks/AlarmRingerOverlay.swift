@@ -38,7 +38,7 @@ struct AlarmRingerOverlay: View {
             }
         }
         .zIndex(10)
-        .onReceive(model.controlBus) { handle($0) }
+        .onReceive(model.ringerBus) { handle($0) }
     }
 
     private func handle(_ event: ControlEvent) {

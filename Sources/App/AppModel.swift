@@ -103,6 +103,9 @@ final class AppModel {
     let alarms = AlarmStore.shared
 
     let controlBus = PassthroughSubject<ControlEvent, Never>()
+    /// Events while the alarm/timer ringer is up go here instead, so the
+    /// underlying screen can't react to them.
+    let ringerBus = PassthroughSubject<ControlEvent, Never>()
 
     init() {
         // QA hook: launch with SIMCTL_CHILD_START_ROUTE=alarm etc. to open
@@ -175,6 +178,12 @@ final class AppModel {
             return
         }
         if holdActive { return }
+
+        // While the ringer overlay is up, it owns all input.
+        if ringer != nil {
+            ringerBus.send(event)
+            return
+        }
 
         // Global transport handling (classic iPod behavior) unless a screen
         // claimed the media buttons (camera).
