@@ -104,6 +104,37 @@ final class AppModel {
 
     let controlBus = PassthroughSubject<ControlEvent, Never>()
 
+    init() {
+        // QA hook: launch with SIMCTL_CHILD_START_ROUTE=alarm etc. to open
+        // a specific screen first.
+        if let name = ProcessInfo.processInfo.environment["START_ROUTE"],
+           let route = Self.route(named: name) {
+            stack = [route]
+        }
+    }
+
+    static func route(named name: String) -> Route? {
+        switch name {
+        case "music": return .music
+        case "coverflow": return .coverFlow
+        case "albums": return .musicAlbums
+        case "songs": return .musicSongs
+        case "playlists": return .musicPlaylists
+        case "nowplaying": return .nowPlaying
+        case "photos": return .photos
+        case "camera": return .camera
+        case "recorder": return .recorder
+        case "recordings": return .recordings
+        case "notes": return .notes
+        case "clocks": return .clocks
+        case "alarm": return .alarm
+        case "timer": return .timer
+        case "stopwatch": return .stopwatch
+        case "settings": return .settings
+        default: return nil
+        }
+    }
+
     private var lastInputAt = Date()
 
     // MARK: Navigation

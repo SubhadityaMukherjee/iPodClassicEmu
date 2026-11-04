@@ -175,6 +175,7 @@ struct TimerScreen: View {
             Text(TimeFormat.hms(model.timer.remaining))
                 .font(.system(size: 26, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
+                .foregroundStyle(Theme.ink)
 
             controls
                 .padding(.horizontal, 22)
@@ -385,6 +386,7 @@ struct StopwatchScreen: View {
             Text(TimeFormat.stopwatch(model.stopwatch.elapsed))
                 .font(.system(size: 32, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
+                .foregroundStyle(Theme.ink)
                 .padding(.top, 8)
 
             if !model.stopwatch.laps.isEmpty {
