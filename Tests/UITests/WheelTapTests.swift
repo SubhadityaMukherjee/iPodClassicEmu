@@ -28,6 +28,14 @@ final class WheelTapTests: XCTestCase {
             app.staticTexts["Cover Flow"].waitForExistence(timeout: 3),
             "Center tap did not push the Music menu"
         )
+
+        // The pushed screen must fully COVER the home screen (opaque
+        // background). Home's "Photos" row still exists in the hierarchy but
+        // must not be tappable/visible through the new screen.
+        let photosRow = app.staticTexts["Photos"]
+        if photosRow.exists {
+            XCTAssertFalse(photosRow.isHittable, "Home menu shows through the pushed screen (missing opaque background)")
+        }
     }
 
     @MainActor

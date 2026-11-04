@@ -48,6 +48,7 @@ struct ScreenRouter: View {
         ZStack {
             ForEach(Array(model.stack.enumerated()), id: \.element) { index, route in
                 screen(for: route)
+                    .background(PaperBackground())  // opaque: covers the screens below it
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
                         removal: .move(edge: .trailing).combined(with: .opacity)

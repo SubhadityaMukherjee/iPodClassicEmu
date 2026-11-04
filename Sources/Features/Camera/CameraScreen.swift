@@ -120,7 +120,6 @@ struct CameraScreen: View {
                 ForEach(Array(optionsItems.enumerated()), id: \.element.id) { i, item in
                     MenuRow(item: item, selected: optionsSelection == i)
                         .frame(height: 30.5)
-                    Divider().background(Color.black.opacity(0.10))
                 }
             }
             .padding(.top, 2)
