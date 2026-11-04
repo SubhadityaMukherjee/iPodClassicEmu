@@ -43,7 +43,7 @@ struct NowPlayingScreen: View {
                 VStack {
                     Spacer()
                     Text(toast)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(Theme.font(12, .bold))
                         .foregroundStyle(Theme.ink)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -69,13 +69,13 @@ struct NowPlayingScreen: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 MarqueeText(text: song?.title ?? "Not Playing",
-                            font: .system(size: 16.5, weight: .bold),
+                            font: Theme.font(16.5, .bold),
                             color: Theme.ink)
                 MarqueeText(text: song?.artistName ?? "",
-                            font: .system(size: 14, weight: .medium),
+                            font: Theme.font(14, .medium),
                             color: Theme.inkDim)
                 MarqueeText(text: song?.albumTitle ?? "",
-                            font: .system(size: 13, weight: .medium),
+                            font: Theme.font(13, .medium),
                             color: Theme.inkDim.opacity(0.85))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -98,7 +98,7 @@ struct NowPlayingScreen: View {
                 .frame(width: 132, height: 132)
                 .overlay(
                     Image(systemName: "music.note")
-                        .font(.system(size: 30))
+                        .font(Theme.font(30))
                         .foregroundStyle(Theme.inkDim)
                 )
                 .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.2), lineWidth: 0.8))
@@ -128,7 +128,7 @@ struct NowPlayingScreen: View {
                     Text(player.isPlaying ? "-\(TimeFormat.mss(max(0, player.duration - player.playbackTime)))" : TimeFormat.mss(player.duration))
                         .monospacedDigit()
                 }
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(Theme.font(12.5, .semibold))
                 .foregroundStyle(Theme.inkDim)
 
                 ZStack(alignment: .leading) {
@@ -153,10 +153,10 @@ struct NowPlayingScreen: View {
         GeometryReader { geo in
             VStack(spacing: 3) {
                 HStack {
-                    Image(systemName: "speaker.fill").font(.system(size: 12))
+                    Image(systemName: "speaker.fill").font(Theme.font(12))
                     Spacer()
                     Text("\(Int(player.volume * 100))")
-                        .font(.system(size: 12.5, weight: .bold))
+                        .font(Theme.font(12.5, .bold))
                         .monospacedDigit()
                 }
                 .foregroundStyle(Theme.inkDim)
@@ -184,6 +184,7 @@ struct NowPlayingScreen: View {
     private var optionItems: [MenuItem] {
         [
             MenuItem(id: "playlist", title: "Add to Playlist"),
+            MenuItem(id: "artist", title: "Go to Artist"),
             MenuItem(id: "album", title: "Go to Album"),
         ]
     }
@@ -242,6 +243,19 @@ struct NowPlayingScreen: View {
         model.push(.albumDetail(album.id.rawValue))
     }
 
+    private func goToArtist() async {
+        guard let song else { return }
+        let name = song.artistName
+        guard let artist = model.music.artists.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame })
+                ?? model.music.artists.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) else {
+            toast = "Artist not found"
+            closeMenu()
+            return
+        }
+        closeMenu()
+        model.push(.artistDetail(artist.id.rawValue))
+    }
+
     // MARK: Input
 
     private func handle(_ event: ControlEvent) {
@@ -269,6 +283,7 @@ struct NowPlayingScreen: View {
                 } else {
                     switch optionItems[min(menuSelection, optionItems.count - 1)].id {
                     case "playlist": showPlaylistPicker()
+                    case "artist": Task { await goToArtist() }
                     case "album": Task { await goToAlbum() }
                     default: break
                     }

@@ -75,13 +75,16 @@ struct MenuList: View {
     var body: some View {
         GeometryReader { geo in
             let m = settings.fontMultiplier
-            // Window sized by the smallest row height so the screen always
-            // fills — mixed compact (header) + tall rows would otherwise
-            // leave a blank band at the bottom of All Songs.
+            // Render enough rows to fill the screen even when mixed with
+            // shorter compact (header) rows, but keep the selection inside
+            // the rows that ACTUALLY fit (tallest row height), so the tail
+            // of the list never scrolls the selection off-screen.
             let minRowH: CGFloat = 28 * m
-            let visible = max(1, Int((geo.size.height / minRowH).rounded(.up)))
-            let start = max(0, min(selection - max(0, visible - 3), max(0, items.count - visible)))
-            let slice = items.dropFirst(start).prefix(visible)
+            let maxRowH = styleMaxRowHeight * m
+            let visibleFill = max(1, Int((geo.size.height / minRowH).rounded(.up)))
+            let visibleReal = max(1, Int((geo.size.height / maxRowH).rounded(.down)))
+            let start = windowStart(selection: selection, count: items.count, visibleReal: visibleReal, visibleFill: visibleFill)
+            let slice = items.dropFirst(start).prefix(visibleFill)
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
@@ -116,6 +119,22 @@ struct MenuList: View {
         case .twoLine: return compact ? 38 : 43
         case .thumbnail: return compact ? 40 : 47
         }
+    }
+
+    private var styleMaxRowHeight: CGFloat {
+        switch style {
+        case .normal: return 33
+        case .twoLine: return 43
+        case .thumbnail: return 47
+        }
+    }
+
+    /// Window origin: fill the screen (visibleFill rows rendered) while
+    /// keeping the selection within the rows that truly fit (visibleReal).
+    private func windowStart(selection: Int, count: Int, visibleReal: Int, visibleFill: Int) -> Int {
+        var start = max(0, selection - max(0, visibleReal - 2))
+        if selection < start { start = selection }
+        return min(start, max(0, count - visibleFill))
     }
 }
 

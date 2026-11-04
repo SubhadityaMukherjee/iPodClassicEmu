@@ -39,7 +39,7 @@ struct TitleBarView: View {
 
             if model.holdActive {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 10.5, weight: .bold))
+                    .font(Theme.font(10.5, .bold))
                     .foregroundStyle(Color(red: 0.55, green: 0.30, blue: 0.10))
                     .padding(.trailing, 6)
             }
@@ -123,7 +123,7 @@ struct BatteryIcon: View {
             .padding(.leading, 1)
             if charging {
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 7.5, weight: .black))
+                    .font(Theme.font(7.5, .black))
                     .foregroundStyle(Color(white: 0.95))
                     .shadow(color: .black.opacity(0.5), radius: 0.5)
                     .frame(width: 22, alignment: .center)

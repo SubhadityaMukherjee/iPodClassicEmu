@@ -69,6 +69,14 @@ final class PhotoLibraryModel {
         loaded = true
     }
 
+    /// Re-fetches the library and drops the thumbnail cache so newly taken
+    /// photos appear without restarting the app.
+    func reload() {
+        guard authorized else { return }
+        thumbnails.removeAll()
+        loadPhotos()
+    }
+
     /// Saves a captured UIImage into the photo library.
     func saveToLibrary(_ image: UIImage) async throws {
         try await PHPhotoLibrary.shared().performChanges {

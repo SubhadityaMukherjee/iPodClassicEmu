@@ -20,9 +20,18 @@ struct NotesListScreen: View {
                 ModalHost { deletePanel }
                     .zIndex(2)
             }
+            if holdItem != nil {
+                ModalHost { holdPanel }
+                    .zIndex(3)
+            }
         }
         .onWheel { handle($0) }
         .onAppear { model.notes.loadNotes() }
+        .sheet(isPresented: Binding(get: { shareText != nil }, set: { if !$0 { shareText = nil } })) {
+            if let text = shareText {
+                ActivityView(items: [text])
+            }
+        }
     }
 
     private var listItems: [MenuItem] {
@@ -46,6 +55,24 @@ struct NotesListScreen: View {
     }
 
     private func handle(_ event: ControlEvent) {
+        if holdItem != nil {
+            switch event {
+            case .tick(let d):
+                holdSelection = min(2, max(0, holdSelection + (d > 0 ? 1 : -1)))
+                WheelFeedback.tick(dir: d)
+            case .select:
+                switch holdSelection {
+                case 0: shareText = "\(holdItem ?? "")\n\n\(model.notes.read(holdItem ?? ""))"; holdItem = nil
+                case 1: deleteCandidate = holdItem; deleteSelection = 1; holdItem = nil
+                default: holdItem = nil
+                }
+            case .menu, .menuHold:
+                holdItem = nil
+            default:
+                break
+            }
+            return
+        }
         if deleteCandidate != nil {
             switch event {
             case .tick(let d):
@@ -80,15 +107,45 @@ struct NotesListScreen: View {
         case .centerHold:
             let item = listItems[min(selection, listItems.count - 1)]
             if item.id != "__new__" {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    deleteCandidate = item.id
-                }
-                deleteSelection = 1
+                holdItem = item.id
+                holdSelection = 0
             }
         case .menu:
             model.pop()
         default:
             break
+        }
+    }
+
+    @State private var holdItem: String?
+    @State private var holdSelection = 0
+    @State private var shareText: String?
+
+    private var holdPanel: some View {
+        ModalPanel(title: "Note Options", onClose: { holdItem = nil }) {
+            VStack(spacing: 0) {
+                MenuRow(item: MenuItem(id: "h.share", title: "Share", showsChevron: false), selected: holdSelection == 0)
+                    .frame(height: 30.5)
+                    .onTapGesture {
+                        if let name = holdItem {
+                            shareText = "\(name)\n\n\(model.notes.read(name))"
+                        }
+                        holdItem = nil
+                    }
+                MenuRow(item: MenuItem(id: "h.delete", title: "Delete", showsChevron: false), selected: holdSelection == 1)
+                    .frame(height: 30.5)
+                    .onTapGesture {
+                        deleteCandidate = holdItem
+                        deleteSelection = 1
+                        holdItem = nil
+                    }
+                MenuRow(item: MenuItem(id: "h.cancel", title: "Cancel", showsChevron: false), selected: holdSelection == 2)
+                    .frame(height: 30.5)
+                    .onTapGesture {
+                        holdItem = nil
+                    }
+            }
+            .padding(.top, 2)
         }
     }
 }
@@ -103,7 +160,7 @@ struct NoteEditorScreen: View {
 
     var body: some View {
         TextEditor(text: $text)
-            .font(.system(size: 14))
+            .font(Theme.font(14))
             .foregroundStyle(Theme.ink)
             .scrollContentBackground(.hidden)
             .background(PaperBackground())
@@ -124,9 +181,9 @@ struct NoteEditorScreen: View {
                 model.notes.write(fileName, text)
                 model.notes.loadNotes()
             }
-            .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
-                if let url = shareURL {
-                    ActivityView(items: [url])
+            .sheet(isPresented: Binding(get: { shareText != nil }, set: { if !$0 { shareText = nil } })) {
+                if let text = shareText {
+                    ActivityView(items: [text])
                 }
             }
     }
@@ -141,15 +198,14 @@ struct NoteEditorScreen: View {
             model.notes.write(fileName, text)
             model.popToRoot()
         case .centerHold:
-            // Hold center: share the note file with other apps.
-            let url = model.notes.fileURL(for: fileName)
+            // Hold center: share the note as plain text.
             WheelHaptics.shared.ensureRunning()
             WheelHaptics.shared.buttonPress(strength: 0.9)
-            shareURL = url
+            shareText = "\(fileName)\n\n\(text)"
         default:
             break
         }
     }
 
-    @State private var shareURL: URL?
+    @State private var shareText: String?
 }
