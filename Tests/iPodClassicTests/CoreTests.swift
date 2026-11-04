@@ -26,20 +26,29 @@ final class TimeFormatTests: XCTestCase {
 
 final class WheelGeometryTests: XCTestCase {
     func testQuadrantZones() {
-        // Angles: 0° = east, positive clockwise.
+        // Angles: 0° = east, positive clockwise. Buttons ±32° around each
+        // label; diagonals are scroll zones (nil).
         XCTAssertEqual(WheelCoordinator.quadrantZone(0), .next)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(44), .next)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(46), .play)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(31), .next)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(33), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(45), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(57), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(59), .play)
         XCTAssertEqual(WheelCoordinator.quadrantZone(90), .play)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(134), .play)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(136), .prev)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(121), .play)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(123), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(147), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(149), .prev)
         XCTAssertEqual(WheelCoordinator.quadrantZone(180), .prev)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(224), .prev)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(226), .menu)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(211), .prev)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(213), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(237), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(239), .menu)
         XCTAssertEqual(WheelCoordinator.quadrantZone(270), .menu)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(314), .menu)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(316), .next)
-        XCTAssertEqual(WheelCoordinator.quadrantZone(350), .next)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(301), .menu)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(303), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(327), nil)
+        XCTAssertEqual(WheelCoordinator.quadrantZone(329), .next)
     }
 }
 

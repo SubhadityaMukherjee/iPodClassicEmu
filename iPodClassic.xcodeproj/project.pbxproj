@@ -48,10 +48,18 @@
 		F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */; };
 		F9E16E555874477D62C613D3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2803B556B5B7050105E7CFB4 /* Theme.swift */; };
 		FBFCC04B6C4BCA7FE19B3ECD /* PhotoLibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6386B4A55E1B30CAE0EA14D /* PhotoLibraryModel.swift */; };
+		FC441BCF22529569C9289A56 /* WheelTapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		6BC59B5FB470443B0B7A8379 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 71574A89CE8CF4AB0F83A735 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9A29DF893980B70CC4EABB5B;
+			remoteInfo = iPodClassic;
+		};
+		91BCF740473B07250C133733 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 71574A89CE8CF4AB0F83A735 /* Project object */;
 			proxyType = 1;
@@ -63,7 +71,7 @@
 /* Begin PBXFileReference section */
 		06464256EE519A5BD50EA73F /* iPodClassicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodClassicApp.swift; sourceTree = "<group>"; };
 		0C9168F602DF28123A3C7389 /* RecorderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderModel.swift; sourceTree = "<group>"; };
-		0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = AlarmBeep.caf; sourceTree = "<group>"; };
+		0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */ = {isa = PBXFileReference; path = AlarmBeep.caf; sourceTree = "<group>"; };
 		1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmRingerOverlay.swift; sourceTree = "<group>"; };
 		1D783A264CBB399887431ACB /* MusicScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicScreens.swift; sourceTree = "<group>"; };
 		2252DE6110093E2FF64B7404 /* CRTOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRTOverlay.swift; sourceTree = "<group>"; };
@@ -73,24 +81,26 @@
 		3471A066596E32FEE25ED63B /* ClocksScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClocksScreens.swift; sourceTree = "<group>"; };
 		38EC3AA5879EA27E592945C2 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		3A54E7E9C330E86065492453 /* CoverFlowScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverFlowScreen.swift; sourceTree = "<group>"; };
-		3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iPodClassic.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iPodClassic.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		45DA368CF25B19FEF8CE837C /* NotesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
 		483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreTests.swift; sourceTree = "<group>"; };
 		4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraScreen.swift; sourceTree = "<group>"; };
+		4DF62CF32F140AD7C1A61F7C /* iPodClassicUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = iPodClassicUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4EC998CD72BCE921ABFBE36B /* MusicService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicService.swift; sourceTree = "<group>"; };
 		59116EF21FFA3688484F038F /* RecorderScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderScreens.swift; sourceTree = "<group>"; };
 		5F9F9D030FECE8C1639FE2E6 /* MenuComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuComponents.swift; sourceTree = "<group>"; };
-		674DFC06B8F7A1B1F904D34D /* RubberBand.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = RubberBand.caf; sourceTree = "<group>"; };
+		674DFC06B8F7A1B1F904D34D /* RubberBand.caf */ = {isa = PBXFileReference; path = RubberBand.caf; sourceTree = "<group>"; };
 		6B37641D1E5AA57A45A02D07 /* TimeFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormat.swift; sourceTree = "<group>"; };
 		6B937A3043FF83416A501A21 /* SettingsScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreens.swift; sourceTree = "<group>"; };
 		70FD912BBA672A8037F0ED9F /* PlayerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerModel.swift; sourceTree = "<group>"; };
+		826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelTapTests.swift; sourceTree = "<group>"; };
 		83813FFB62AFA2BA71D7B05D /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
 		8DE0B67D71510C6279340644 /* ClockFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockFace.swift; sourceTree = "<group>"; };
 		90462DBBAE1970378F420CEE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A16CC36E7096FECFA8123BA8 /* TickSounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickSounds.swift; sourceTree = "<group>"; };
 		A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenView.swift; sourceTree = "<group>"; };
-		B7CEBDD3E18661EEC5335B6E /* Tick.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Tick.caf; sourceTree = "<group>"; };
-		B9E142990608C64F576307AC /* TickSoft.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = TickSoft.caf; sourceTree = "<group>"; };
+		B7CEBDD3E18661EEC5335B6E /* Tick.caf */ = {isa = PBXFileReference; path = Tick.caf; sourceTree = "<group>"; };
+		B9E142990608C64F576307AC /* TickSoft.caf */ = {isa = PBXFileReference; path = TickSoft.caf; sourceTree = "<group>"; };
 		BA58EF527B138B0EF70E505F /* WheelHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelHaptics.swift; sourceTree = "<group>"; };
 		BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingScreen.swift; sourceTree = "<group>"; };
 		C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRouter.swift; sourceTree = "<group>"; };
@@ -201,6 +211,14 @@
 			path = Device;
 			sourceTree = "<group>";
 		};
+		73F203B71AC9E682E132909F /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
 		78BB416E64B1F2B6F055B8E2 /* Notes */ = {
 			isa = PBXGroup;
 			children = (
@@ -272,6 +290,7 @@
 			children = (
 				3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */,
 				2252FD3DDEC10A47D988C6D3 /* iPodClassicTests.xctest */,
+				4DF62CF32F140AD7C1A61F7C /* iPodClassicUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -290,6 +309,7 @@
 			isa = PBXGroup;
 			children = (
 				A15B0827071640C6BEF4A060 /* iPodClassicTests */,
+				73F203B71AC9E682E132909F /* UITests */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -355,6 +375,24 @@
 			productReference = 3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */;
 			productType = "com.apple.product-type.application";
 		};
+		CEE6AE9F4BEB6E7AD6D19E4C /* iPodClassicUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FA0656B5DDD9705A4D5A8ABA /* Build configuration list for PBXNativeTarget "iPodClassicUITests" */;
+			buildPhases = (
+				7286F3BDE84511E8FEEF56C8 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				762496F06B8BE40093B386DE /* PBXTargetDependency */,
+			);
+			name = iPodClassicUITests;
+			packageProductDependencies = (
+			);
+			productName = iPodClassicUITests;
+			productReference = 4DF62CF32F140AD7C1A61F7C /* iPodClassicUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -365,11 +403,17 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					5D16D3A353808887BED0863D = {
-						DevelopmentTeam = 46655DQD2X;
+						DevelopmentTeam = 365U99GNTQ;
 						ProvisioningStyle = Automatic;
 					};
 					9A29DF893980B70CC4EABB5B = {
+						DevelopmentTeam = 365U99GNTQ;
 						ProvisioningStyle = Automatic;
+					};
+					CEE6AE9F4BEB6E7AD6D19E4C = {
+						DevelopmentTeam = 365U99GNTQ;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 9A29DF893980B70CC4EABB5B;
 					};
 				};
 			};
@@ -389,6 +433,7 @@
 			targets = (
 				9A29DF893980B70CC4EABB5B /* iPodClassic */,
 				5D16D3A353808887BED0863D /* iPodClassicTests */,
+				CEE6AE9F4BEB6E7AD6D19E4C /* iPodClassicUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -451,6 +496,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7286F3BDE84511E8FEEF56C8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FC441BCF22529569C9289A56 /* WheelTapTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C31B4C2037E59325F16AC26E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -462,6 +515,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		762496F06B8BE40093B386DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9A29DF893980B70CC4EABB5B /* iPodClassic */;
+			targetProxy = 91BCF740473B07250C133733 /* PBXContainerItemProxy */;
+		};
 		97436FF547E815A15311B75C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 9A29DF893980B70CC4EABB5B /* iPodClassic */;
@@ -507,7 +565,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 46655DQD2X;
+				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -543,7 +601,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 365U99GNTQ;
 				INFOPLIST_FILE = Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -563,7 +620,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 365U99GNTQ;
 				INFOPLIST_FILE = Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -575,6 +631,24 @@
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		989115D61A38E2786E722FEA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ipodclassic.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = iPodClassic;
 			};
 			name = Release;
 		};
@@ -615,7 +689,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 46655DQD2X;
+				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -656,6 +730,24 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iPodClassic.app/iPodClassic";
 			};
 			name = Release;
+		};
+		CCEE4EBE871F5BA711AFC093 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ipodclassic.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = iPodClassic;
+			};
+			name = Debug;
 		};
 		F66EB5F3564B8C87CCA725EA /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -701,6 +793,15 @@
 			buildConfigurations = (
 				554D4BB1A5C21EE0CF73EF29 /* Debug */,
 				6897D46DA0C80311A34481D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FA0656B5DDD9705A4D5A8ABA /* Build configuration list for PBXNativeTarget "iPodClassicUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CCEE4EBE871F5BA711AFC093 /* Debug */,
+				989115D61A38E2786E722FEA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
