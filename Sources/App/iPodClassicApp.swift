@@ -14,9 +14,6 @@ struct iPodClassicApp: App {
            let bundle = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundle)
         }
-        // The LCD is light but the system keyboard should be dark.
-        UITextField.appearance().keyboardAppearance = .dark
-        UITextView.appearance().keyboardAppearance = .dark
         _model = State(initialValue: AppModel())
 
         AlarmNotifications.configureDelegate()

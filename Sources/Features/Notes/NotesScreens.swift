@@ -106,6 +106,8 @@ struct NoteEditorScreen: View {
             .scrollContentBackground(.hidden)
             .background(PaperBackground())
             .padding(.horizontal, 4)
+            // Dark keyboard; explicit ink color keeps the text black.
+            .environment(\.colorScheme, .dark)
             .onWheel { handle($0) }
             .onChange(of: text) { _, newValue in
                 if loaded {

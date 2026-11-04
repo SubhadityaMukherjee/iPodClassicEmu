@@ -162,6 +162,9 @@ struct MusicSearchScreen: View {
                     .foregroundStyle(Theme.ink)
                     .submitLabel(.search)
                     .padding(.vertical, 4)
+                    // Dark keyboard without global appearance proxies
+                    // (those crash the input assistant's layout engine).
+                    .environment(\.colorScheme, .dark)
                 if !query.isEmpty {
                     Button {
                         query = ""
@@ -194,7 +197,13 @@ struct MusicSearchScreen: View {
         }
         .padding(.top, 4)
         .onWheel { handle($0) }
-        .onAppear { focused = true }
+        .onAppear {
+            // Focusing during the push transition corrupts the layout engine
+            // (SIGABRT in NSISEngine) — wait for the transition to settle.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                focused = true
+            }
+        }
         .onDisappear { focused = false }
     }
 
