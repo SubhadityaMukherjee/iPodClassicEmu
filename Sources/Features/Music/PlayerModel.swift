@@ -28,6 +28,7 @@ final class PlayerModel {
         queue = songs
         queueIndex = min(max(0, index), songs.count - 1)
         guard let start = currentSong else { return }
+        applyPlaybackSettings()
         player.queue = ApplicationMusicPlayer.Queue(for: songs, startingAt: start)
         MediaVolumeController.shared.setVolume(Float(volume))
         Task {
@@ -35,6 +36,19 @@ final class PlayerModel {
             self.isPlaying = true
         }
         startTimer()
+    }
+
+    /// Applies the Settings choices (shuffle/repeat) to the player state.
+    private func applyPlaybackSettings() {
+        let s = AppSettings.shared
+        player.state.repeatMode = {
+            switch s.repeatMode {
+            case 1: return .all
+            case 2: return .one
+            default: return .none
+            }
+        }()
+        player.state.shuffleMode = s.shuffle ? .songs : .off
     }
 
     func shufflePlay(_ songs: [Song]) {
