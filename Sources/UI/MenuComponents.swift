@@ -260,7 +260,7 @@ struct SplitMenuLayout<Preview: View>: View {
                 .overlay(alignment: .leading) {
                     // Drop shadow cast from the menu onto the pane.
                     Rectangle()
-                        .fill(Color.black.opacity(settings.theme == 1 ? 0.22 : 0.0))
+                        .fill(Color.black.opacity(0.22))
                         .frame(width: 7)
                         .blur(radius: 4)
                         .allowsHitTesting(false)

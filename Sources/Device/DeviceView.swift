@@ -6,7 +6,6 @@ struct DeviceView: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @State private var heartbeat = Date()
-    @State private var booted = false
 
     var body: some View {
         GeometryReader { geo in
@@ -23,26 +22,35 @@ struct DeviceView: View {
                     ScreenView()
                         .frame(width: w * 0.955, height: w * 0.955 * 0.75)
                         .overlay {
-                            // Boot splash: the white screen with the iPod
-                            // wordmark, like turning on the real thing.
-                            if !booted {
-                                BootSplash()
-                                    .transition(.opacity)
-                            }
-                        }
-                        .overlay {
                             // Hold: LCD fades out, playing art centered.
                             if model.holdActive {
                                 HoldScreenOverlay()
                                     .transition(.opacity)
                             }
                         }
+                        // Subtle inset: soft shadow + dark bevel so the LCD
+                        // reads as recessed into the body.
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 2)
+                                .stroke(Color.black.opacity(0.55), lineWidth: 1.2)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 2))
+                        .shadow(color: .black.opacity(0.35), radius: 5, x: 0, y: 1)
                         .padding(.top, 2)
 
                     Spacer(minLength: 0)
 
                     ClickWheelView()
                         .frame(width: w * 0.66, height: w * 0.66)
+                        // Faint ambient shadow so the wheel reads as seated
+                        // inside the body.
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.45))
+                                .blur(radius: 9)
+                                .offset(y: 2)
+                                .padding(-4)
+                        )
 
                     Spacer(minLength: 0)
                         .frame(height: h * 0.045)
@@ -60,18 +68,10 @@ struct DeviceView: View {
                 AlarmRingerOverlay(context: ringer)
             }
         }
-        .task {
-            // Brief authentic boot, skippable by any wheel input.
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
-            withAnimation(.easeIn(duration: 0.35)) { booted = true }
-        }
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             heartbeat = Date()
         }
         .onReceive(model.controlBus.map { _ in () }) { _ in
-            if !booted {
-                withAnimation(.easeIn(duration: 0.25)) { booted = true }
-            }
             // Input ends the dim immediately rather than waiting for the heartbeat.
             heartbeat = Date()
         }
@@ -99,20 +99,6 @@ struct DeviceView: View {
             .onTapGesture {
                 withAnimation(.easeIn(duration: 0.15)) { model.screenAsleep = false }
             }
-    }
-}
-
-/// Startup screen: white backlight, black "iPod" wordmark — like powering
-/// on the original.
-struct BootSplash: View {
-    var body: some View {
-        ZStack {
-            Color(white: 0.96)
-            Text("iPod")
-                .font(.system(size: 40, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(white: 0.12))
-        }
-        .contentShape(Rectangle())
     }
 }
 
