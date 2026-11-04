@@ -115,8 +115,9 @@ struct HoldScreenOverlay: View {
                     ArtworkView(artwork: aw, width: 500, height: 500)
                         .frame(width: geo.size.height * 0.66, height: geo.size.height * 0.66)
                         .clipShape(RoundedRectangle(cornerRadius: 2))
-                        .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.5), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.45), radius: 10, y: 4)
+                        // Keep the art as dim as the rest of the hold screen.
+                        .overlay(Color.black.opacity(0.72))
+                        .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.6), lineWidth: 1))
                 } else {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 58))
