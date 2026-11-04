@@ -298,47 +298,78 @@ struct NowPlayingScreen: View {
     }
 }
 
-/// Single-line text that marquees horizontally when it overflows.
+/// Single-line text that marquees like the classic iPod: fixed width, and
+/// when it overflows it scrolls continuously right-to-left, wrapping around
+/// with a gap — no bouncing.
 struct MarqueeText: View {
     let text: String
     let font: Font
     let color: Color
-    let approxCharWidth: CGFloat = 8.0
-    @State private var overflowing = false
+
+    @State private var textWidth: CGFloat = 0
+    @State private var scrolling = false
+    @State private var offset: CGFloat = 0
+    private let gap: CGFloat = 30
 
     var body: some View {
         GeometryReader { geo in
-            let approx = CGFloat(text.count) * approxCharWidth
-            if text.isEmpty {
-                Color.clear
-            } else if approx > geo.size.width {
-                // Overflow: slide back and forth.
-                TimelineView(.animation(minimumInterval: 0.05)) { tl in
-                    let phase = tl.date.timeIntervalSinceReferenceDate
-                    let cycle = Double(max(3, Double(text.count) * 0.14))
-                    let t = phase.truncatingRemainder(dividingBy: cycle) / cycle
-                    let slide: CGFloat = t < 0.5
-                        ? -max(0, approx - geo.size.width + 8) * smoothstep(t * 2)
-                        : -max(0, approx - geo.size.width + 8) * smoothstep((1 - t) * 2)
+            let overflows = textWidth > geo.size.width + 1
+            ZStack(alignment: .leading) {
+                if overflows {
+                    HStack(spacing: gap) {
+                        tickerText
+                        tickerText  // second copy closes the loop seamlessly
+                    }
+                    .background(
+                        // Measure one copy's width to size the loop.
+                        tickerText.hidden().background(
+                            GeometryReader { g in
+                                Color.clear.onAppear { textWidth = g.size.width }
+                                    .onChange(of: g.size.width) { textWidth = $1 }
+                            }
+                        )
+                    )
+                    .offset(x: offset)
+                } else {
                     Text(text)
                         .font(font)
                         .foregroundStyle(color)
                         .lineLimit(1)
-                        .fixedSize()
-                        .offset(x: slide)
                 }
-            } else {
-                Text(text)
-                    .font(font)
-                    .foregroundStyle(color)
-                    .lineLimit(1)
             }
+            .frame(width: geo.size.width, alignment: .leading)
+            .clipped()
+            .onChange(of: geo.size.width) { _ in restartIfNeeded(overflows: overflows) }
+            .onChange(of: overflows) { newOverflows in
+                restartIfNeeded(overflows: newOverflows)
+            }
+            .onAppear { restartIfNeeded(overflows: overflows) }
+            .onDisappear { stop() }
         }
         .frame(height: 22)
     }
 
-    private func smoothstep(_ x: Double) -> Double {
-        let c = min(1, max(0, x))
-        return c * c * (3 - 2 * c)
+    private var tickerText: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private func restartIfNeeded(overflows: Bool) {
+        guard overflows, textWidth > 0, !scrolling else { return }
+        scrolling = true
+        offset = 0
+        let distance = textWidth + gap
+        let duration = Double(distance) / 32.0  // ~32 pt/s, classic pace
+        withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+            offset = -distance
+        }
+    }
+
+    private func stop() {
+        scrolling = false
+        offset = 0
     }
 }
