@@ -21,9 +21,12 @@ struct NowPlayingScreen: View {
     var body: some View {
         ZStack {
             VStack(spacing: 6) {
+                // Centered in the space above the progress bar, like the
+                // classic Now Playing layout.
+                Spacer(minLength: 0)
+
                 infoRow
                     .padding(.horizontal, 8)
-                    .padding(.top, 8)
 
                 Spacer(minLength: 0)
 
