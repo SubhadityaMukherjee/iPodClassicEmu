@@ -47,6 +47,10 @@ struct DeviceView: View {
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             heartbeat = Date()
         }
+        .onReceive(model.controlBus.map { _ in () }) { _ in
+            // Input ends the dim immediately rather than waiting for the heartbeat.
+            heartbeat = Date()
+        }
     }
 
     private var isDimmed: Bool {

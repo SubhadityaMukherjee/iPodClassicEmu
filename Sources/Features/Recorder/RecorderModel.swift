@@ -33,6 +33,7 @@ final class RecorderModel {
     private var timer: Timer?
     private var pausedTotal: TimeInterval = 0
     private var segmentStart: Date = Date()
+    private var observingInterruptions = false
 
     var currentFileURL: URL? {
         recorder?.url
@@ -228,6 +229,8 @@ final class RecorderModel {
     /// Audio session interruption (call, Siri): pause safely; resume
     /// recording when the interruption ends so long captures survive.
     func observeInterruptions() {
+        guard !observingInterruptions else { return }
+        observingInterruptions = true
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] note in
