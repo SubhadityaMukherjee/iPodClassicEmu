@@ -36,7 +36,6 @@ struct NotesListScreen: View {
             VStack(spacing: 0) {
                 MenuRow(item: MenuItem(id: "del.yes", title: "Delete", showsChevron: false), selected: deleteSelection == 0)
                     .frame(height: 30.5)
-                Divider().background(Color.black.opacity(0.10))
                 MenuRow(item: MenuItem(id: "del.no", title: "Cancel", showsChevron: false), selected: deleteSelection == 1)
                     .frame(height: 30.5)
             }

@@ -420,7 +420,6 @@ struct StopwatchScreen: View {
                             .monospacedDigit()
                     }
                     .padding(.vertical, 1.5)
-                    Divider().background(Color.black.opacity(0.08))
                 }
             }
         }

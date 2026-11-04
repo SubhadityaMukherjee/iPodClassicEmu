@@ -16,12 +16,12 @@ struct DeviceView: View {
 
                 VStack(spacing: 0) {
                     HoldSwitchView()
-                        .frame(width: w * 0.915, height: 24)
-                        .padding(.top, h * 0.018)
+                        .frame(width: w * 0.955, height: 24)
+                        .padding(.top, h * 0.016)
 
                     ScreenView()
-                        .frame(width: w * 0.915, height: w * 0.915 * 0.75)
-                        .padding(.top, 3)
+                        .frame(width: w * 0.955, height: w * 0.955 * 0.75)
+                        .padding(.top, 2)
 
                     Spacer(minLength: 0)
 

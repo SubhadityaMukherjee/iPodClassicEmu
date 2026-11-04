@@ -390,7 +390,6 @@ struct AlbumDetailScreen: View {
                         if start <= i && i < start + visible {
                             MenuRow(item: headerItems[i], selected: selection == i, compact: true)
                                 .frame(height: 30.5)
-                            Divider().background(Color.black.opacity(0.10))
                         }
                     }
                     ForEach(Array(tracks.enumerated()), id: \.element.id) { i, song in
@@ -404,7 +403,6 @@ struct AlbumDetailScreen: View {
                                 thumb: album?.artwork
                             )
                             .frame(height: rowH)
-                            Divider().background(Color.black.opacity(0.10))
                         }
                     }
                 }

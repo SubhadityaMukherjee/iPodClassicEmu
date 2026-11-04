@@ -75,8 +75,6 @@ struct MenuList: View {
                     ForEach(Array(slice.enumerated()), id: \.element.id) { offset, item in
                         MenuRow(item: item, selected: start + offset == selection, compact: compact, index: numbered ? start + offset + 1 : nil, style: style, thumb: thumbProvider?(item))
                             .frame(height: rowH)
-                        Divider()
-                            .background(Color.black.opacity(0.10))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -158,7 +156,6 @@ struct MenuRow: View {
                     .padding(.trailing, 5)
             }
         }
-        .padding(.horizontal, 4)
         .foregroundStyle(selected ? Color.white : Theme.ink)
         .background {
             if selected {
