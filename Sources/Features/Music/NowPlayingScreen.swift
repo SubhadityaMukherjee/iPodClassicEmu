@@ -75,7 +75,7 @@ struct NowPlayingScreen: View {
     private var progressBar: some View {
         GeometryReader { geo in
             let progress = player.duration > 0 ? player.playbackTime / player.duration : 0
-            VStack(spacing: 1) {
+            VStack(spacing: 3) {
                 HStack {
                     Text(TimeFormat.mss(player.playbackTime))
                         .monospacedDigit()
@@ -83,13 +83,13 @@ struct NowPlayingScreen: View {
                     Text(player.isPlaying ? "-\(TimeFormat.mss(max(0, player.duration - player.playbackTime)))" : TimeFormat.mss(player.duration))
                         .monospacedDigit()
                 }
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(Theme.inkDim)
 
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(Color.black.opacity(0.22))
-                        .frame(height: 7)
+                        .frame(height: 10)
                     Capsule()
                         .fill(
                             LinearGradient(
@@ -97,21 +97,21 @@ struct NowPlayingScreen: View {
                                 startPoint: .leading, endPoint: .trailing
                             )
                         )
-                        .frame(width: max(4, geo.size.width * progress), height: 7)
+                        .frame(width: max(6, geo.size.width * progress), height: 10)
                 }
             }
         }
-        .frame(height: 26)
+        .frame(height: 38)
     }
 
     private var volumeBar: some View {
         GeometryReader { geo in
-            VStack(spacing: 1) {
+            VStack(spacing: 3) {
                 HStack {
-                    Image(systemName: "speaker.fill").font(.system(size: 10))
+                    Image(systemName: "speaker.fill").font(.system(size: 12))
                     Spacer()
                     Text("\(Int(player.volume * 100))")
-                        .font(.system(size: 10.5, weight: .bold))
+                        .font(.system(size: 12.5, weight: .bold))
                         .monospacedDigit()
                 }
                 .foregroundStyle(Theme.inkDim)
@@ -119,7 +119,7 @@ struct NowPlayingScreen: View {
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(Color.black.opacity(0.22))
-                        .frame(height: 7)
+                        .frame(height: 10)
                     Capsule()
                         .fill(
                             LinearGradient(
@@ -127,11 +127,11 @@ struct NowPlayingScreen: View {
                                 startPoint: .leading, endPoint: .trailing
                             )
                         )
-                        .frame(width: max(4, geo.size.width * player.volume), height: 7)
+                        .frame(width: max(6, geo.size.width * player.volume), height: 10)
                 }
             }
         }
-        .frame(height: 26)
+        .frame(height: 38)
     }
 
     // MARK: Input

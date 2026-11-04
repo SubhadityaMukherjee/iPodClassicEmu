@@ -69,6 +69,9 @@ enum Route: Hashable {
     case timer
     case stopwatch
 
+    // Calendar
+    case calendar
+
     // Settings
     case settings
     case settingsClickwheel
@@ -129,6 +132,7 @@ final class AppModel {
         case "recordings": return .recordings
         case "notes": return .notes
         case "clocks": return .clocks
+        case "calendar": return .calendar
         case "alarm": return .alarm
         case "timer": return .timer
         case "stopwatch": return .stopwatch
@@ -162,6 +166,15 @@ final class AppModel {
         guard stack.count > 1 else { return }
         withAnimation(.easeOut(duration: 0.22)) {
             stack = [.home]
+        }
+    }
+
+    /// App Shortcut / Action Button entry: wake, reset to home, open camera.
+    @MainActor
+    func openCameraShortcut() {
+        screenAsleep = false
+        withAnimation(.easeOut(duration: 0.22)) {
+            stack = [.home, .camera]
         }
     }
 

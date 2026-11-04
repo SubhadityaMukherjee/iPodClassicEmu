@@ -38,13 +38,13 @@ enum Theme {
 
     // MARK: Fonts
 
-    static func row(_ size: CGFloat = 17) -> Font {
+    static func row(_ size: CGFloat = 18.5) -> Font {
         .system(size: size, weight: .semibold, design: .default)
     }
-    static func barTitle(_ size: CGFloat = 16) -> Font {
+    static func barTitle(_ size: CGFloat = 17) -> Font {
         .system(size: size, weight: .bold, design: .default)
     }
-    static func barClock(_ size: CGFloat = 14) -> Font {
+    static func barClock(_ size: CGFloat = 14.5) -> Font {
         .system(size: size, weight: .medium, design: .default)
     }
 }

@@ -223,11 +223,11 @@ struct MusicListScreen: View {
 
     private var headerItems: [MenuItem] {
         var h = [
-            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
-            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
         ]
         if sortLabels != nil {
-            h.append(MenuItem(id: "hdr.sort", title: "Sort By", detail: sortLabels![sortIndex], showsChevron: false))
+            h.append(MenuItem(id: "hdr.sort", title: "Sort By", detail: sortLabels![sortIndex], showsChevron: false, isActionRow: true))
         }
         return h
     }
@@ -374,8 +374,8 @@ struct ArtistDetailScreen: View {
     }
     private var headerItems: [MenuItem] {
         [
-            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
-            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
         ]
     }
     private var totalRows: Int { headerItems.count + albums.count }
@@ -430,8 +430,8 @@ struct GenreAlbumsScreen: View {
     private var albums: [Album] { model.music.albums(inGenre: genre) }
     private var headerItems: [MenuItem] {
         [
-            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
-            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
         ]
     }
     private var genreSongs: [Song] {
@@ -499,9 +499,9 @@ struct AlbumDetailScreen: View {
 
     private var headerItems: [MenuItem] {
         [
-            MenuItem(id: "header.coverflow", title: "View in Cover Flow", symbol: "rectangle.stack", showsChevron: false),
-            MenuItem(id: "header.play", title: "Play All", symbol: "play.fill", showsChevron: false),
-            MenuItem(id: "header.shuffle", title: "Shuffle Songs", symbol: "shuffle", showsChevron: false),
+            MenuItem(id: "header.coverflow", title: "View in Cover Flow", symbol: "rectangle.stack", showsChevron: false, isActionRow: true),
+            MenuItem(id: "header.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
+            MenuItem(id: "header.shuffle", title: "Shuffle Songs", symbol: "shuffle", showsChevron: false, isActionRow: true),
         ]
     }
 
@@ -516,7 +516,7 @@ struct AlbumDetailScreen: View {
     @ViewBuilder
     private var list: some View {
         GeometryReader { geo in
-            let rowH: CGFloat = 44
+            let rowH: CGFloat = 47
             let visible = max(1, Int((geo.size.height / rowH).rounded(.down)))
             let start = max(0, min(selection - max(0, visible - 3), max(0, totalRows - visible)))
             ScrollView(.vertical, showsIndicators: false) {
@@ -524,7 +524,7 @@ struct AlbumDetailScreen: View {
                     ForEach(0..<min(headerItems.count, max(0, totalRows - start)), id: \.self) { i in
                         if start <= i && i < start + visible {
                             MenuRow(item: headerItems[i], selected: selection == i, compact: true)
-                                .frame(height: 30.5)
+                                .frame(height: 33)
                         }
                     }
                     ForEach(Array(tracks.enumerated()), id: \.element.id) { i, song in
@@ -594,8 +594,8 @@ struct PlaylistDetailScreen: View {
 
     private var headerItems: [MenuItem] {
         [
-            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false),
-            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false),
+            MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
+            MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
         ]
     }
     private var totalRows: Int { headerItems.count + tracks.count }

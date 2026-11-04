@@ -7,6 +7,7 @@ struct PhotosGridScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
+    @State private var shareImage: UIImage?
 
     private let columns = 4
 
@@ -21,6 +22,11 @@ struct PhotosGridScreen: View {
         .onWheel { handle($0) }
         .onAppear {
             if !model.photos.loaded { Task { await model.photos.requestAccess() } }
+        }
+        .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
+            if let img = shareImage {
+                ActivityView(items: [img])
+            }
         }
     }
 
@@ -67,6 +73,17 @@ struct PhotosGridScreen: View {
         case .select:
             if selection < model.photos.count {
                 model.push(.photoDetail(selection))
+            }
+        case .centerHold:
+            // Hold center on the grid: share the selected photo.
+            if selection < model.photos.count, let asset = model.photos.asset(at: selection) {
+                Task {
+                    if let img = await model.photos.loadFullImage(asset) {
+                        WheelHaptics.shared.ensureRunning()
+                        WheelHaptics.shared.buttonPress(strength: 0.9)
+                        shareImage = img
+                    }
+                }
             }
         case .menu:
             model.pop()
@@ -115,7 +132,8 @@ private struct PhotoCell: View {
     }
 }
 
-/// Full-screen photo with prev/next navigation.
+/// Full-screen photo with prev/next navigation, pinch/drag zoom, and
+/// hold-center share.
 struct PhotoDetailScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
@@ -123,6 +141,12 @@ struct PhotoDetailScreen: View {
 
     @State private var selection = 0
     @State private var image: UIImage?
+    @State private var shareImage: UIImage?
+
+    // Pinch zoom / pan
+    @State private var scale: CGFloat = 1
+    @State private var baseScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
 
     var body: some View {
         ZStack {
@@ -132,13 +156,63 @@ struct PhotoDetailScreen: View {
                     .resizable()
                     .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .clipped()
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { v in
+                                scale = min(6, max(1, baseScale * v))
+                            }
+                            .onEnded { _ in
+                                baseScale = scale
+                                if scale <= 1.04 {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        scale = 1; baseScale = 1; offset = .zero
+                                    }
+                                }
+                            }
+                    )
+                    .gesture(
+                        scale > 1.04
+                            ? DragGesture()
+                                .onChanged { v in offset = CGSize(width: v.translation.width, height: v.translation.height) }
+                                .onEnded { _ in }
+                            : nil
+                    )
             } else {
                 ProgressView().tint(.white)
             }
+
+            if scale > 1.04 {
+                VStack {
+                    Spacer()
+                    Text("Pinch to zoom · drag to pan")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.black.opacity(0.6)))
+                        .padding(.bottom, 8)
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: scale > 1.04)
         .onWheel { handle($0) }
-        .task(id: selection) { await load() }
+        .task(id: selection) {
+            await load()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                scale = 1; baseScale = 1; offset = .zero
+            }
+        }
         .onAppear { selection = index }
+        .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
+            if let img = shareImage {
+                ActivityView(items: [img])
+            }
+        }
     }
 
     private func load() async {
@@ -152,6 +226,13 @@ struct PhotoDetailScreen: View {
             moveListSelection(&selection, count: model.photos.count, delta: d, settings: settings)
         case .select, .playPause:
             break
+        case .centerHold:
+            // Hold center: share this photo.
+            if let image {
+                WheelHaptics.shared.ensureRunning()
+                WheelHaptics.shared.buttonPress(strength: 0.9)
+                shareImage = image
+            }
         case .menu:
             model.pop()
         case .prev:

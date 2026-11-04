@@ -52,13 +52,13 @@ struct NotesListScreen: View {
             case .select:
                 if deleteSelection == 0, let name = deleteCandidate {
                     model.notes.delete(name)
-                    deleteCandidate = nil
+                    withAnimation(.easeOut(duration: 0.18)) { deleteCandidate = nil }
                     if selection >= listItems.count { selection = max(0, listItems.count - 1) }
                 } else {
-                    deleteCandidate = nil
+                    withAnimation(.easeOut(duration: 0.18)) { deleteCandidate = nil }
                 }
             case .menu:
-                deleteCandidate = nil
+                withAnimation(.easeOut(duration: 0.18)) { deleteCandidate = nil }
             default:
                 break
             }
@@ -78,7 +78,9 @@ struct NotesListScreen: View {
         case .centerHold:
             let item = listItems[min(selection, listItems.count - 1)]
             if item.id != "__new__" {
-                deleteCandidate = item.id
+                withAnimation(.easeOut(duration: 0.18)) {
+                    deleteCandidate = item.id
+                }
                 deleteSelection = 1
             }
         case .menu:
@@ -118,6 +120,11 @@ struct NoteEditorScreen: View {
                 model.notes.write(fileName, text)
                 model.notes.loadNotes()
             }
+            .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
+                if let url = shareURL {
+                    ActivityView(items: [url])
+                }
+            }
     }
 
     private func handle(_ event: ControlEvent) {
@@ -129,8 +136,16 @@ struct NoteEditorScreen: View {
         case .menuHold:
             model.notes.write(fileName, text)
             model.popToRoot()
+        case .centerHold:
+            // Hold center: share the note file with other apps.
+            let url = model.notes.fileURL(for: fileName)
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.9)
+            shareURL = url
         default:
             break
         }
     }
+
+    @State private var shareURL: URL?
 }

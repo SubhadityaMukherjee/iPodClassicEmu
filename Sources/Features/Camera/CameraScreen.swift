@@ -155,11 +155,13 @@ struct CameraScreen: View {
             // toggles the options panel.
             if Date().timeIntervalSince(lastMenuTap) < 0.65 {
                 lastMenuTap = .distantPast
-                optionsOpen = false
+                withAnimation(.easeOut(duration: 0.18)) { optionsOpen = false }
                 model.pop()
             } else {
                 lastMenuTap = Date()
-                optionsOpen.toggle()
+                withAnimation(.easeOut(duration: 0.18)) {
+                    optionsOpen.toggle()
+                }
                 optionsSelection = 0
             }
         case .prev:

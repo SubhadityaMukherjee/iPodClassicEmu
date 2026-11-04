@@ -56,7 +56,7 @@ struct CoverFlowScreen: View {
                         FlowCover(album: album, size: coverSize, offset: offset)
                             .position(
                                 x: w / 2 + CGFloat(offset) * w * (abs(offset) > 0 ? 0.42 : 0.0),
-                                y: h * 0.44
+                                y: h * 0.52
                             )
                             .opacity(offset == 0 ? 1 : 0.92)
                     }
@@ -104,11 +104,11 @@ struct CoverFlowScreen: View {
             overlayTracks = await model.music.tracks(forAlbum: album)
         }
         overlaySelection = 0
-        overlayOpen = true
+        withAnimation(.easeOut(duration: 0.2)) { overlayOpen = true }
     }
 
     private func closeOverlay() {
-        overlayOpen = false
+        withAnimation(.easeIn(duration: 0.15)) { overlayOpen = false }
     }
 
     // MARK: Input

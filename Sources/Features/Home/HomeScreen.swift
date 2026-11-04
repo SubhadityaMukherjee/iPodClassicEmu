@@ -16,6 +16,7 @@ struct HomeScreen: View {
             MenuItem(id: "memos", title: "Voice Memos"),
             MenuItem(id: "notes", title: "Notes"),
             MenuItem(id: "clocks", title: "Clocks"),
+            MenuItem(id: "calendar", title: "Calendar"),
             MenuItem(id: "settings", title: "Settings"),
             MenuItem(id: "nowplaying", title: "Now Playing"),
         ]
@@ -50,6 +51,7 @@ struct HomeScreen: View {
         case "memos": model.push(.recorder)
         case "notes": model.push(.notes)
         case "clocks": model.push(.clocks)
+        case "calendar": model.push(.calendar)
         case "settings": model.push(.settings)
         case "nowplaying": model.push(.nowPlaying)
         default: break
@@ -86,6 +88,8 @@ struct HomeScreen: View {
             glyph("square.and.pencil")
         case "clocks":
             LiveClockPreview()
+        case "calendar":
+            glyph("calendar")
         case "settings":
             glyph("gearshape.fill")
         case "nowplaying":

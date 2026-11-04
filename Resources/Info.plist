@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>iPodClassic plays your synced Apple Music library and needs access to your music.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Calendar shows your events for the selected day.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The iPodClassic camera needs the camera to take photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
