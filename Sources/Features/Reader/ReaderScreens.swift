@@ -472,7 +472,7 @@ final class EpubController {
         (function(){
           var s = document.getElementById('ipod-reader-css');
           if (!s) { s = document.createElement('style'); s.id = 'ipod-reader-css'; document.head.appendChild(s); }
-          s.textContent = "html{scroll-behavior:auto !important;} body{font-size:\\(book.fontSize)px !important;line-height:\\(lineHeight) !important;font-family:\\(family) !important;padding:\\(padding)px !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
+          s.textContent = "html{scroll-behavior:auto !important;font-size:\\(book.fontSize)px !important;} body{font-size:\\(book.fontSize)px !important;line-height:\\(lineHeight) !important;font-family:\\(family) !important;padding:\\(padding)px !important;} p,div,li,blockquote,section,article,aside,td,th,dd,dt,figcaption,pre,code{font-size:inherit !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
         })()
         """
     }
