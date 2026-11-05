@@ -34,6 +34,8 @@ struct ScreenRouter: View {
         case .clocks: return "Clocks"
         case .extras: return "Extras"
         case .flashlight: return "Flashlight"
+        case .reader: return "Reader"
+        case .readerBook(let id): return model.reader.book(id: id)?.title ?? "Reader"
         case .calendar: return "Calendar"
         case .musicSearch: return "Search"
         case .alarm: return "Alarm Clock"
@@ -100,6 +102,8 @@ struct ScreenRouter: View {
         case .clocks: ClocksMenuScreen()
         case .extras: ExtrasScreen()
         case .flashlight: FlashlightScreen()
+        case .reader: ReaderScreen()
+        case .readerBook(let id): BookScreen(bookID: id)
         case .musicSearch: MusicSearchScreen()
         case .calendar: CalendarScreen()
         case .alarm: AlarmScreen()
