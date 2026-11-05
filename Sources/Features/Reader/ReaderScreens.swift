@@ -2,6 +2,7 @@ import SwiftUI
 import PDFKit
 import WebKit
 import UniformTypeIdentifiers
+import UIKit
 
 /// Reader menu: "Add from Files" plus the imported books.
 struct ReaderScreen: View {
@@ -161,6 +162,7 @@ struct BookScreen: View {
     @State private var toast = ""
     @State private var highlights: [BookHighlight] = []
     @State private var selectedText = ""
+    @State private var pdfSelectionToken: NSObjectProtocol?
     @State private var epubController = EpubController()
     @State private var pdfController = PDFBookController()
 
@@ -203,10 +205,30 @@ struct BookScreen: View {
                     highlights = HighlightStore.load(bookID: bookID, kind: .epub)
                 }
             }
+            // PDFKit posts selection changes; surface them in the
+            // highlight bar (only one PDF view exists in the app).
+            if pdfSelectionToken == nil {
+                pdfSelectionToken = NotificationCenter.default.addObserver(
+                    forName: .PDFViewSelectionChanged, object: nil, queue: .main) { _ in
+                        guard self.book?.kind == .pdf else { return }
+                        let text = self.pdfController.view?.currentSelection?.string ?? ""
+                        if text.isEmpty {
+                            if !self.selectedText.isEmpty {
+                                withAnimation(.easeIn(duration: 0.15)) { self.selectedText = "" }
+                            }
+                        } else {
+                            withAnimation(.easeOut(duration: 0.15)) { self.selectedText = text }
+                        }
+                }
+            }
             model.transportClaimedByScreen = true
         }
         .onDisappear {
             model.transportClaimedByScreen = false
+            if let token = pdfSelectionToken {
+                NotificationCenter.default.removeObserver(token)
+                pdfSelectionToken = nil
+            }
             saveLocation()
         }
     }
@@ -279,7 +301,11 @@ struct BookScreen: View {
                 }
                 .buttonStyle(.plain)
                 Button {
-                    epubController.clearSelection()
+                    if isPDF {
+                        pdfController.clearSelection()
+                    } else {
+                        epubController.clearSelection()
+                    }
                     withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
                 } label: {
                     capsuleLabel("Cancel", primary: false)
@@ -455,33 +481,56 @@ struct BookScreen: View {
 
     // MARK: Actions
 
-    /// Wraps the current selection in a persistent mark, stores it with the
-    /// book, and appends it to the book's Highlights note.
+    /// Wraps the current selection in a persistent mark (EPUB: DOM marks;
+    /// PDF: highlight annotations written into the file), stores it, and
+    /// mirrors it into the book's Highlights note.
     private func saveHighlight() {
-        guard var b = book, b.kind == .epub else { return }
-        epubController.wrapSelection { text in
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
-            guard !trimmed.isEmpty else { return }
-            let highlight = BookHighlight(id: UUID().uuidString, chapter: b.chapterIndex, text: trimmed)
-            highlights.append(highlight)
-            HighlightStore.save(highlights, bookID: b.id, kind: b.kind)
-            appendHighlightToNotes(highlight, book: b)
-            showToast("Highlighted")
+        guard var b = book else { return }
+        if b.kind == .epub {
+            epubController.wrapSelection { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
+                guard !trimmed.isEmpty else { return }
+                let highlight = BookHighlight(id: UUID().uuidString, chapter: b.chapterIndex, text: trimmed)
+                highlights.append(highlight)
+                HighlightStore.save(highlights, bookID: b.id, kind: b.kind)
+                appendHighlightToNotes(highlight, book: b)
+                showToast("Highlighted")
+            }
+        } else {
+            pdfHighlightSelection(book: b)
         }
     }
 
-    /// Mirror into Documents/Notes so highlights read as a notes file.
+    /// PDF: native annotation highlighting; annotations are saved into the
+    /// PDF file itself so they stay with the book.
+    private func pdfHighlightSelection(book: ReaderStore.Book) {
+        guard let selection = pdfController.view?.currentSelection,
+              let text = selection.string, !text.isEmpty else {
+            withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
+            return
+        }
+        for page in selection.pages {
+            let bounds = selection.bounds(for: page)
+            let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
+            annotation.color = UIColor.systemYellow.withAlphaComponent(0.4)
+            page.addAnnotation(annotation)
+        }
+        pdfController.clearSelection()
+        _ = pdfController.document?.write(to: Self.pdfURL(for: book))
+        let highlight = BookHighlight(id: UUID().uuidString,
+                                      chapter: pdfController.currentPageIndex,
+                                      text: text)
+        appendHighlightToNotes(highlight, book: book)
+        withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
+        showToast("Highlighted")
+    }
+
+    /// Mirror into Documents/Notes — one line per highlight: - "text"
     private func appendHighlightToNotes(_ highlight: BookHighlight, book: ReaderStore.Book) {
         let noteName = "\(book.title) - Highlights"
-        if !FileManager.default.fileExists(atPath: model.notes.fileURL(for: noteName).path) {
-            model.notes.write(noteName, "Highlights from \"\(book.title)\"\n")
-        }
-        let chapterTitle = chapters.indices.contains(highlight.chapter)
-            ? chapters[highlight.chapter].title
-            : "Chapter \(highlight.chapter + 1)"
         let body = model.notes.read(noteName)
-        model.notes.write(noteName, "\(body)\n— \(chapterTitle)\n\"\(highlight.text)\"\n")
+        model.notes.write(noteName, "\(body)- \"\(highlight.text)\"\n")
     }
 
     private func stepChapter(_ delta: Int) {
@@ -586,11 +635,16 @@ struct BookScreen: View {
 final class EpubController {
     weak var webView: WKWebView?
 
-    /// Instant, viewport-relative scroll: smooth animation restarts on
-    /// every tick and feels laggy; raw jumps track the wheel 1:1.
+    /// Instant, viewport-precise scrolling through the native scroll view:
+    /// a tick moves exactly one screenful (fraction × height), no JS round
+    /// trip, no bounce, and tiles repaint cleanly between jumps.
     func scrollByPage(fraction: Double) {
-        let js = "window.scrollBy(0, Math.round(window.innerHeight * \(fraction)))"
-        webView?.evaluateJavaScript(js, completionHandler: nil)
+        guard let scrollView = webView?.scrollView else { return }
+        var offset = scrollView.contentOffset
+        offset.y += scrollView.bounds.height * fraction
+        let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height + scrollView.contentInset.bottom)
+        offset.y = min(max(offset.y, -scrollView.contentInset.top), maxY)
+        scrollView.setContentOffset(offset, animated: false)
     }
 
     func applyStyle(to book: ReaderStore.Book) {
@@ -657,6 +711,10 @@ struct EpubWebView: UIViewRepresentable {
         wv.navigationDelegate = context.coordinator
         wv.scrollView.indicatorStyle = .black
         wv.backgroundColor = .systemBackground
+        // Page-stepping must map 1:1 to the visible screen: no bounce
+        // overshoot, no hidden safe-area insets shrinking the viewport.
+        wv.scrollView.bounces = false
+        wv.scrollView.contentInsetAdjustmentBehavior = .never
         let cfg = wv.configuration.userContentController
         cfg.addUserScript(WKUserScript(source: HighlightJS.selectionWatch,
                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -733,6 +791,10 @@ final class PDFBookController {
 
     func nextPage() { view?.goToNextPage(nil) }
     func prevPage() { view?.goToPreviousPage(nil) }
+
+    func clearSelection() {
+        view?.clearSelection()
+    }
 
     func goToPage(_ index: Int) {
         guard let doc = view?.document, (0..<doc.pageCount).contains(index), let page = doc.page(at: index) else { return }

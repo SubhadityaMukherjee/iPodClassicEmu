@@ -26,7 +26,7 @@ final class ReaderStore {
 
         init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
              scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
-             lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 1,
+             lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 2,
              pdfContinuous: Bool = true, dim: Int = 0) {
             self.id = id
             self.kind = kind
@@ -83,6 +83,15 @@ final class ReaderStore {
         if let data = d.data(forKey: Self.key),
            let decoded = try? JSONDecoder().decode([Book].self, from: data) {
             books = decoded
+        }
+        // One-time: the old default scroll step (70% of a screen) left a
+        // repeated band between successive ticks. Page-step everything.
+        if !d.bool(forKey: "reader.pageStepMigrated") {
+            for i in books.indices where books[i].kind == .epub && books[i].scrollStep == 1 {
+                books[i].scrollStep = 2
+            }
+            persist()
+            d.set(true, forKey: "reader.pageStepMigrated")
         }
     }
 
