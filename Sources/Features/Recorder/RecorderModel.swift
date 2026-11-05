@@ -99,7 +99,7 @@ final class RecorderModel {
         guard isRecording else { return }
         if !isPaused { pausedTotal += Date().timeIntervalSince(segmentStart) }
         recorder?.stop()
-        elapsed = pausedTotal
+        elapsed = 0  // the timer resets after a save; duration lives on the file
         recorder = nil
         isRecording = false
         isPaused = false

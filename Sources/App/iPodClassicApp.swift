@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import AVFoundation
 
 @main
 struct iPodClassicApp: App {
@@ -8,6 +9,12 @@ struct iPodClassicApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        // ApplicationMusicPlayer runs in-process and needs an active
+        // .playback audio session or playback dies when the app
+        // backgrounds. Configure once, before any model reads volume.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setActive(true)
+
         // QA hook: RESET_DEFAULTS must run BEFORE AppModel (and the
         // settings/alarms singletons it holds) are created, or they would
         // read the stale persisted values.

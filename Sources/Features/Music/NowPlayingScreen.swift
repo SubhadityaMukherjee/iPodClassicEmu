@@ -12,6 +12,8 @@ struct NowPlayingScreen: View {
     @State private var menuSelection = 0
     @State private var playlistMode = false
     @State private var playlistSelection = 0
+    @State private var queueMode = false
+    @State private var queueSelection = 0
     @State private var toast = ""
 
     private var player: PlayerModel { model.player }
@@ -184,19 +186,34 @@ struct NowPlayingScreen: View {
     private var optionItems: [MenuItem] {
         [
             MenuItem(id: "playlist", title: "Add to Playlist"),
+            MenuItem(id: "queue", title: "Up Next (\(player.upNext.count))"),
             MenuItem(id: "artist", title: "Go to Artist"),
             MenuItem(id: "album", title: "Go to Album"),
         ]
     }
 
+    private var upNextItems: [MenuItem] {
+        player.upNext.map {
+            MenuItem(id: $0.id, title: $0.title, subtitle: $0.isCurrent ? "Playing" : $0.artist, showsChevron: false)
+        }
+    }
+
     private var optionsPanel: some View {
-        ModalPanel(title: playlistMode ? "Add to Playlist" : "Song Options", onClose: { closeMenu() }) {
+        ModalPanel(title: panelTitle, onClose: { closeMenu() }) {
             if playlistMode {
                 MenuList(
                     items: playlists.map { MenuItem(id: $0.id.rawValue, title: $0.name) },
                     selection: playlistSelection,
                     compact: true,
                     emptyText: "No Playlists"
+                )
+                .padding(.top, 2)
+            } else if queueMode {
+                MenuList(
+                    items: upNextItems,
+                    selection: queueSelection,
+                    compact: true,
+                    emptyText: "Queue Empty"
                 )
                 .padding(.top, 2)
             } else {
@@ -206,16 +223,28 @@ struct NowPlayingScreen: View {
         }
     }
 
+    private var panelTitle: String {
+        playlistMode ? "Add to Playlist" : (queueMode ? "Up Next" : "Song Options")
+    }
+
     private func closeMenu() {
         withAnimation(.easeIn(duration: 0.15)) {
             menuOpen = false
             playlistMode = false
+            queueMode = false
         }
     }
 
     private func showPlaylistPicker() {
         playlistSelection = 0
         withAnimation(.easeOut(duration: 0.18)) { playlistMode = true }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation(.easeOut(duration: 0.2)) { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeIn(duration: 0.3)) { toast = "" }
+        }
     }
 
     private func addToPlaylist(_ playlist: Playlist) async {
@@ -264,6 +293,8 @@ struct NowPlayingScreen: View {
             if menuOpen {
                 if playlistMode {
                     moveListSelection(&playlistSelection, count: playlists.count, delta: d, settings: settings)
+                } else if queueMode {
+                    moveListSelection(&queueSelection, count: player.upNext.count, delta: d, settings: settings)
                 } else {
                     moveListSelection(&menuSelection, count: optionItems.count, delta: d, settings: settings)
                 }
@@ -280,9 +311,18 @@ struct NowPlayingScreen: View {
                     if playlists.indices.contains(playlistSelection) {
                         Task { await addToPlaylist(playlists[playlistSelection]) }
                     }
+                } else if queueMode {
+                    let items = player.upNext
+                    if items.indices.contains(queueSelection) {
+                        player.jump(to: items[queueSelection].id)
+                        showToast("Playing \(items[queueSelection].title)")
+                    }
                 } else {
                     switch optionItems[min(menuSelection, optionItems.count - 1)].id {
                     case "playlist": showPlaylistPicker()
+                    case "queue":
+                        queueSelection = 0
+                        withAnimation(.easeOut(duration: 0.18)) { queueMode = true }
                     case "artist": Task { await goToArtist() }
                     case "album": Task { await goToAlbum() }
                     default: break
@@ -297,6 +337,7 @@ struct NowPlayingScreen: View {
             WheelHaptics.shared.buttonPress(strength: 0.9)
             menuSelection = 0
             playlistMode = false
+            queueMode = false
             withAnimation(.easeOut(duration: 0.18)) { menuOpen = true }
         case .menu:
             if menuOpen {

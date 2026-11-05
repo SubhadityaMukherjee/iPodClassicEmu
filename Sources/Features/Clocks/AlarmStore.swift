@@ -147,14 +147,21 @@ final class AlarmStore: ObservableObject {
     /// at the alarm time — full volume, even on the silent switch.
     func startKeepAlive() {
         guard enabled, monitor == nil else { return }
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .default, options: [])
-        try? session.setActive(true)
-        if let url = Bundle.main.url(forResource: "Tick", withExtension: "caf") {
-            keepAlivePlayer = try? AVAudioPlayer(contentsOf: url)
-            keepAlivePlayer?.numberOfLoops = -1
-            keepAlivePlayer?.volume = 0.01   // effectively inaudible
-            keepAlivePlayer?.play()
+        // The monitor must always run; the silent audio below is only
+        // needed when nothing else keeps the process alive. While music
+        // plays, leave the session alone — reconfiguring it can interrupt
+        // playback, and the active audio session keeps us alive anyway.
+        let musicPlaying = AppModelRouter.shared.model?.player.isPlaying == true
+        if !musicPlaying {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.playback, mode: .default, options: [])
+            try? session.setActive(true)
+            if let url = Bundle.main.url(forResource: "Tick", withExtension: "caf") {
+                keepAlivePlayer = try? AVAudioPlayer(contentsOf: url)
+                keepAlivePlayer?.numberOfLoops = -1
+                keepAlivePlayer?.volume = 0.01   // effectively inaudible
+                keepAlivePlayer?.play()
+            }
         }
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.checkFire() }
         RunLoop.main.add(t, forMode: .common)

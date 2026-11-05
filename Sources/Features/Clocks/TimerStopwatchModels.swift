@@ -202,7 +202,9 @@ final class RingerManager {
         audioPlayer?.stop()
         audioPlayer = nil
         AppModelRouter.shared.model?.ringer = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Keep the session active (music playback + background audio rely
+        // on it); just drop the ringer's duck-others configuration.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         // Re-arm tomorrow's request after the ringer is dismissed.
         AlarmStore.shared.schedule()
     }
