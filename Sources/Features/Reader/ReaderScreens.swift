@@ -724,16 +724,25 @@ final class EpubController {
         webView?.evaluateJavaScript(HighlightJS.clearSelection, completionHandler: nil)
     }
 
-    /// Current position as a fraction of pages through the chapter
-    /// (native horizontal offset / range — no JS round trip).
+    /// Current position as a fraction of pages through the chapter. Read
+    /// from the DOM: page turns go through window.scrollBy and WebKit does
+    /// not mirror horizontal DOM scroll into the native scrollView offset
+    /// (which stays 0 — reading it would always save page 0).
     func scrollFraction(completion: @escaping (Double) -> Void) {
-        guard let scrollView = webView?.scrollView else {
-            completion(0)
-            return
+        let js = """
+        (function(){
+          var period = window.innerWidth;
+          var max = document.documentElement.scrollWidth - window.innerWidth;
+          if (max <= 0) return 1;
+          var maxIdx = Math.max(1, Math.round(max / period));
+          var idx = Math.min(maxIdx, Math.max(0, Math.round(window.scrollX / period)));
+          return idx / maxIdx;
+        })()
+        """
+        webView?.evaluateJavaScript(js) { value, _ in
+            let f = (value as? NSNumber)?.doubleValue ?? 0
+            DispatchQueue.main.async { completion(min(max(f, 0), 1)) }
         }
-        let maxScroll = max(0, scrollView.contentSize.width - scrollView.bounds.width)
-        let fraction = maxScroll > 0 ? scrollView.contentOffset.x / maxScroll : 1
-        completion(min(max(fraction, 0), 1))
     }
 
     /// Jumps to the page nearest to `fraction` through the chapter (DOM
@@ -830,10 +839,19 @@ struct EpubWebView: UIViewRepresentable {
         if let chapter, context.coordinator.loadedURL != chapter.url {
             context.coordinator.loadedURL = chapter.url
             wv.loadFileURL(chapter.url, allowingReadAccessTo: bookDir)
-        } else if context.coordinator.appliedStyle != book {
+        } else if !styleMatches(context.coordinator.appliedStyle, book) {
             context.coordinator.appliedStyle = book
             wv.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
         }
+    }
+
+    /// Only style-relevant fields — position/highlight saves mutate the
+    /// book constantly and must NOT re-inject the stylesheet (a re-layout
+    /// on every autosave is churn at best and a scroll reset at worst).
+    private func styleMatches(_ a: ReaderStore.Book?, _ b: ReaderStore.Book) -> Bool {
+        guard let a else { return false }
+        return a.fontSize == b.fontSize && a.fontFamily == b.fontFamily
+            && a.lineSpacing == b.lineSpacing && a.margin == b.margin
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -869,9 +887,11 @@ struct EpubWebView: UIViewRepresentable {
                 // Correct the first restore if layout was still settling —
                 // but NEVER yank back if reading already started (the
                 // entry position would stomp the current page).
-                if let scrollView = controller.webView?.scrollView,
-                   scrollView.contentOffset.x < 1 {
-                    controller.restorePosition(fraction: fraction)
+                controller.webView?.evaluateJavaScript("window.scrollX") { value, _ in
+                    let x = (value as? NSNumber)?.doubleValue ?? 0
+                    if x < 1 {
+                        controller.restorePosition(fraction: fraction)
+                    }
                 }
             }
         }
