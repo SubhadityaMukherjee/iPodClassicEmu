@@ -354,3 +354,24 @@ struct ModalHost<Panel: View>: View {
         .transition(.opacity.combined(with: .scale(scale: 0.94)))
     }
 }
+
+/// Small capsule toast pinned near the bottom of the screen ("Added to
+/// Queue", errors). Show it with a transition, clear the text after a beat.
+struct ToastCapsule: View {
+    let text: String
+
+    var body: some View {
+        VStack {
+            Spacer()
+            Text(text)
+                .font(Theme.font(12, .bold))
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color(white: 0.85)))
+                .padding(.bottom, 30)
+        }
+        .transition(.opacity)
+        .allowsHitTesting(false)
+    }
+}

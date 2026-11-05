@@ -171,6 +171,7 @@ struct MusicListScreen: View {
     let kind: MusicListKind
 
     @State private var selection = 0
+    @State private var toast = ""
 
     private static let songSortLabels = ["Title", "Artist", "Duration", "Recently Added"]
     private static let albumSortLabels = ["Title", "Artist", "Recently Added"]
@@ -241,19 +242,32 @@ struct MusicListScreen: View {
     }
 
     var body: some View {
-        MenuList(
-            items: allItems,
-            selection: selection,
-            style: listStyle
-        ) { item in
-            // Thumbnails resolve by album id; only thumbnail-style lists render them.
-            model.music.album(item.id)?.artwork
+        ZStack {
+            MenuList(
+                items: allItems,
+                selection: selection,
+                style: listStyle
+            ) { item in
+                // Thumbnails resolve by album id; only thumbnail-style lists render them.
+                model.music.album(item.id)?.artwork
+            }
+            if !toast.isEmpty {
+                ToastCapsule(text: toast)
+                    .zIndex(2)
+            }
         }
         .onWheel { handle($0) }
         .onAppear {
             if !model.music.loaded && !model.music.loading {
                 Task { await model.music.loadLibrary() }
             }
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation(.easeOut(duration: 0.2)) { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeIn(duration: 0.3)) { toast = "" }
         }
     }
 
@@ -282,6 +296,19 @@ struct MusicListScreen: View {
                 activateHeader(headerItems[selection].id)
             } else {
                 selectEntry(at: selection - headerItems.count)
+            }
+        case .centerHold:
+            // Hold on a song row: add to queue ("play next").
+            guard kind == .songs else { break }
+            let idx = selection - headerItems.count
+            let songs = sortedSongs
+            guard songs.indices.contains(idx) else { break }
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.85)
+            if model.player.addToQueue(songs[idx]) {
+                showToast("Added to Queue")
+            } else {
+                showToast("Nothing Playing")
             }
         case .menu:
             model.pop()
@@ -484,17 +511,42 @@ struct AlbumDetailScreen: View {
 
     @State private var selection = 0
     @State private var tracks: [Song] = []
+    @State private var toast = ""
 
     private var album: Album? { model.music.album(albumID) }
 
     var body: some View {
-        list
-            .onWheel { handle($0) }
-            .task(id: albumID) {
-                if let album {
-                    tracks = await model.music.tracks(forAlbum: album)
-                }
+        ZStack {
+            // Shared MenuList (mixed action-row/track heights) so the rows
+            // fill the screen exactly — the old hand-rolled windowing
+            // assumed 47pt rows everywhere and always left white space at
+            // the bottom.
+            MenuList(
+                items: headerItems + trackItems,
+                selection: selection,
+                emptyText: "No Tracks",
+                style: .thumbnail
+            ) { item in
+                item.id.hasPrefix("track.") ? album?.artwork : nil
             }
+            if !toast.isEmpty {
+                ToastCapsule(text: toast)
+                    .zIndex(2)
+            }
+        }
+        .onWheel { handle($0) }
+        .task(id: albumID) {
+            if let album {
+                tracks = await model.music.tracks(forAlbum: album)
+            }
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation(.easeOut(duration: 0.2)) { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeIn(duration: 0.3)) { toast = "" }
+        }
     }
 
     private var headerItems: [MenuItem] {
@@ -513,45 +565,23 @@ struct AlbumDetailScreen: View {
 
     private var totalRows: Int { headerItems.count + tracks.count }
 
-    @ViewBuilder
-    private var list: some View {
-        GeometryReader { geo in
-            let rowH: CGFloat = 47
-            let visible = max(1, Int((geo.size.height / rowH).rounded(.down)))
-            let start = max(0, min(selection - max(0, visible - 3), max(0, totalRows - visible)))
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(0..<min(headerItems.count, max(0, totalRows - start)), id: \.self) { i in
-                        if start <= i && i < start + visible {
-                            MenuRow(item: headerItems[i], selected: selection == i, compact: true)
-                                .frame(height: 33)
-                        }
-                    }
-                    ForEach(Array(tracks.enumerated()), id: \.element.id) { i, song in
-                        let row = headerItems.count + i
-                        if row >= start && row < start + visible {
-                            MenuRow(
-                                item: trackItems[i],
-                                selected: selection == row,
-                                compact: true,
-                                style: .thumbnail,
-                                thumb: album?.artwork
-                            )
-                            .frame(height: rowH)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
             moveListSelection(&selection, count: totalRows, delta: d, settings: settings)
         case .select:
             activateCurrent()
+        case .centerHold:
+            // Hold a track row: add to queue ("play next").
+            let idx = selection - headerItems.count
+            guard tracks.indices.contains(idx) else { break }
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.85)
+            if model.player.addToQueue(tracks[idx]) {
+                showToast("Added to Queue")
+            } else {
+                showToast("Nothing Playing")
+            }
         case .menu:
             model.pop()
         default:
@@ -589,6 +619,7 @@ struct PlaylistDetailScreen: View {
 
     @State private var selection = 0
     @State private var tracks: [Song] = []
+    @State private var toast = ""
 
     private var playlist: Playlist? { model.music.playlist(playlistID) }
 
@@ -601,17 +632,30 @@ struct PlaylistDetailScreen: View {
     private var totalRows: Int { headerItems.count + tracks.count }
 
     var body: some View {
-        MenuList(
-            items: headerItems + tracks.enumerated().map { i, s in
-                MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.artistName, showsChevron: false)
-            },
-            selection: selection, emptyText: "No Songs", style: .twoLine
-        )
+        ZStack {
+            MenuList(
+                items: headerItems + tracks.enumerated().map { i, s in
+                    MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.artistName, showsChevron: false)
+                },
+                selection: selection, emptyText: "No Songs", style: .twoLine
+            )
+            if !toast.isEmpty {
+                ToastCapsule(text: toast)
+                    .zIndex(2)
+            }
+        }
         .onWheel { handle($0) }
         .task(id: playlistID) {
             if let playlist {
                 tracks = await model.music.tracks(forPlaylist: playlist)
             }
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation(.easeOut(duration: 0.2)) { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeIn(duration: 0.3)) { toast = "" }
         }
     }
 
@@ -634,6 +678,16 @@ struct PlaylistDetailScreen: View {
                     model.player.play(tracks, startingAt: idx)
                     model.push(.nowPlaying)
                 }
+            }
+        case .centerHold:
+            let idx = selection - headerItems.count
+            guard tracks.indices.contains(idx) else { break }
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.85)
+            if model.player.addToQueue(tracks[idx]) {
+                showToast("Added to Queue")
+            } else {
+                showToast("Nothing Playing")
             }
         case .menu:
             model.pop()
