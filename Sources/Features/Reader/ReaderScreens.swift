@@ -389,7 +389,7 @@ struct BookScreen: View {
             BookSetting(id: "family", title: "Font", values: ["Serif", "Sans"], index: min(max(book.fontFamily, 0), 1)),
             BookSetting(id: "spacing", title: "Line Spacing", values: ["Compact", "Normal", "Wide"], index: min(max(book.lineSpacing, 0), 2)),
             BookSetting(id: "margin", title: "Margins", values: ["Narrow", "Normal", "Wide"], index: min(max(book.margin, 0), 2)),
-            BookSetting(id: "scroll", title: "Page Step", values: ["1 Page", "2 Pages", "4 Pages"], index: min(max(book.scrollStep, 0), 2)),
+            BookSetting(id: "scroll", title: "Scroll Step", values: ["Small", "Medium", "Large"], index: min(max(book.scrollStep, 0), 2)),
             BookSetting(id: "dim", title: "Screen", values: ["Bright", "Dim", "Darker"], index: min(max(book.dim, 0), 2)),
         ]
     }
@@ -621,10 +621,9 @@ struct BookScreen: View {
                     }
                 }
             } else {
-                // Column paging: one wheel tick turns a page (or several,
-                // per the Page Step setting). Instant — no animation lag.
-                let pages = [1, 2, 4][min(max(book?.scrollStep ?? 1, 0), 2)]
-                epubController.scrollByPages(d > 0 ? pages : -pages)
+                // Vertical viewport-fraction scrolling, instant.
+                let step = [0.4, 0.7, 1.0][min(max(book?.scrollStep ?? 1, 0), 2)]
+                epubController.scrollByPage(fraction: d > 0 ? step : -step)
             }
         case .select:
             if panelOpen {
@@ -658,36 +657,18 @@ struct BookScreen: View {
 // MARK: - EPUB rendering
 
 /// Command handle for the parent screen to drive the web view.
-///
-/// Chapters render as CSS columns — each column is exactly one page
-/// (viewport-sized), so the browser itself only breaks content between
-/// complete lines. Turning a page scrolls horizontally by one column;
-/// text can never be cut mid-line at either edge.
 final class EpubController {
     weak var webView: WKWebView?
 
-    /// Turns `count` pages (negative = backwards). A column period is one
-    /// viewport width, so integer multiples land exactly on page starts.
-    func scrollByPages(_ count: Int) {
-        webView?.evaluateJavaScript("window.scrollBy(window.innerWidth * \(count), 0)", completionHandler: nil)
+    /// Instant, viewport-fraction vertical scroll (of the readable area):
+    /// tracks the wheel 1:1, no animation restarts.
+    func scrollByPage(fraction: Double) {
+        let js = "window.scrollBy(0, Math.round(window.innerHeight * \(fraction)))"
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
     func applyStyle(to book: ReaderStore.Book) {
-        webView?.evaluateJavaScript(EpubController.cssJS(for: book)) { _, _ in
-            // Reflow moved the page boundaries — snap to the nearest one.
-            self.snapToNearestPage()
-        }
-    }
-
-    /// Re-rounds the current offset onto the column grid.
-    func snapToNearestPage() {
-        webView?.evaluateJavaScript(EpubController.pageFractionJS) { value, _ in
-            let f = (value as? NSNumber)?.doubleValue ?? 0
-            DispatchQueue.main.async {
-                self.webView?.evaluateJavaScript(
-                    EpubController.restoreJS(fraction: f), completionHandler: nil)
-            }
-        }
+        webView?.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
     }
 
     /// Wraps the current selection in persistent marks; returns its text.
@@ -702,9 +683,9 @@ final class EpubController {
         webView?.evaluateJavaScript(HighlightJS.clearSelection, completionHandler: nil)
     }
 
-    /// Current position as a fraction of pages through the chapter (0…1).
+    /// Current position as a fraction of the chapter (0…1).
     func scrollFraction(completion: @escaping (Double) -> Void) {
-        webView?.evaluateJavaScript(EpubController.pageFractionJS) { value, _ in
+        webView?.evaluateJavaScript(EpubController.scrollFractionJS) { value, _ in
             let f = (value as? NSNumber)?.doubleValue ?? 0
             DispatchQueue.main.async { completion(min(max(f, 0), 1)) }
         }
@@ -712,30 +693,12 @@ final class EpubController {
 
     // MARK: Injected JS
 
-    /// Position as page index / max page index (columns are viewport-wide).
-    static let pageFractionJS = """
-    (function(){
-      var period = window.innerWidth;
-      var max = document.documentElement.scrollWidth - window.innerWidth;
-      if (max <= 0) return 1;
-      var maxIdx = Math.max(1, Math.round(max / period));
-      var idx = Math.min(maxIdx, Math.max(0, Math.round(window.scrollX / period)));
-      return idx / maxIdx;
-    })()
+    static let scrollFractionJS = """
+    document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) : 1
     """
 
-    /// Jumps to the page nearest to `fraction` through the chapter.
     static func restoreJS(fraction: Double) -> String {
-        """
-        (function(){
-          var period = window.innerWidth;
-          var max = document.documentElement.scrollWidth - window.innerWidth;
-          if (max <= 0) { window.scrollTo(0, 0); return; }
-          var maxIdx = Math.max(1, Math.round(max / period));
-          var idx = Math.round(\(fraction) * maxIdx);
-          window.scrollTo(idx * period, 0);
-        })()
-        """
+        "document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollTo(0, \(fraction) * (document.documentElement.scrollHeight - window.innerHeight)) : window.scrollTo(0,0)"
     }
 
     /// The unitless CSS line-height multiplier for a book's spacing setting.
@@ -743,23 +706,20 @@ final class EpubController {
         [1.4, 1.55, 1.75][min(max(book.lineSpacing, 0), 2)]
     }
 
-    /// Reader stylesheet: viewport-sized columns. Each page shows text
-    /// with `margin` side margins (the column gap is the right margin of
-    /// page N and the left margin of page N+1) and vertical breathing
-    /// room from the html padding — identical on every page.
+    /// Reader stylesheet. Vertical scrolling with viewport insets for the
+    /// chrome; narrow-column wrapping helpers (hyphenation, long-word
+    /// breaking, left alignment) tuned for the small LCD.
     static func cssJS(for book: ReaderStore.Book) -> String {
         let families = ["Georgia,'Times New Roman',serif", "-apple-system,'Helvetica Neue',sans-serif"]
         let family = families[min(max(book.fontFamily, 0), families.count - 1)]
         let lineHeight = lineHeightMultiplier(book)
-        let margins = [10, 16, 24]
-        let m = margins[min(max(book.margin, 0), margins.count - 1)]
-        let vTop = book.fontSize + 8
-        let vBottom = 14
+        let paddings = [10, 16, 24]
+        let padding = paddings[min(max(book.margin, 0), paddings.count - 1)]
         return """
         (function(){
           var s = document.getElementById('ipod-reader-css');
           if (!s) { s = document.createElement('style'); s.id = 'ipod-reader-css'; document.head.appendChild(s); }
-          s.textContent = "html{scroll-behavior:auto !important;font-size:\(book.fontSize)px !important;padding-top:\(vTop)px !important;padding-bottom:\(vBottom)px !important;box-sizing:border-box !important;-webkit-text-size-adjust:100% !important;} body{margin:0 !important;padding:0 !important;height:calc(100vh - \(vTop + vBottom)px) !important;column-width:calc(100vw - \(2 * m)px) !important;column-gap:\(2 * m)px !important;column-fill:auto !important;font-size:\(book.fontSize)px !important;line-height:\(lineHeight) !important;font-family:\(family) !important;text-align:left !important;overflow-wrap:break-word !important;-webkit-hyphens:auto !important;hyphens:auto !important;orphans:2 !important;widows:2 !important;} p,div,li,blockquote,section,article,aside,td,th,dd,dt,figcaption,pre,code{font-size:inherit !important;} mark.ipod-hl{background:rgba(255,208,0,0.45) !important;color:inherit !important;} img,svg,video{max-width:100% !important;max-height:calc(100vh - \(vTop + vBottom + 20)px) !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
+          s.textContent = "html{scroll-behavior:auto !important;font-size:\(book.fontSize)px !important;-webkit-text-size-adjust:100% !important;} body{font-size:\(book.fontSize)px !important;line-height:\(lineHeight) !important;font-family:\(family) !important;padding:\(padding)px !important;text-align:left !important;overflow-wrap:break-word !important;-webkit-hyphens:auto !important;hyphens:auto !important;orphans:2 !important;widows:2 !important;} p,div,li,blockquote,section,article,aside,td,th,dd,dt,figcaption,pre,code{font-size:inherit !important;} mark.ipod-hl{background:rgba(255,208,0,0.45) !important;color:inherit !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
         })()
         """
     }
@@ -783,11 +743,16 @@ struct EpubWebView: UIViewRepresentable {
         wv.navigationDelegate = context.coordinator
         wv.scrollView.indicatorStyle = .black
         wv.backgroundColor = .systemBackground
-        // Pages are horizontal columns: no bounce overshoot, no insets —
-        // the column layout reserves its own breathing room.
+        // Vertical reading scroll: no bounce overshoot; the insets reserve
+        // breathing room at the document's ends (the progress bar lives
+        // below the reading area in its own row).
         wv.scrollView.bounces = false
         wv.scrollView.contentInsetAdjustmentBehavior = .never
-        wv.scrollView.contentInset = .zero
+        wv.scrollView.contentInset = UIEdgeInsets(
+            top: CGFloat(book.fontSize) + 8,
+            left: 0,
+            bottom: 12,
+            right: 0)
         let cfg = wv.configuration.userContentController
         cfg.addUserScript(WKUserScript(source: HighlightJS.selectionWatch,
                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
