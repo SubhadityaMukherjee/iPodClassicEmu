@@ -42,9 +42,10 @@ struct AlarmScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var alarm: AlarmStore
 
-    enum Segment: Int, CaseIterable { case hour, minute, ampm, toggle }
+    enum Segment: Int, CaseIterable { case hour, minute, ampm, repeatDays, toggle }
 
     @State private var segment: Segment = .hour
+    @State private var dayCursor = 0  // highlighted letter within Repeat Days
 
     var body: some View {
         VStack(spacing: 6) {
@@ -58,6 +59,8 @@ struct AlarmScreen: View {
                 .padding(.horizontal, 70)
 
             timeRow
+
+            repeatRow
 
             alarmToggle
                 .padding(.bottom, 8)
@@ -88,6 +91,7 @@ struct AlarmScreen: View {
         case .hour: return "Set Hour"
         case .minute: return "Set Minute"
         case .ampm: return "AM / PM"
+        case .repeatDays: return "Repeat: \(alarm.repeatLabel)"
         case .toggle: return "Alarm"
         }
     }
@@ -111,6 +115,24 @@ struct AlarmScreen: View {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(selected ? AnyShapeStyle(SelectionGradient()) : AnyShapeStyle(Color.clear))
             )
+    }
+
+    private var repeatRow: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<7, id: \.self) { i in
+                let focused = segment == .repeatDays && i == dayCursor
+                Text(Calendar.current.veryShortWeekdaySymbols[i])
+                    .font(Theme.font(12, .semibold))
+                    .foregroundStyle(focused ? Color.white : (alarm.repeatDays[i] ? Theme.ink : Theme.inkDim))
+                    .frame(width: 18, height: 18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(focused
+                                  ? AnyShapeStyle(SelectionGradient())
+                                  : (alarm.repeatDays[i] ? AnyShapeStyle(Color.black.opacity(0.12)) : AnyShapeStyle(Color.clear)))
+                    )
+            }
+        }
     }
 
     private var alarmToggle: some View {
@@ -138,6 +160,8 @@ struct AlarmScreen: View {
         case .select:
             if segment == .toggle {
                 alarm.enabled.toggle()
+            } else if segment == .repeatDays {
+                alarm.repeatDays[dayCursor].toggle()
             } else {
                 segment = Segment(rawValue: segment.rawValue + 1) ?? .hour
             }
@@ -158,6 +182,18 @@ struct AlarmScreen: View {
             alarm.minute = wrap(alarm.minute + delta, 0, 59)
         case .ampm:
             if delta != 0 { alarm.isPM.toggle() }
+        case .repeatDays:
+            // Wheel walks the day cursor; stepping past either edge moves on.
+            let next = dayCursor + delta
+            if next < 0 {
+                segment = .ampm
+                dayCursor = 6
+            } else if next > 6 {
+                segment = .toggle
+                dayCursor = 0
+            } else {
+                dayCursor = next
+            }
         case .toggle:
             if delta != 0 { alarm.enabled.toggle() }
         }
