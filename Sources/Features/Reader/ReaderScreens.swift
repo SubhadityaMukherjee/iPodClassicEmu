@@ -81,7 +81,12 @@ struct ReaderScreen: View {
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            moveListSelection(&selection, count: items.count, delta: d, settings: settings)
+            if deleteCandidate != nil {
+                // The confirmation panel is up: wheel moves its rows.
+                moveListSelection(&deleteSelection, count: 2, delta: d, settings: settings)
+            } else {
+                moveListSelection(&selection, count: items.count, delta: d, settings: settings)
+            }
         case .select:
             if deleteCandidate != nil {
                 let id = ["cancel", "delete"][min(deleteSelection, 1)]
@@ -108,7 +113,12 @@ struct ReaderScreen: View {
                 WheelHaptics.shared.buttonPress(strength: 0.85)
             }
         case .menu:
-            model.pop()
+            if deleteCandidate != nil {
+                // MENU closes the confirmation first.
+                deleteCandidate = nil
+            } else {
+                model.pop()
+            }
         default:
             break
         }
@@ -394,7 +404,7 @@ struct BookScreen: View {
         var index: Int
     }
 
-    private static let fontSizes = [15, 17, 19, 22, 25]
+    private static let fontSizes = [11, 13, 15, 17, 19, 22, 25]
 
     private var bookSettings: [BookSetting] {
         guard let book else { return [] }
@@ -406,7 +416,7 @@ struct BookScreen: View {
                             index: min(max(book.dim, 0), 2)),
             ]
         }
-        let sizeIndex = max(0, Self.fontSizes.firstIndex(of: book.fontSize) ?? 1)
+        let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
         return [
             BookSetting(id: "size", title: "Font Size", values: Self.fontSizes.map { "\($0) px" }, index: sizeIndex),
             BookSetting(id: "family", title: "Font", values: ["Serif", "Sans"], index: min(max(book.fontFamily, 0), 1)),
