@@ -170,6 +170,11 @@ final class RingerManager {
     }
 
     private func playLoop() {
+        startSound()
+    }
+
+    /// Loud alarm loop through a .playback session (bypasses the mute switch).
+    func startSound() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default, options: [.duckOthers])
         try? session.setActive(true)
@@ -185,5 +190,7 @@ final class RingerManager {
         audioPlayer = nil
         AppModelRouter.shared.model?.ringer = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Re-arm tomorrow's request after the ringer is dismissed.
+        AlarmStore.shared.schedule()
     }
 }
