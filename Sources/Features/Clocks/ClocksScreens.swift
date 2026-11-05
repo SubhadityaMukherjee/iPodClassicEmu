@@ -71,6 +71,16 @@ struct AlarmScreen: View {
             }
         }
         .onWheel { handle($0) }
+        .onAppear {
+            // Ask for notification permission while the user is right here.
+            alarm.schedule()
+            // QA hook: fire the ringer after N seconds for UI tests.
+            if let s = ProcessInfo.processInfo.environment["ALARM_FIRE_SECONDS"], let secs = Double(s), secs > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + secs) {
+                    AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
+                }
+            }
+        }
     }
 
     private var segmentTitle: String {

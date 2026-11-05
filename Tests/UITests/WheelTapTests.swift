@@ -88,6 +88,29 @@ final class WheelTapTests: XCTestCase {
     }
 
     @MainActor
+    func testAlarmRingerFiresAndDismisses() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launchEnvironment["START_ROUTE"] = "alarm"
+        app.launchEnvironment["ALARM_FIRE_SECONDS"] = "5"
+        app.launch()
+
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+
+        // The ringer overlay must appear with its Snooze/Stop rows.
+        XCTAssertTrue(app.staticTexts["Snooze"].waitForExistence(timeout: 12),
+                      "Ringer overlay did not fire")
+
+        // Dismiss: center on "Snooze" (first row) also closes the overlay.
+        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        origin.withOffset(CGVector(dx: 8, dy: 0)).tap()
+
+        XCTAssertTrue(app.staticTexts["Snooze"].waitForNonExistence(timeout: 5),
+                      "Ringer overlay did not dismiss")
+    }
+
+    @MainActor
     func testSettingsSubmenuScrollsAndSelects() throws {
         let app = XCUIApplication()
         app.launchEnvironment["RESET_DEFAULTS"] = "1"

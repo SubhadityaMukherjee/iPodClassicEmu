@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import UserNotifications
 
 /// The single classic alarm (hour/minute/AM-PM/enabled), persisted and
@@ -91,7 +92,57 @@ final class AlarmStore: ObservableObject {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["alarm.daily"])
     }
 
-    /// Snooze: schedule one shot in 9 minutes.
+    // MARK: - In-app firing (keeps ringing even when locked or muted)
+
+    private var keepAlivePlayer: AVAudioPlayer?
+    private var monitor: Timer?
+    private var snoozeTimer: Timer?
+    private var lastFireDay: String?
+
+    /// While backgrounded with an armed alarm, plays near-silent audio so
+    /// iOS keeps the process alive; a monitor then fires the ringer in-app
+    /// at the alarm time — full volume, even on the silent switch.
+    func startKeepAlive() {
+        guard enabled, monitor == nil else { return }
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .default, options: [])
+        try? session.setActive(true)
+        if let url = Bundle.main.url(forResource: "Tick", withExtension: "caf") {
+            keepAlivePlayer = try? AVAudioPlayer(contentsOf: url)
+            keepAlivePlayer?.numberOfLoops = -1
+            keepAlivePlayer?.volume = 0.01   // effectively inaudible
+            keepAlivePlayer?.play()
+        }
+        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.checkFire() }
+        RunLoop.main.add(t, forMode: .common)
+        monitor = t
+    }
+
+    func stopKeepAlive() {
+        monitor?.invalidate()
+        monitor = nil
+        keepAlivePlayer?.stop()
+        keepAlivePlayer = nil
+    }
+
+    private func checkFire() {
+        let cal = Calendar.current
+        let now = cal.dateComponents([.hour, .minute], from: Date())
+        guard let h = now.hour, let m = now.minute, h == hour24, m == minute else { return }
+        let key = cal.startOfDay(for: Date()).timeIntervalSince1970.description
+        guard lastFireDay != key else { return }
+        lastFireDay = key
+        // The app handles today's ring; drop today's (duplicate) system
+        // notification and let schedule() re-arm tomorrow's.
+        cancel()
+        stopKeepAlive()
+        DispatchQueue.main.async {
+            AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
+        }
+    }
+
+    /// Snooze: notification in 9 minutes (killed-app fallback) plus an
+    /// in-app timer that rings without needing the notification.
     func snooze() {
         let content = UNMutableNotificationContent()
         content.title = "Snoozed Alarm"
@@ -102,6 +153,15 @@ final class AlarmStore: ObservableObject {
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 9 * 60, repeats: false)
         let request = UNNotificationRequest(identifier: "alarm.snooze", content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
+
+        snoozeTimer?.invalidate()
+        snoozeTimer = Timer(timeInterval: 9 * 60, repeats: false) { [weak self] _ in
+            self?.lastFireDay = nil
+            DispatchQueue.main.async {
+                AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
+            }
+        }
+        RunLoop.main.add(snoozeTimer!, forMode: .common)
     }
 }
 

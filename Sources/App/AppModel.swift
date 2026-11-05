@@ -255,6 +255,8 @@ final class AppModel {
 
     func startRinger(_ context: RingerContext) {
         ringer = context
+        // Actual sound: .playback session ignores the silent switch.
+        RingerManager.shared.startSound()
     }
 }
 

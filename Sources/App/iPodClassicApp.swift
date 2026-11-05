@@ -5,6 +5,7 @@ import UserNotifications
 @main
 struct iPodClassicApp: App {
     @State private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // QA hook: RESET_DEFAULTS must run BEFORE AppModel (and the
@@ -30,6 +31,20 @@ struct iPodClassicApp: App {
                 .preferredColorScheme(.dark)
                 .persistentSystemOverlays(.hidden)
                 .statusBarHidden()
+                .onChange(of: scenePhase) { _, phase in
+                    // While backgrounded with an armed alarm, keep the
+                    // process alive so the in-app ringer can fire (full
+                    // volume, silent-switch-proof). Killed-app fallback is
+                    // the system notification.
+                    switch phase {
+                    case .background:
+                        if model.alarms.enabled { model.alarms.startKeepAlive() }
+                    case .active:
+                        model.alarms.stopKeepAlive()
+                    default:
+                        break
+                    }
+                }
         }
     }
 }
