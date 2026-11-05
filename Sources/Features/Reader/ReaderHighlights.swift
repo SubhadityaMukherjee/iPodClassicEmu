@@ -76,14 +76,14 @@ enum HighlightJS {
     /// Collapses the selection without changing the DOM.
     static let clearSelection = "window.getSelection().removeAllRanges()"
 
-    /// Re-wraps saved highlight texts after a chapter load: builds a char
-    /// offset map of the document's text nodes, finds each text, and wraps
-    /// the intersecting node slices.
+    /// Re-wraps saved highlight texts after a chapter load. The document
+    /// offset map is rebuilt after every wrap — earlier wraps mutate the
+    /// DOM, so stale indexes would duplicate or misplace text.
     static func restore(texts: [String]) -> String {
         let payload = String(data: (try? JSONEncoder().encode(texts)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
         return """
         (function(texts){
-          function textNodes() {
+          function buildMap() {
             var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
             var nodes = [], full = '';
             while (walker.nextNode()) {
@@ -95,8 +95,8 @@ enum HighlightJS {
             }
             return {nodes: nodes, full: full};
           }
-          var state = textNodes();
           texts.forEach(function(t) {
+            var state = buildMap();
             var start = state.full.indexOf(t);
             if (start < 0) return;
             var end = start + t.length, cursor = 0;
