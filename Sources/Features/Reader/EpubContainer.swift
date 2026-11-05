@@ -154,8 +154,10 @@ struct EpubChapter: Identifiable, Equatable {
     var id: Int { index }
 }
 
-/// Parses container.xml → OPF manifest/spine into an ordered chapter list
-/// with human titles pulled from each document's <title>.
+/// Parses container.xml → OPF manifest/spine into an ordered chapter list.
+/// Titles come from the book's own TOC when present (EPUB2 toc.ncx /
+/// EPUB3 nav document, the authoritative names), then each document's
+/// <title>/<h1>/<h2>, then a "Chapter N" fallback.
 enum EpubParser {
     static func load(bookDir: URL) -> [EpubChapter] {
         let containerURL = bookDir.appendingPathComponent("META-INF/container.xml")
@@ -167,6 +169,9 @@ enum EpubParser {
         let opf = parseOPF(opfData)
         let opfDir = opfURL.deletingLastPathComponent()
 
+        // The TOC maps OPF-relative hrefs to human titles.
+        let tocMap = parseTOC(bookDir: bookDir, opfDir: opfDir, opf: opf)
+
         var chapters: [EpubChapter] = []
         for idref in opf.spine {
             guard let item = opf.manifest[idref] else { continue }
@@ -174,10 +179,72 @@ enum EpubParser {
             guard media.contains("xhtml") || media.contains("html") else { continue }
             let href = item.href.removingPercentEncoding ?? item.href
             let url = opfDir.appendingPathComponent(href)
-            let title = documentTitle(url, fallback: "Chapter \(chapters.count + 1)")
+            let fallback = "Chapter \(chapters.count + 1)"
+            let title = tocMap[normalizeHref(href)]
+                ?? documentTitle(url, fallback: fallback)
             chapters.append(EpubChapter(index: chapters.count, title: title, url: url))
         }
         return chapters
+    }
+
+    /// Strips fragments and leading "./" so OPF and TOC hrefs compare equal.
+    static func normalizeHref(_ href: String) -> String {
+        let noFragment = href.split(separator: "#").first.map(String.init) ?? href
+        var h = noFragment
+        while h.hasPrefix("./") { h = String(h.dropFirst(2)) }
+        return h
+    }
+
+    // MARK: TOC (NCX + EPUB3 nav)
+
+    private struct ManifestItem {
+        let href: String
+        let mediaType: String
+        let properties: String
+    }
+
+    private struct OPF {
+        var manifest: [String: ManifestItem] = [:]
+        var spine: [String] = []
+        var tocID: String?
+    }
+
+    private static func parseTOC(bookDir: URL, opfDir: URL, opf: OPF) -> [String: String] {
+        var map: [String: String] = [:]
+
+        // EPUB2: the NCX file named by spine@toc or by media type.
+        var ncxHref: String? = opf.manifest.values.first { $0.mediaType.lowercased().contains("dtbncx") }?.href
+            ?? opf.manifest[opf.tocID ?? ""]?.href
+        if let href = ncxHref, !href.isEmpty {
+            let url = opfDir.appendingPathComponent(href.removingPercentEncoding ?? href)
+            if let data = try? Data(contentsOf: url) {
+                let delegate = NCXDelegate()
+                let parser = XMLParser(data: data)
+                parser.delegate = delegate
+                parser.parse()
+                for entry in delegate.entries {
+                    map[normalizeHref(entry.src)] = entry.label
+                }
+            }
+        }
+
+        // EPUB3: the manifest item marked properties="…nav…" is the nav
+        // document — an XHTML list of links in reading order.
+        if let navItem = opf.manifest.values.first(where: { $0.properties.lowercased().contains("nav") }) {
+            let url = opfDir.appendingPathComponent(navItem.href.removingPercentEncoding ?? navItem.href)
+            if let html = try? String(contentsOf: url, encoding: .utf8) {
+                let pattern = "<a[^>]*href\\s*=\\s*\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>"
+                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
+                    let ns = html as NSString
+                    for m in regex.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
+                        let src = ns.substring(with: m.range(at: 1))
+                        let label = stripTags(ns.substring(with: m.range(at: 2)))
+                        if !label.isEmpty { map[normalizeHref(src)] = label }
+                    }
+                }
+            }
+        }
+        return map
     }
 
     // MARK: XML plumbing
@@ -190,12 +257,12 @@ enum EpubParser {
         return delegate.rootFile
     }
 
-    private static func parseOPF(_ data: Data) -> (manifest: [String: (href: String, mediaType: String)], spine: [String]) {
+    private static func parseOPF(_ data: Data) -> OPF {
         let delegate = OPFDelegate()
         let parser = XMLParser(data: data)
         parser.delegate = delegate
         parser.parse()
-        return (delegate.manifest, delegate.spine)
+        return delegate.opf
     }
 
     private final class ContainerDelegate: NSObject, XMLParserDelegate {
@@ -210,39 +277,121 @@ enum EpubParser {
     }
 
     private final class OPFDelegate: NSObject, XMLParserDelegate {
-        var manifest: [String: (href: String, mediaType: String)] = [:]
-        var spine: [String] = []
+        var opf = OPF()
 
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                     qualifiedName: String?, attributes: [String: String]) {
             if name == "item", let id = attributes["id"], let href = attributes["href"] {
-                manifest[id] = (href, attributes["media-type"] ?? "")
+                opf.manifest[id] = ManifestItem(href: href,
+                                                mediaType: attributes["media-type"] ?? "",
+                                                properties: attributes["properties"] ?? "")
             } else if name == "itemref", let idref = attributes["idref"] {
-                spine.append(idref)
+                opf.spine.append(idref)
+                if let toc = attributes["toc"] { opf.tocID = toc }
             }
         }
     }
 
-    /// <title> of a document (tags/entities stripped); falls back to <h1>.
-    static func documentTitle(_ url: URL, fallback: String) -> String {
-        guard let html = try? String(contentsOf: url, encoding: .utf8) else { return fallback }
-        let patterns = ["<title[^>]*>([\\s\\S]*?)</title>", "<h1[^>]*>([\\s\\S]*?)</h1>"]
-        for p in patterns {
-            if let regex = try? NSRegularExpression(pattern: p, options: [.caseInsensitive]),
-               let m = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
-               let r = Range(m.range(at: 1), in: html) {
-                let raw = String(html[r])
-                var text = raw.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-                text = text.replacingOccurrences(of: "&nbsp;", with: " ")
-                    .replacingOccurrences(of: "&amp;", with: "&")
-                    .replacingOccurrences(of: "&lt;", with: "<")
-                    .replacingOccurrences(of: "&gt;", with: ">")
-                    .replacingOccurrences(of: "&quot;", with: "\"")
-                    .replacingOccurrences(of: "&#39;", with: "'")
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { return trimmed }
+    /// Flattens the NCX navMap (navPoints nest) into (src, label) pairs.
+    private final class NCXDelegate: NSObject, XMLParserDelegate {
+        var entries: [(src: String, label: String)] = []
+        private var frames: [(label: String?, src: String?)] = []
+        private var inText = false
+
+        func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
+                    qualifiedName: String?, attributes: [String: String]) {
+            if name == "navPoint" {
+                frames.append((nil, nil))
+            } else if name == "text" && !frames.isEmpty {
+                inText = true
+                if frames[frames.count - 1].label == nil { frames[frames.count - 1].label = "" }
+            } else if name == "content", !frames.isEmpty {
+                frames[frames.count - 1].src = attributes["src"]
             }
         }
-        return fallback
+
+        func parser(_ parser: XMLParser, foundCharacters string: String) {
+            if inText, !frames.isEmpty, frames[frames.count - 1].label != nil {
+                frames[frames.count - 1].label?.append(string)
+            }
+        }
+
+        func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+            if name == "text" {
+                inText = false
+            } else if name == "navPoint", !frames.isEmpty {
+                let frame = frames.removeLast()
+                if let label = frame.label?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   let src = frame.src, !label.isEmpty {
+                    entries.append((src, label))
+                }
+            }
+        }
+    }
+
+    // MARK: Titles without a TOC
+
+    /// Strips tags and decodes entities; whitespace collapsed.
+    private static func stripTags(_ raw: String) -> String {
+        var text = raw.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        for (entity, char) in [("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+                               ("&quot;", "\""), ("&apos;", "'"), ("&#39;", "'"),
+                               ("&hellip;", "…"), ("&mdash;", "—"), ("&ndash;", "–")] {
+            text = text.replacingOccurrences(of: entity, with: char)
+        }
+        // Numeric entities: &#123; decimal and &#x1F; hex.
+        text = decodeNumericEntities(text)
+        return text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Replaces &#123; / &#xAB; with their characters.
+    private static func decodeNumericEntities(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: "&#(x?)([0-9a-fA-F]+);", options: [.caseInsensitive]) else { return text }
+        let ns = text as NSString
+        var out = ""
+        var cursor = 0
+        regex.enumerateMatches(in: text, range: NSRange(location: 0, length: ns.length)) { match, _, _ in
+            guard let match, match.range.location != NSNotFound else { return }
+            out += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            let isHex = !ns.substring(with: match.range(at: 1)).isEmpty
+            let digits = ns.substring(with: match.range(at: 2))
+            let value = isHex ? Int(digits, radix: 16) : Int(digits)
+            if let v = value, let scalar = Unicode.Scalar(v) {
+                out += String(Character(scalar))
+            }
+            cursor = match.range.location + match.range.length
+        }
+        out += ns.substring(from: cursor)
+        return out
+    }
+
+    /// <title> of a document (tags/entities stripped), then <h1>/<h2>;
+    /// generic titles ("untitled", book-wide placeholders) are skipped in
+    /// favor of the heading. Falls back to the caller's fallback.
+    static func documentTitle(_ url: URL, fallback: String) -> String {
+        guard let html = try? String(contentsOf: url, encoding: .utf8) else { return fallback }
+        let generic = ["untitled", "table of contents", "content", "contents", "title"]
+        var titleTag: String?
+        var heading: String?
+        for p in ["<title[^>]*>([\\s\\S]*?)</title>",
+                  "<h1[^>]*>([\\s\\S]*?)</h1>",
+                  "<h2[^>]*>([\\s\\S]*?)</h2>"] {
+            guard let regex = try? NSRegularExpression(pattern: p, options: [.caseInsensitive]),
+                  let m = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+                  let r = Range(m.range(at: 1), in: html) else { continue }
+            let cleaned = stripTags(String(html[r]))
+            if cleaned.isEmpty { continue }
+            if titleTag == nil, p.contains("title") {
+                if generic.contains(cleaned.lowercased()) { continue }
+                titleTag = cleaned
+            } else if heading == nil {
+                heading = cleaned
+            }
+            if titleTag != nil || heading != nil { break }
+        }
+        return titleTag ?? heading ?? fallback
     }
 }

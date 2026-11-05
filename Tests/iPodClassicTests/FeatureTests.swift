@@ -334,4 +334,72 @@ final class EpubParserTests: XCTestCase {
         XCTAssertEqual(EpubParser.documentTitle(url, fallback: "F"), "Alpha Begins")
         XCTAssertEqual(EpubParser.documentTitle(workDir.appendingPathComponent("missing.xhtml"), fallback: "F"), "F")
     }
+
+    /// Builds a minimal EPUB dir whose chapters are titled by toc.ncx.
+    func testNCTXTOCTitlesWinOverDocumentTitles() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("epub-ncx-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("META-INF"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("Text"), withIntermediateDirectories: true)
+
+        try Data("""
+        <container version="1.0"><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>
+        """.utf8).write(to: dir.appendingPathComponent("META-INF/container.xml"))
+
+        try Data("""
+        <package>
+          <manifest>
+            <item id="c1" href="Text/ch1.xhtml" media-type="application/xhtml+xml"/>
+            <item id="c2" href="Text/ch2.xhtml" media-type="application/xhtml+xml"/>
+            <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+          </manifest>
+          <spine toc="ncx"><itemref idref="c1"/><itemref idref="c2"/></spine>
+        </package>
+        """.utf8).write(to: dir.appendingPathComponent("content.opf"))
+
+        try Data("""
+        <ncx>
+          <navMap>
+            <navPoint><navLabel><text>The Beginning of Everything</text></navLabel><content src="Text/ch1.xhtml"/></navPoint>
+            <navPoint><navLabel><text>Part Two &amp; Beyond</text></navLabel><content src="Text/ch2.xhtml#top"/></navPoint>
+          </navMap>
+        </ncx>
+        """.utf8).write(to: dir.appendingPathComponent("toc.ncx"))
+
+        // In-document <title>s deliberately disagree with the TOC.
+        try Data("<html><head><title>Wrong</title></head><body><p>x</p></body></html>".utf8)
+            .write(to: dir.appendingPathComponent("Text/ch1.xhtml"))
+        try Data("<html><body><p>y</p></body></html>".utf8)
+            .write(to: dir.appendingPathComponent("Text/ch2.xhtml"))
+
+        let chapters = EpubParser.load(bookDir: dir)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        XCTAssertEqual(chapters.count, 2)
+        XCTAssertEqual(chapters[0].title, "The Beginning of Everything", "TOC label should win over <title>")
+        XCTAssertEqual(chapters[1].title, "Part Two & Beyond", "TOC label with entity + fragment should match")
+    }
+
+    func testBookDecodesOldFormatWithoutNewFields() throws {
+        // JSON written by the very first reader build.
+        let json = """
+        [{"id":"Old Book","kind":"epub","title":"Old Book","chapterIndex":3,
+          "scrollFraction":0.25,"fontSize":19}]
+        """.data(using: .utf8)!
+        let books = try JSONDecoder().decode([ReaderStore.Book].self, from: json)
+        XCTAssertEqual(books.count, 1)
+        XCTAssertEqual(books[0].chapterIndex, 3)
+        XCTAssertEqual(books[0].fontSize, 19)
+        XCTAssertEqual(books[0].dim, 0)
+        XCTAssertEqual(books[0].lineSpacing, 1)
+        XCTAssertTrue(books[0].pdfContinuous)
+    }
+
+    func testHighlightStoreRoundTrip() throws {
+        let id = "TestHL-\(UUID().uuidString)"
+        let url = HighlightStore.url(bookID: id, kind: .pdf)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let items = [BookHighlight(id: "h1", chapter: 2, text: "a highlighted sentence"),
+                     BookHighlight(id: "h2", chapter: 5, text: "another one")]
+        HighlightStore.save(items, bookID: id, kind: .pdf)
+        XCTAssertEqual(HighlightStore.load(bookID: id, kind: .pdf), items)
+    }
 }
