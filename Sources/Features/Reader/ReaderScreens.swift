@@ -636,13 +636,17 @@ final class EpubController {
     weak var webView: WKWebView?
 
     /// Instant, viewport-precise scrolling through the native scroll view:
-    /// a tick moves exactly one screenful (fraction × height), no JS round
-    /// trip, no bounce, and tiles repaint cleanly between jumps.
+    /// a tick moves exactly one readable screenful (the area between the
+    /// top/bottom insets), so text never lands under the bars.
     func scrollByPage(fraction: Double) {
         guard let scrollView = webView?.scrollView else { return }
+        let readable = max(120, scrollView.bounds.height
+                            - scrollView.contentInset.top
+                            - scrollView.contentInset.bottom)
         var offset = scrollView.contentOffset
-        offset.y += scrollView.bounds.height * fraction
-        let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height + scrollView.contentInset.bottom)
+        offset.y += readable * fraction
+        let maxY = max(0, scrollView.contentSize.height + scrollView.contentInset.bottom
+                        - scrollView.bounds.height)
         offset.y = min(max(offset.y, -scrollView.contentInset.top), maxY)
         scrollView.setContentOffset(offset, animated: false)
     }
@@ -715,6 +719,14 @@ struct EpubWebView: UIViewRepresentable {
         // overshoot, no hidden safe-area insets shrinking the viewport.
         wv.scrollView.bounces = false
         wv.scrollView.contentInsetAdjustmentBehavior = .never
+        // Keep text clear of the screen chrome: roughly a font-size worth
+        // of breathing room at the top, plus room for the progress bar at
+        // the bottom (insets are per-viewport, unlike body padding).
+        wv.scrollView.contentInset = UIEdgeInsets(
+            top: CGFloat(book.fontSize) + 8,
+            left: 0,
+            bottom: CGFloat(book.fontSize) + 14,
+            right: 0)
         let cfg = wv.configuration.userContentController
         cfg.addUserScript(WKUserScript(source: HighlightJS.selectionWatch,
                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
