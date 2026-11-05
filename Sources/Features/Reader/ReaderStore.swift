@@ -17,6 +17,44 @@ final class ReaderStore {
         var chapterIndex: Int      // epub: spine index; pdf: page index
         var scrollFraction: Double // epub: position within the chapter
         var fontSize: Int          // epub: CSS body font size in px
+        var fontFamily: Int        // epub: 0 serif, 1 sans
+        var lineSpacing: Int       // epub: 0 compact, 1 normal, 2 wide
+        var margin: Int            // epub: 0 narrow, 1 normal, 2 wide
+        var scrollStep: Int        // epub: 0 small, 1 medium, 2 full page
+        var pdfContinuous: Bool    // pdf: continuous scroll vs one page
+
+        init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
+             scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
+             lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 1,
+             pdfContinuous: Bool = true) {
+            self.id = id
+            self.kind = kind
+            self.title = title
+            self.chapterIndex = chapterIndex
+            self.scrollFraction = scrollFraction
+            self.fontSize = fontSize
+            self.fontFamily = fontFamily
+            self.lineSpacing = lineSpacing
+            self.margin = margin
+            self.scrollStep = scrollStep
+            self.pdfContinuous = pdfContinuous
+        }
+
+        /// Tolerates books persisted by older versions (missing keys).
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            kind = try c.decode(Kind.self, forKey: .kind)
+            title = try c.decode(String.self, forKey: .title)
+            chapterIndex = try c.decodeIfPresent(Int.self, forKey: .chapterIndex) ?? 0
+            scrollFraction = try c.decodeIfPresent(Double.self, forKey: .scrollFraction) ?? 0
+            fontSize = try c.decodeIfPresent(Int.self, forKey: .fontSize) ?? 17
+            fontFamily = try c.decodeIfPresent(Int.self, forKey: .fontFamily) ?? 0
+            lineSpacing = try c.decodeIfPresent(Int.self, forKey: .lineSpacing) ?? 1
+            margin = try c.decodeIfPresent(Int.self, forKey: .margin) ?? 1
+            scrollStep = try c.decodeIfPresent(Int.self, forKey: .scrollStep) ?? 1
+            pdfContinuous = try c.decodeIfPresent(Bool.self, forKey: .pdfContinuous) ?? true
+        }
     }
 
     enum ImportError: LocalizedError {

@@ -66,27 +66,19 @@ final class PlayerModel {
         play(shuffled, startingAt: 0)
     }
 
-    /// Song carried by a queue entry, if any.
-    private func entrySong(_ entry: MusicPlayer.Queue.Entry) -> Song? {
-        if case .song(let song) = entry.item { return song }
-        return nil
-    }
-
-    /// Position of `currentEntry` in the play queue (play order, so this
-    /// follows MusicKit's internal shuffle).
-    private func currentEntryPosition() -> Int? {
-        guard let current = player.queue.currentEntry else { return nil }
-        return player.queue.entries.firstIndex { $0.id == current.id }
-    }
-
-    /// Reconciles the UI bookkeeping with the player's real position.
-    /// Matched by song identity, not entry IDs (entry IDs captured at
-    /// queue-assignment time don't survive skip/auto-advance reliably).
+    /// Reconciles the UI bookkeeping with what's actually playing.
+    ///
+    /// Entries churn their IDs while MusicKit resolves them (transient →
+    /// regular) and `item` may be nil in that window, so entry-ID or item
+    /// matching is unreliable — but `title`/`subtitle` are always
+    /// populated, and the subtitle is the artist for songs. Match on those.
     private func syncFromPlayer() {
-        guard let current = player.queue.currentEntry,
-              let song = entrySong(current),
-              let qi = queue.firstIndex(where: { $0.id == song.id }),
-              qi != queueIndex else { return }
+        guard let current = player.queue.currentEntry else { return }
+        let title = current.title
+        let artist = current.subtitle ?? ""
+        let qi = queue.firstIndex { $0.title == title && $0.artistName == artist }
+            ?? queue.firstIndex { $0.title == title }
+        guard let qi, qi != queueIndex else { return }
         queueIndex = qi
         playbackTime = player.playbackTime
     }
@@ -156,20 +148,10 @@ final class PlayerModel {
     }
 
     func next() {
-        // Walk the player's own entry list (play order, so this follows
-        // its internal shuffle); never rebuild the queue here — that
-        // would reshuffle what's left.
-        let entries = player.queue.entries
-        if let pos = currentEntryPosition(), entries.index(after: pos) < entries.endIndex {
-            player.queue.currentEntry = entries[entries.index(after: pos)]
-            Task {
-                try? await player.play()
-                self.syncFromPlayer()
-            }
-        } else {
-            Task { try? await player.pause() }
-            isPlaying = false
-        }
+        // skipToNextEntry is the proven transport path (it advanced audio
+        // reliably); the polling tick syncs the UI via title matching.
+        // At the queue end it simply throws and nothing happens.
+        Task { try? await player.skipToNextEntry() }
     }
 
     func previous() {
@@ -177,16 +159,7 @@ final class PlayerModel {
             scrub(to: 0)
             return
         }
-        let entries = player.queue.entries
-        if let pos = currentEntryPosition(), pos > entries.startIndex {
-            player.queue.currentEntry = entries[entries.index(before: pos)]
-            Task {
-                try? await player.play()
-                self.syncFromPlayer()
-            }
-        } else {
-            scrub(to: 0)
-        }
+        Task { try? await player.skipToPreviousEntry() }
     }
 
     func scrub(to time: Double) {
