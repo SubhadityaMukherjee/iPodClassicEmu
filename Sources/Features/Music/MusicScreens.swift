@@ -31,6 +31,9 @@ struct MusicMenuScreen: View {
             model.music.refreshStatus()
             if model.music.isAuthorized && !model.music.loaded && !model.music.loading {
                 Task { await model.music.loadLibrary() }
+            } else {
+                // Re-check for new library content each time Music opens.
+                Task { await model.music.refreshIfStale() }
             }
         }
     }

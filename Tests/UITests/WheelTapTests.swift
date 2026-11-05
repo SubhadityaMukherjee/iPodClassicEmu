@@ -125,8 +125,8 @@ final class WheelTapTests: XCTestCase {
                 .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
         }
 
-        // Home → Settings (6 ticks down; Extras sits where Clocks did), open it.
-        for _ in 0..<6 { tick() }
+        // Home → Settings (7 ticks down; Reader added a home row), open it.
+        for _ in 0..<7 { tick() }
         center.tap()
         XCTAssertTrue(app.staticTexts["Clickwheel"].waitForExistence(timeout: 3), "Settings menu did not open")
 
@@ -168,10 +168,11 @@ final class WheelTapTests: XCTestCase {
         // buried screen still listened, home would push a duplicate Photos.
         center.tap()
 
-        // MENU pops exactly one level: we must land back on HOME (its rows
-        // visible), not on another Photos screen.
+        // MENU pops exactly one level: we must land back on HOME (its first
+        // row is visible), not on another Photos screen. The last home row
+        // may be outside the initial window, so assert on row 0.
         origin.withOffset(CGVector(dx: 0, dy: -96)).tap()
-        XCTAssertTrue(app.staticTexts["Now Playing"].waitForExistence(timeout: 3),
+        XCTAssertTrue(app.staticTexts["Music"].waitForExistence(timeout: 3),
                       "MENU did not return home — a buried screen likely pushed a duplicate")
     }
 

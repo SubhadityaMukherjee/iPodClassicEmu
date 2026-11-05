@@ -29,23 +29,23 @@ final class E2ETests: XCTestCase {
     }
 
     @MainActor
-    func testReaderReachableFromExtras() throws {
-        let app = launch(start: "extras")
+    func testReaderReachableFromHome() throws {
+        let app = launch(start: "home")
         let wheel = app.otherElements["clickwheel"]
         XCTAssertTrue(wheel.waitForExistence(timeout: 5))
         let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
 
-        // Extras rows: Clocks, Calendar, Reader, Flashlight. Two ticks down
-        // selects Reader; center opens it.
+        // Home rows: Music, Photos, Camera, Voice Memos, Notes, Reader, …
+        // Five ticks down selects Reader; center opens it.
         func tick() {
             origin.withOffset(CGVector(dx: 64, dy: 64))
                 .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
         }
-        for _ in 0..<2 { tick() }
+        for _ in 0..<5 { tick() }
         origin.withOffset(CGVector(dx: 0, dy: 0)).tap()
 
         XCTAssertTrue(app.staticTexts["Add from Files"].waitForExistence(timeout: 3),
-                      "Extras → Reader navigation failed")
+                      "Home → Reader navigation failed")
     }
 
     @MainActor

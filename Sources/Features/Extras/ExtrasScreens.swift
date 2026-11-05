@@ -12,7 +12,6 @@ struct ExtrasScreen: View {
         [
             MenuItem(id: "clocks", title: "Clocks"),
             MenuItem(id: "calendar", title: "Calendar"),
-            MenuItem(id: "reader", title: "Reader", symbol: "book.fill"),
             MenuItem(id: "flashlight", title: "Flashlight", symbol: "flashlight.on.fill", showsChevron: false),
         ]
     }
@@ -30,7 +29,6 @@ struct ExtrasScreen: View {
             switch items[min(selection, items.count - 1)].id {
             case "clocks": model.push(.clocks)
             case "calendar": model.push(.calendar)
-            case "reader": model.push(.reader)
             case "flashlight": model.push(.flashlight)
             default: break
             }
