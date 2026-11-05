@@ -44,6 +44,9 @@ final class TimerModel {
         fireDate = Date().addingTimeInterval(duration)
         startTimer()
         scheduleNotification(after: duration)
+        if let fire = fireDate {
+            LiveActivityManager.shared.timerStarted(endDate: fire, total: duration)
+        }
     }
 
     func pause() {
@@ -52,6 +55,7 @@ final class TimerModel {
         timer?.invalidate()
         timer = nil
         cancelNotification()
+        LiveActivityManager.shared.timerPaused(remaining: remaining)
     }
 
     func resume() {
@@ -60,6 +64,9 @@ final class TimerModel {
         fireDate = Date().addingTimeInterval(remaining)
         startTimer()
         scheduleNotification(after: remaining)
+        if let fire = fireDate {
+            LiveActivityManager.shared.timerResumed(endDate: fire)
+        }
     }
 
     func reset() {
@@ -70,6 +77,7 @@ final class TimerModel {
         timer?.invalidate()
         timer = nil
         cancelNotification()
+        LiveActivityManager.shared.timerEnded()
     }
 
     private func startTimer() {
@@ -78,6 +86,7 @@ final class TimerModel {
             guard let self, let fire = self.fireDate else { return }
             self.remaining = max(0, fire.timeIntervalSinceNow)
             if self.remaining <= 0 {
+                LiveActivityManager.shared.timerFinished()
                 self.reset()
                 RingerManager.shared.startTimerRinger()
             }
@@ -118,6 +127,7 @@ final class StopwatchModel {
         guard !isRunning else { return }
         isRunning = true
         startDate = Date()
+        LiveActivityManager.shared.stopwatchStarted()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { [weak self] _ in
             guard let self, let start = self.startDate else { return }
@@ -132,6 +142,7 @@ final class StopwatchModel {
         isRunning = false
         timer?.invalidate()
         timer = nil
+        LiveActivityManager.shared.stopwatchPaused(elapsed: base)
     }
 
     func reset() {
@@ -139,10 +150,12 @@ final class StopwatchModel {
         elapsed = 0
         base = 0
         laps = []
+        LiveActivityManager.shared.stopwatchEnded()
     }
 
     func lap() {
         laps.append(elapsed)
+        LiveActivityManager.shared.stopwatchLap(count: laps.count)
     }
 }
 
