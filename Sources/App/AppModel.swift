@@ -127,10 +127,20 @@ final class AppModel {
     let ringerBus = PassthroughSubject<ControlEvent, Never>()
 
     init() {
+        // QA hook: READER_IMPORT imports a book from Documents before the
+        // first frame (simulator checks against real EPUBs).
+        if let name = ProcessInfo.processInfo.environment["READER_IMPORT"] {
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            _ = try? reader.addBook(from: docs.appendingPathComponent(name))
+        }
+
         // QA hook: START_ROUTE opens a specific screen first (UI tests).
         if let name = ProcessInfo.processInfo.environment["START_ROUTE"],
            let route = Self.route(named: name) {
             stack = [route]
+        } else if let name = ProcessInfo.processInfo.environment["START_ROUTE"],
+                  name == "readerLast", let first = reader.books.first {
+            stack = [.readerBook(first.id)]
         }
     }
 
