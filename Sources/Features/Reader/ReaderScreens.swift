@@ -153,6 +153,7 @@ struct BookScreen: View {
 
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.scenePhase) private var scenePhase
     @State private var book: ReaderStore.Book?
     @State private var chapters: [EpubChapter] = []
     @State private var outline: [OutlineEntry] = []
@@ -197,6 +198,16 @@ struct BookScreen: View {
             }
         }
         .onWheel { handle($0) }
+        .onChange(of: scenePhase) { _, phase in
+            // Leaving the foreground (or quitting) — flush the position;
+            // onDisappear alone never runs on a kill or an app update.
+            if phase != .active { saveLocation() }
+        }
+        .onReceive(Timer.publish(every: 6, on: .main, in: .common).autoconnect()) { _ in
+            // Rolling autosave so even a hard kill loses at most a few
+            // seconds of reading.
+            if !panelOpen { saveLocation() }
+        }
         .onAppear {
             if book == nil {
                 book = model.reader.book(id: bookID)
@@ -236,12 +247,13 @@ struct BookScreen: View {
     @ViewBuilder
     private func content(book: ReaderStore.Book) -> some View {
         if book.kind == .pdf {
-            // Padding keeps pages clear of the title bar and the progress
-            // bar (PDFView exposes no scroll insets of its own).
+            // Padding keeps pages clear of the title bar and, at the
+            // bottom, comfortably above the progress bar (PDFView exposes
+            // no scroll insets of its own).
             PDFBookView(url: Self.pdfURL(for: book), controller: pdfController,
                         initialPage: book.chapterIndex, continuous: book.pdfContinuous)
                 .padding(.top, 10)
-                .padding(.bottom, 16)
+                .padding(.bottom, 30)
         } else {
             EpubWebView(
                 chapter: chapters.indices.contains(book.chapterIndex) ? chapters[book.chapterIndex] : nil,
@@ -724,12 +736,13 @@ struct EpubWebView: UIViewRepresentable {
         wv.scrollView.bounces = false
         wv.scrollView.contentInsetAdjustmentBehavior = .never
         // Keep text clear of the screen chrome: roughly a font-size worth
-        // of breathing room at the top, plus room for the progress bar at
-        // the bottom (insets are per-viewport, unlike body padding).
+        // of breathing room at the top, and generous room at the bottom so
+        // lines always end above the progress bar (insets are per-viewport,
+        // unlike body padding).
         wv.scrollView.contentInset = UIEdgeInsets(
             top: CGFloat(book.fontSize) + 8,
             left: 0,
-            bottom: CGFloat(book.fontSize) + 14,
+            bottom: CGFloat(book.fontSize) + 26,
             right: 0)
         let cfg = wv.configuration.userContentController
         cfg.addUserScript(WKUserScript(source: HighlightJS.selectionWatch,
