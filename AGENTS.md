@@ -27,10 +27,11 @@ There is no linter; keep style consistent with surrounding code. Swift 5, iOS 18
   - `Camera/` — `CameraModel` (AVCaptureSession on serial queue, zoom, lens switch, capture delegate), `CameraScreen` (wheel zoom, prev/next = aspect ratio, hold = flip lens, center = capture, MENU = options panel; claims transport buttons via `model.transportClaimedByScreen`).
   - `Recorder/` — `RecorderModel` (.m4a in Documents/Recordings, pause/resume, background-safe, interruption handling, playback), recorder/list/detail screens with share sheet.
   - `Notes/` — `NotesStore` (.txt in Documents/Notes, visible in Files app), list + editor (touch keyboard, debounced autosave, MENU writes).
-  - `Clocks/` — `AlarmStore` (single classic alarm → repeating `UNCalendarNotificationTrigger`), `AlarmNotifications` (delegate → in-app ringer), `TimerModel`/`StopwatchModel`, `RingerManager` (in-app loop + overlay), `AlarmScreen` (wheel edits hour/minute/AM-PM, center advances), `TimerScreen`, `StopwatchScreen`.
+  - `Clocks/` — `AlarmStore` (single classic alarm with weekday repeats; nothing selected = daily → one repeating `UNCalendarNotificationTrigger` per selected day), `AlarmNotifications` (delegate → in-app ringer), `TimerModel`/`StopwatchModel`, `RingerManager` (in-app loop + overlay), `AlarmScreen` (wheel edits hour/minute/AM-PM, day cursor; center advances/toggles — wheel past the day-row edges changes segment), `TimerScreen`, `StopwatchScreen`.
   - `Settings/` — value-cycling rows via `ValueSettingsScreen`; Apple Music connect, Clickwheel, Display (CRT/scanlines/backlight illusion/dim), Playback, About.
 - Input flow: `ClickWheelView` → `AppModel.handle` → (hold switch / sleep / global transport interception) → `controlBus` (Combine) → only the top screen reacts via `.onReceive`.
 - Global transport: prev/next/play/pause always control music (like a real iPod) except when a screen claims them (camera). MENU-hold goes home; PLAY-hold sleeps.
+- Live Activities: `iPodClassicWidgets` extension target (bundle `com.ipodclassic.app.widgets`) shows one activity per kind (timer/stopwatch/recorder) on lock screen + Dynamic Island. `Shared/TrackActivityAttributes.swift` is compiled into BOTH the app and the widget; `LiveActivityManager` (Sources/App) is driven by the timer/stopwatch/recorder models. All on-screen motion is auto-ticking `Text(timerInterval:)` — the app only posts updates on start/pause/resume/lap/end, no push token. Requires `NSSupportsLiveActivities` (set in project.yml); Dynamic Island needs a real device.
 
 ## Sounds & resources
 

@@ -11,17 +11,21 @@ final class AlarmStore: ObservableObject {
     @Published var hour: Int { didSet { persist(); if enabled { schedule() } } }       // 1…12
     @Published var minute: Int { didSet { persist(); if enabled { schedule() } } }     // 0…59
     @Published var isPM: Bool { didSet { persist(); if enabled { schedule() } } }
+    /// Repeats on these weekdays (Sunday-first, like the iPhone alarm).
+    /// Nothing selected = every day.
+    @Published var repeatDays: [Bool] { didSet { persist(); if enabled { schedule() } } }
     /// True when notifications are denied — the alarm cannot ring.
     @Published private(set) var permissionDenied = false
 
     private let d = UserDefaults.standard
-    private enum K { static let enabled = "alarm.enabled"; static let hour = "alarm.hour"; static let minute = "alarm.minute"; static let pm = "alarm.pm" }
+    private enum K { static let enabled = "alarm.enabled"; static let hour = "alarm.hour"; static let minute = "alarm.minute"; static let pm = "alarm.pm"; static let repeatDays = "alarm.repeatDays" }
 
     private init() {
         enabled = d.bool(forKey: K.enabled)
         hour = d.object(forKey: K.hour) as? Int ?? 7
         minute = d.object(forKey: K.minute) as? Int ?? 0
         isPM = d.bool(forKey: K.pm)
+        repeatDays = Self.days(fromBitmask: d.integer(forKey: K.repeatDays))
         // Insurance: make sure a pending request exists on every launch —
         // reinstalling the request is free and heals any dropped state.
         if enabled { schedule() }
@@ -38,11 +42,32 @@ final class AlarmStore: ObservableObject {
         String(format: "%02d : %02d %@", hour, minute, isPM ? "PM" : "AM")
     }
 
+    /// iPhone-style repeat summary: "Every Day", "Weekdays", "Weekends",
+    /// or a comma list ("Mon, Wed, Fri").
+    var repeatLabel: String {
+        let all = repeatDays.allSatisfy { $0 }
+        let none = repeatDays.allSatisfy { !$0 }
+        if all || none { return "Every Day" }
+        if repeatDays == [false, true, true, true, true, true, false] { return "Weekdays" }
+        if repeatDays == [true, false, false, false, false, false, true] { return "Weekends" }
+        let names = Calendar.current.shortWeekdaySymbols  // Sun…Sat
+        return repeatDays.enumerated().filter { $0.element }.map { names[$0.offset] }.joined(separator: ", ")
+    }
+
     private func persist() {
         d.set(enabled, forKey: K.enabled)
         d.set(hour, forKey: K.hour)
         d.set(minute, forKey: K.minute)
         d.set(isPM, forKey: K.pm)
+        d.set(Self.bitmask(fromDays: repeatDays), forKey: K.repeatDays)
+    }
+
+    private static func bitmask(fromDays days: [Bool]) -> Int {
+        days.enumerated().reduce(0) { $0 + ($1.element ? 1 << $1.offset : 0) }
+    }
+
+    private static func days(fromBitmask mask: Int) -> [Bool] {
+        (0..<7).map { mask & (1 << $0) != 0 }
     }
 
     /// Verifies notification permission, then (re)schedules. Never silently
@@ -75,21 +100,39 @@ final class AlarmStore: ObservableObject {
         // Break through Focus / Do Not Disturb (user can still opt out).
         content.interruptionLevel = .timeSensitive
 
-        var comps = DateComponents()
-        comps.hour = hour24
-        comps.minute = minute
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
+        let center = UNUserNotificationCenter.current()
+        let add: (UNNotificationRequest) -> Void = { request in
+            center.add(request) { error in
+                if let error {
+                    WheelEventLog.log("alarm schedule failed: \(error.localizedDescription)")
+                }
+            }
+        }
 
-        let request = UNNotificationRequest(identifier: "alarm.daily", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error {
-                WheelEventLog.log("alarm schedule failed: \(error.localizedDescription)")
+        let everyDay = repeatDays.allSatisfy { $0 } || repeatDays.allSatisfy { !$0 }
+        if everyDay {
+            // One daily repeating request (the classic iPod behavior).
+            var comps = DateComponents()
+            comps.hour = hour24
+            comps.minute = minute
+            add(UNNotificationRequest(identifier: "alarm.daily", content: content,
+                                      trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)))
+        } else {
+            // One repeating request per weekday (1 = Sunday … 7 = Saturday).
+            for (i, on) in repeatDays.enumerated() where on {
+                var comps = DateComponents()
+                comps.hour = hour24
+                comps.minute = minute
+                comps.weekday = i + 1
+                add(UNNotificationRequest(identifier: "alarm.day.\(i + 1)", content: content,
+                                          trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)))
             }
         }
     }
 
     func cancel() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["alarm.daily"])
+        let ids = ["alarm.daily"] + (1...7).map { "alarm.day.\($0)" }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
     // MARK: - In-app firing (keeps ringing even when locked or muted)
@@ -129,6 +172,9 @@ final class AlarmStore: ObservableObject {
         let cal = Calendar.current
         let now = cal.dateComponents([.hour, .minute], from: Date())
         guard let h = now.hour, let m = now.minute, h == hour24, m == minute else { return }
+        // Honor the repeat selection (nothing selected = every day).
+        let today = cal.component(.weekday, from: Date()) - 1  // 0 = Sunday
+        guard repeatDays.allSatisfy({ !$0 }) || repeatDays[today] else { return }
         let key = cal.startOfDay(for: Date()).timeIntervalSince1970.description
         guard lastFireDay != key else { return }
         lastFireDay = key
