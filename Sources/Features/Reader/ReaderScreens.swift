@@ -144,8 +144,9 @@ struct DocumentPicker: UIViewControllerRepresentable {
 // MARK: - Book screen
 
 /// One open book: reflowing EPUB (WKWebView) or paginated PDF (PDFKit).
-/// Wheel scrolls pages; center opens chapters; hold center cycles font
-/// size (EPUB only); prev/next change chapter/page.
+/// Wheel scrolls; center opens chapters/contents; hold center opens the
+/// book's settings (font, spacing, margins, scroll step, PDF view mode);
+/// prev/next change chapter/page.
 struct BookScreen: View {
     let bookID: String
 
@@ -155,6 +156,7 @@ struct BookScreen: View {
     @State private var chapters: [EpubChapter] = []
     @State private var outline: [OutlineEntry] = []
     @State private var panelOpen = false
+    @State private var panelIsSettings = false
     @State private var panelSelection = 0
     @State private var toast = ""
     @State private var epubController = EpubController()
@@ -166,12 +168,13 @@ struct BookScreen: View {
         ZStack {
             if let book {
                 if book.kind == .pdf {
-                    PDFBookView(url: Self.pdfURL(for: book), controller: pdfController, initialPage: book.chapterIndex)
+                    PDFBookView(url: Self.pdfURL(for: book), controller: pdfController,
+                                initialPage: book.chapterIndex, continuous: book.pdfContinuous)
                 } else {
                     EpubWebView(
                         chapter: chapters.indices.contains(book.chapterIndex) ? chapters[book.chapterIndex] : nil,
                         bookDir: Self.epubDir(for: book),
-                        fontSize: book.fontSize,
+                        book: book,
                         restoreFraction: book.scrollFraction,
                         controller: epubController
                     )
@@ -216,7 +219,41 @@ struct BookScreen: View {
 
     // MARK: Panels
 
+    /// One adjustable book setting: title, possible values, current index.
+    private struct BookSetting: Identifiable {
+        let id: String
+        let title: String
+        let values: [String]
+        var index: Int
+    }
+
+    private static let fontSizes = [15, 17, 19, 22, 25]
+    private static let scrollFractions = [0.4, 0.7, 1.0]
+
+    private var bookSettings: [BookSetting] {
+        guard let book else { return [] }
+        if book.kind == .pdf {
+            return [BookSetting(id: "view", title: "View", values: ["Continuous", "One Page"],
+                                index: book.pdfContinuous ? 0 : 1)]
+        }
+        let sizeIndex = max(0, Self.fontSizes.firstIndex(of: book.fontSize) ?? 1)
+        return [
+            BookSetting(id: "size", title: "Font Size", values: Self.fontSizes.map { "\($0) px" }, index: sizeIndex),
+            BookSetting(id: "family", title: "Font", values: ["Serif", "Sans"], index: min(max(book.fontFamily, 0), 1)),
+            BookSetting(id: "spacing", title: "Line Spacing", values: ["Compact", "Normal", "Wide"], index: min(max(book.lineSpacing, 0), 2)),
+            BookSetting(id: "margin", title: "Margins", values: ["Narrow", "Normal", "Wide"], index: min(max(book.margin, 0), 2)),
+            BookSetting(id: "scroll", title: "Scroll Step", values: ["Small", "Medium", "Large"], index: min(max(book.scrollStep, 0), 2)),
+        ]
+    }
+
     private var panelRows: [MenuItem] {
+        if panelIsSettings {
+            return bookSettings.map { setting in
+                MenuItem(id: setting.id, title: setting.title,
+                         detail: setting.values.indices.contains(setting.index) ? setting.values[setting.index] : "",
+                         showsChevron: false)
+            }
+        }
         if isPDF {
             return outline.map { entry in
                 let indent = String(repeating: "    ", count: entry.level)
@@ -229,20 +266,31 @@ struct BookScreen: View {
     }
 
     private var panel: some View {
-        ModalPanel(title: isPDF ? "Contents" : "Chapters", onClose: { closePanel() }) {
+        ModalPanel(title: panelTitle, onClose: { closePanel() }) {
             MenuList(items: panelRows, selection: panelSelection, compact: true, emptyText: "No Contents")
                 .padding(.top, 2)
         }
+    }
+
+    private var panelTitle: String {
+        panelIsSettings ? "Book Settings" : (isPDF ? "Contents" : "Chapters")
     }
 
     private func closePanel() {
         withAnimation(.easeIn(duration: 0.15)) { panelOpen = false }
     }
 
-    private func openPanel() {
+    private func openContents() {
         if isPDF && outline.isEmpty {
             outline = PDFBookView.flattenOutline(pdfController.document?.outlineRoot, document: pdfController.document)
         }
+        panelIsSettings = false
+        panelSelection = 0
+        withAnimation(.easeOut(duration: 0.18)) { panelOpen = true }
+    }
+
+    private func openSettings() {
+        panelIsSettings = true
         panelSelection = 0
         withAnimation(.easeOut(duration: 0.18)) { panelOpen = true }
     }
@@ -250,6 +298,10 @@ struct BookScreen: View {
     private func activatePanelRow() {
         let rows = panelRows
         guard rows.indices.contains(panelSelection) else { return }
+        if panelIsSettings {
+            cycleSetting(id: rows[panelSelection].id)
+            return
+        }
         let id = rows[panelSelection].id
         if isPDF {
             let idx = Int(id.dropFirst("out.".count)) ?? 0
@@ -268,16 +320,37 @@ struct BookScreen: View {
         closePanel()
     }
 
-    // MARK: Actions
-
-    private func cycleFontSize() {
-        let sizes = [15, 17, 19, 22]
-        let current = book?.fontSize ?? 17
-        let next = sizes.first(where: { $0 > current }) ?? sizes[0]
-        book?.fontSize = next
-        epubController.applyFontSize(next)
-        showToast("Font Size \(next)")
+    /// Cycles one setting to its next value and applies it immediately.
+    private func cycleSetting(id: String) {
+        guard var b = book else { return }
+        func wrapped(_ current: Int, _ count: Int) -> Int { (current + 1) % count }
+        switch id {
+        case "view":
+            b.pdfContinuous.toggle()
+            pdfController.setDisplayMode(continuous: b.pdfContinuous)
+        case "size":
+            let idx = max(0, Self.fontSizes.firstIndex(of: b.fontSize) ?? 1)
+            b.fontSize = Self.fontSizes[wrapped(idx, Self.fontSizes.count)]
+            epubController.applyStyle(to: b)
+        case "family":
+            b.fontFamily = wrapped(min(max(b.fontFamily, 0), 1), 2)
+            epubController.applyStyle(to: b)
+        case "spacing":
+            b.lineSpacing = wrapped(min(max(b.lineSpacing, 0), 2), 3)
+            epubController.applyStyle(to: b)
+        case "margin":
+            b.margin = wrapped(min(max(b.margin, 0), 2), 3)
+            epubController.applyStyle(to: b)
+        case "scroll":
+            b.scrollStep = wrapped(min(max(b.scrollStep, 0), 2), 3)
+        default:
+            break
+        }
+        book = b
+        model.reader.update(b)
     }
+
+    // MARK: Actions
 
     private func stepChapter(_ delta: Int) {
         guard var b = book else { return }
@@ -330,19 +403,22 @@ struct BookScreen: View {
             } else if isPDF {
                 if d > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
             } else {
-                epubController.scroll(by: d > 0 ? 240 : -240)
+                // Instant viewport-fraction jumps track the wheel 1:1.
+                let step = Self.scrollFractions[min(max(book?.scrollStep ?? 1, 0), Self.scrollFractions.count - 1)]
+                epubController.scrollByPage(fraction: d > 0 ? step : -step)
             }
         case .select:
             if panelOpen {
                 activatePanelRow()
             } else {
-                openPanel()
+                openContents()
             }
         case .centerHold:
-            guard !panelOpen, let book, book.kind == .epub else { break }
+            // Hold center: book settings (both PDF and EPUB).
+            guard !panelOpen, book != nil else { break }
             WheelHaptics.shared.ensureRunning()
             WheelHaptics.shared.buttonPress(strength: 0.85)
-            cycleFontSize()
+            openSettings()
         case .next, .nextHold:
             stepChapter(1)
         case .prev, .prevHold:
@@ -366,12 +442,15 @@ struct BookScreen: View {
 final class EpubController {
     weak var webView: WKWebView?
 
-    func scroll(by dy: CGFloat) {
-        webView?.evaluateJavaScript("window.scrollBy({top: \(dy), behavior: 'smooth'})", completionHandler: nil)
+    /// Instant, viewport-relative scroll: smooth animation restarts on
+    /// every tick and feels laggy; raw jumps track the wheel 1:1.
+    func scrollByPage(fraction: Double) {
+        let js = "window.scrollBy(0, Math.round(window.innerHeight * \(fraction)))"
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
-    func applyFontSize(_ px: Int) {
-        webView?.evaluateJavaScript(Self.cssJS(px: px), completionHandler: nil)
+    func applyStyle(to book: ReaderStore.Book) {
+        webView?.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
     }
 
     func scrollFraction(completion: @escaping (Double) -> Void) {
@@ -382,24 +461,35 @@ final class EpubController {
         }
     }
 
-    static func cssJS(px: Int) -> String {
-        """
+    static func cssJS(for book: ReaderStore.Book) -> String {
+        let families = ["Georgia,'Times New Roman',serif", "-apple-system,'Helvetica Neue',sans-serif"]
+        let family = families[min(max(book.fontFamily, 0), families.count - 1)]
+        let lineHeights = [1.4, 1.55, 1.75]
+        let lineHeight = lineHeights[min(max(book.lineSpacing, 0), lineHeights.count - 1)]
+        let paddings = [10, 16, 24]
+        let padding = paddings[min(max(book.margin, 0), paddings.count - 1)]
+        return """
         (function(){
           var s = document.getElementById('ipod-reader-css');
           if (!s) { s = document.createElement('style'); s.id = 'ipod-reader-css'; document.head.appendChild(s); }
-          s.textContent = "body{font-size:\\(px)px !important;line-height:1.55 !important;font-family:Georgia,'Times New Roman',serif !important;padding:16px 14px !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
+          s.textContent = "html{scroll-behavior:auto !important;} body{font-size:\\(book.fontSize)px !important;line-height:\\(lineHeight) !important;font-family:\\(family) !important;padding:\\(padding)px !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
         })()
         """
     }
 }
 
+/// Wheel scroll fractions for the scroll-step setting (S/M/L).
+enum ReaderScrollStep {
+    static let fractions = [0.4, 0.7, 1.0]
+}
+
 /// Reflowing EPUB document view. Chapters are XHTML rendered natively by
-/// the web view (reflow is inherent); we inject a reader stylesheet for
-/// font size and restore the saved scroll position on load.
+/// the web view (reflow is inherent); we inject a reader stylesheet built
+/// from the book's settings and restore the saved scroll position on load.
 struct EpubWebView: UIViewRepresentable {
     let chapter: EpubChapter?
     let bookDir: URL
-    let fontSize: Int
+    let book: ReaderStore.Book
     let restoreFraction: Double
     let controller: EpubController
 
@@ -411,6 +501,7 @@ struct EpubWebView: UIViewRepresentable {
         controller.webView = wv
         if let chapter {
             context.coordinator.loadedURL = chapter.url
+            context.coordinator.appliedStyle = book
             wv.loadFileURL(chapter.url, allowingReadAccessTo: bookDir)
         }
         return wv
@@ -422,9 +513,9 @@ struct EpubWebView: UIViewRepresentable {
         if let chapter, context.coordinator.loadedURL != chapter.url {
             context.coordinator.loadedURL = chapter.url
             wv.loadFileURL(chapter.url, allowingReadAccessTo: bookDir)
-        } else if context.coordinator.appliedFontSize != fontSize {
-            context.coordinator.appliedFontSize = fontSize
-            wv.evaluateJavaScript(EpubController.cssJS(px: fontSize), completionHandler: nil)
+        } else if context.coordinator.appliedStyle != book {
+            context.coordinator.appliedStyle = book
+            wv.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
         }
     }
 
@@ -433,7 +524,7 @@ struct EpubWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         var parent: EpubWebView
         var loadedURL: URL?
-        var appliedFontSize: Int = 0
+        var appliedStyle: ReaderStore.Book?
 
         init(parent: EpubWebView) {
             self.parent = parent
@@ -441,8 +532,7 @@ struct EpubWebView: UIViewRepresentable {
 
         func webView(_ webview: WKWebView, didFinish navigation: WKNavigation!) {
             // Inject the reader stylesheet, then restore the saved scroll.
-            let px = parent.fontSize
-            webview.evaluateJavaScript(EpubController.cssJS(px: px), completionHandler: nil)
+            webview.evaluateJavaScript(EpubController.cssJS(for: parent.book), completionHandler: nil)
             let fraction = parent.restoreFraction
             let js = "document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollTo(0, \(fraction) * (document.documentElement.scrollHeight - window.innerHeight)) : window.scrollTo(0,0)"
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -476,6 +566,14 @@ final class PDFBookController {
         view?.go(to: page)
     }
 
+    /// Continuous scroll vs one-page-at-a-time, keeping the current page.
+    func setDisplayMode(continuous: Bool) {
+        guard let view else { return }
+        let page = view.currentPage
+        view.displayMode = continuous ? .singlePageContinuous : .singlePage
+        if let page { view.go(to: page) }
+    }
+
     var currentPageIndex: Int {
         guard let view, let doc = view.document, let page = view.currentPage else { return 0 }
         return doc.index(for: page)
@@ -486,11 +584,12 @@ struct PDFBookView: UIViewRepresentable {
     let url: URL
     let controller: PDFBookController
     let initialPage: Int
+    let continuous: Bool
 
     func makeUIView(context: Context) -> PDFView {
         let v = PDFView()
         v.autoScales = true
-        v.displayMode = .singlePageContinuous
+        v.displayMode = context.coordinator.continuous ? .singlePageContinuous : .singlePage
         v.displayDirection = .vertical
         v.backgroundColor = .systemBackground
         v.document = PDFDocument(url: url)
@@ -503,6 +602,24 @@ struct PDFBookView: UIViewRepresentable {
 
     func updateUIView(_ v: PDFView, context: Context) {
         controller.view = v
+        if context.coordinator.continuous != context.coordinator.parent.continuous {
+            context.coordinator.continuous = context.coordinator.parent.continuous
+            let page = v.currentPage
+            v.displayMode = context.coordinator.continuous ? .singlePageContinuous : .singlePage
+            if let page { v.go(to: page) }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator {
+        var parent: PDFBookView
+        var continuous: Bool
+
+        init(parent: PDFBookView) {
+            self.parent = parent
+            self.continuous = parent.continuous
+        }
     }
 
     /// Depth-first outline flatten, resolving destinations to page indexes.
