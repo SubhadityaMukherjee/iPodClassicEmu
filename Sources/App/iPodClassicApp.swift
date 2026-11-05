@@ -48,6 +48,8 @@ struct iPodClassicApp: App {
                         if model.alarms.enabled { model.alarms.startKeepAlive() }
                     case .active:
                         model.alarms.stopKeepAlive()
+                        // Library may have changed while we were gone.
+                        Task { await model.music.refreshIfStale() }
                     default:
                         break
                     }

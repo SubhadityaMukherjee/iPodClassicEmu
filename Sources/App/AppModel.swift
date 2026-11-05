@@ -136,6 +136,7 @@ final class AppModel {
 
     static func route(named name: String) -> Route? {
         switch name {
+        case "home": return .home
         case "music": return .music
         case "coverflow": return .coverFlow
         case "albums": return .musicAlbums

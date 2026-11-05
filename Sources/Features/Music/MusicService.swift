@@ -13,6 +13,22 @@ final class MusicService {
     private(set) var playlists: [Playlist] = []
     private(set) var loaded = false
     private(set) var loading = false
+    private var lastLoaded: Date?
+
+    /// The library goes stale while the app stays resident (iOS keeps it
+    /// in memory for days) — new songs/albums wouldn't appear otherwise.
+    private static let staleAfter: TimeInterval = 120
+
+    var isStale: Bool {
+        guard loaded, let lastLoaded else { return true }
+        return Date().timeIntervalSince(lastLoaded) > Self.staleAfter
+    }
+
+    /// Re-fetches the library only when the cached copy is stale.
+    func refreshIfStale() async {
+        guard isStale else { return }
+        await loadLibrary()
+    }
 
     var isAuthorized: Bool { status == .authorized }
 
@@ -33,6 +49,7 @@ final class MusicService {
         if qaEnv == "1" {
             seedFakeLibrary()
             loaded = true
+            lastLoaded = Date()
             return
         }
         guard isAuthorized, !loading else { return }
@@ -70,6 +87,7 @@ final class MusicService {
 
         clearMenuCaches()
         loaded = true
+        lastLoaded = Date()
     }
 
     /// Deterministic fake library for wheel/scroll QA in the simulator.

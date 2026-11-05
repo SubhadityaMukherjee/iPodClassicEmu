@@ -15,6 +15,7 @@ struct HomeScreen: View {
             MenuItem(id: "camera", title: "Camera"),
             MenuItem(id: "memos", title: "Voice Memos"),
             MenuItem(id: "notes", title: "Notes"),
+            MenuItem(id: "reader", title: "Reader"),
             MenuItem(id: "extras", title: "Extras"),
             MenuItem(id: "settings", title: "Settings"),
             MenuItem(id: "shuffleAll", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
@@ -50,6 +51,7 @@ struct HomeScreen: View {
         case "camera": model.push(.camera)
         case "memos": model.push(.recorder)
         case "notes": model.push(.notes)
+        case "reader": model.push(.reader)
         case "extras": model.push(.extras)
         case "settings": model.push(.settings)
         case "shuffleAll":
@@ -90,6 +92,8 @@ struct HomeScreen: View {
             glyph("mic.fill")
         case "notes":
             glyph("square.and.pencil")
+        case "reader":
+            glyph("book.fill")
         case "clocks":
             LiveClockPreview()
         case "extras":
