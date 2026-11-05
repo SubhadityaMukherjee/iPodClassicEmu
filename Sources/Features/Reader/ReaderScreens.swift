@@ -236,8 +236,12 @@ struct BookScreen: View {
     @ViewBuilder
     private func content(book: ReaderStore.Book) -> some View {
         if book.kind == .pdf {
+            // Padding keeps pages clear of the title bar and the progress
+            // bar (PDFView exposes no scroll insets of its own).
             PDFBookView(url: Self.pdfURL(for: book), controller: pdfController,
                         initialPage: book.chapterIndex, continuous: book.pdfContinuous)
+                .padding(.top, 10)
+                .padding(.bottom, 16)
         } else {
             EpubWebView(
                 chapter: chapters.indices.contains(book.chapterIndex) ? chapters[book.chapterIndex] : nil,
