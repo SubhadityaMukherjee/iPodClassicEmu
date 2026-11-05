@@ -171,42 +171,58 @@ struct BookScreen: View {
 
     private static let dimOverlays: [Double] = [0, 0.18, 0.38]
 
+    private var dimOpacity: Double {
+        guard let book else { return 0 }
+        return Self.dimOverlays[min(max(book.dim, 0), 2)]
+    }
+
     var body: some View {
-        ZStack {
+        VStack(spacing: 5) {
+            // Reading area: strictly between the title bar and the progress
+            // bar row — the bar never overlays the text, at any offset.
+            ZStack {
+                if let book {
+                    content(book: book)
+                    if panelOpen {
+                        ModalHost { panel }
+                            .zIndex(2)
+                    }
+                    if !selectedText.isEmpty && !panelOpen {
+                        selectionBar
+                            .zIndex(2)
+                    }
+                    if !toast.isEmpty {
+                        ToastCapsule(text: toast)
+                            .zIndex(3)
+                    }
+                } else {
+                    Text("Book not found")
+                        .font(Theme.font(15, .semibold))
+                        .foregroundStyle(Theme.inkDim)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
             if let book {
-                content(book: book)
-                    .overlay(Color.black.opacity(Self.dimOverlays[min(max(book.dim, 0), 2)])
-                        .allowsHitTesting(false))
                 bookProgressBar(book)
-                    .zIndex(1)
-                if panelOpen {
-                    ModalHost { panel }
-                        .zIndex(2)
-                }
-                if !selectedText.isEmpty && !panelOpen {
-                    selectionBar
-                        .zIndex(2)
-                }
-                if !toast.isEmpty {
-                    ToastCapsule(text: toast)
-                        .zIndex(3)
-                }
-            } else {
-                Text("Book not found")
-                    .font(Theme.font(15, .semibold))
-                    .foregroundStyle(Theme.inkDim)
             }
         }
+        .overlay(Color.black.opacity(dimOpacity)
+            .allowsHitTesting(false))
         .onWheel { handle($0) }
         .onChange(of: scenePhase) { _, phase in
             // Leaving the foreground (or quitting) — flush the position;
             // onDisappear alone never runs on a kill or an app update.
             if phase != .active { saveLocation() }
         }
-        .onReceive(Timer.publish(every: 6, on: .main, in: .common).autoconnect()) { _ in
-            // Rolling autosave so even a hard kill loses at most a few
-            // seconds of reading.
-            if !panelOpen { saveLocation() }
+        .task {
+            // Rolling autosave. NB: Timer.publish + onReceive would reset
+            // on every body re-evaluation (saveLocation mutates state) and
+            // never fire; .task survives re-renders.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if !panelOpen { saveLocation() }
+            }
         }
         .onAppear {
             if book == nil {
@@ -247,13 +263,12 @@ struct BookScreen: View {
     @ViewBuilder
     private func content(book: ReaderStore.Book) -> some View {
         if book.kind == .pdf {
-            // Padding keeps pages clear of the title bar and, at the
-            // bottom, comfortably above the progress bar (PDFView exposes
-            // no scroll insets of its own).
+            // A little air above and below the pages (the progress bar
+            // sits in its own row beneath the reading area).
             PDFBookView(url: Self.pdfURL(for: book), controller: pdfController,
                         initialPage: book.chapterIndex, continuous: book.pdfContinuous)
                 .padding(.top, 10)
-                .padding(.bottom, 30)
+                .padding(.bottom, 10)
         } else {
             EpubWebView(
                 chapter: chapters.indices.contains(book.chapterIndex) ? chapters[book.chapterIndex] : nil,
@@ -269,8 +284,8 @@ struct BookScreen: View {
         }
     }
 
-    /// Thin whole-book progress line pinned to the bottom edge (chapter/
-    /// page granularity, like the music progress bar but smaller).
+    /// Thin whole-book progress line in its own row below the reading
+    /// area (chapter/page granularity — never covers the text).
     private func bookProgressBar(_ book: ReaderStore.Book) -> some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
@@ -278,14 +293,9 @@ struct BookScreen: View {
                 Capsule().fill(SelectionGradient())
                     .frame(width: max(4, geo.size.width * progressFraction(book)))
             }
-            .frame(height: 3)
-            .frame(maxWidth: .infinity, alignment: .bottom)
         }
         .frame(height: 3)
         .padding(.horizontal, 12)
-        .padding(.bottom, 2)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .allowsHitTesting(false)
     }
 
     private func progressFraction(_ book: ReaderStore.Book) -> Double {
@@ -735,14 +745,12 @@ struct EpubWebView: UIViewRepresentable {
         // overshoot, no hidden safe-area insets shrinking the viewport.
         wv.scrollView.bounces = false
         wv.scrollView.contentInsetAdjustmentBehavior = .never
-        // Keep text clear of the screen chrome: roughly a font-size worth
-        // of breathing room at the top, and generous room at the bottom so
-        // lines always end above the progress bar (insets are per-viewport,
-        // unlike body padding).
+        // Gentle breathing room at the top of the page; the progress bar
+        // lives below the reading area now, so no bottom reservation.
         wv.scrollView.contentInset = UIEdgeInsets(
             top: CGFloat(book.fontSize) + 8,
             left: 0,
-            bottom: CGFloat(book.fontSize) + 26,
+            bottom: 10,
             right: 0)
         let cfg = wv.configuration.userContentController
         cfg.addUserScript(WKUserScript(source: HighlightJS.selectionWatch,
@@ -788,14 +796,18 @@ struct EpubWebView: UIViewRepresentable {
 
         func webView(_ webview: WKWebView, didFinish navigation: WKNavigation!) {
             // Inject the reader stylesheet, restore highlights, then the
-            // saved scroll position.
+            // saved scroll position. The CSS reflow changes the document
+            // height, so restore twice: immediately and again after layout
+            // settles (the second corrects the first using the final
+            // scrollHeight, e.g. after images load).
             webview.evaluateJavaScript(EpubController.cssJS(for: parent.book), completionHandler: nil)
             if !parent.highlightTexts.isEmpty {
                 webview.evaluateJavaScript(HighlightJS.restore(texts: parent.highlightTexts), completionHandler: nil)
             }
             let fraction = parent.restoreFraction
             let js = "document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollTo(0, \(fraction) * (document.documentElement.scrollHeight - window.innerHeight)) : window.scrollTo(0,0)"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            webview.evaluateJavaScript(js, completionHandler: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                 webview.evaluateJavaScript(js, completionHandler: nil)
             }
         }
