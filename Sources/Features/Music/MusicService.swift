@@ -4,6 +4,10 @@ import os
 
 /// Apple Music library access: one-time library fetch, cached in memory,
 /// plus per-item lookups used by screens and the title bar.
+/// MainActor-isolated so refreshes mutate the observable arrays on the
+/// main thread — off-main mutations can leave mounted views stale (the
+/// list shows old data while direct array readers see the new items).
+@MainActor
 @Observable
 final class MusicService {
     private(set) var status: MusicAuthorization.Status = MusicAuthorization.currentStatus
@@ -14,6 +18,10 @@ final class MusicService {
     private(set) var loaded = false
     private(set) var loading = false
     private var lastLoaded: Date?
+
+    /// Constructible anywhere (AppModel builds it in its own init); every
+    /// other method is MainActor-isolated.
+    nonisolated init() {}
 
     /// The library goes stale while the app stays resident (iOS keeps it
     /// in memory for days) — new songs/albums wouldn't appear otherwise.
@@ -132,17 +140,19 @@ final class MusicService {
     // MARK: Cached menu lists
     // Sorting + MenuItem construction over a whole library is expensive;
     // doing it per wheel tick froze scrolling on large libraries. Caches
-    // are keyed by (sort option, library count) and rebuilt only when
-    // either changes.
+    // are keyed by the library generation (bumped on every reload) plus
+    // their sort option, so a refresh always rebuilds.
 
-    private var songsMenuCache: (sort: Int, count: Int, items: [MenuItem])?
-    private var albumsMenuCache: (sort: Int, count: Int, items: [MenuItem])?
-    private var artistsMenuCache: (count: Int, items: [MenuItem])?
-    private var playlistsMenuCache: (count: Int, items: [MenuItem])?
-    private var genresMenuCache: (count: Int, items: [MenuItem])?
-    private var recentMenuCache: (count: Int, items: [MenuItem])?
+    private var generation = 0
+    private var songsMenuCache: (generation: Int, sort: Int, items: [MenuItem])?
+    private var albumsMenuCache: (generation: Int, sort: Int, items: [MenuItem])?
+    private var artistsMenuCache: (generation: Int, items: [MenuItem])?
+    private var playlistsMenuCache: (generation: Int, items: [MenuItem])?
+    private var genresMenuCache: (generation: Int, items: [MenuItem])?
+    private var recentMenuCache: (generation: Int, items: [MenuItem])?
 
     func clearMenuCaches() {
+        generation += 1
         songsMenuCache = nil
         albumsMenuCache = nil
         artistsMenuCache = nil
@@ -151,8 +161,10 @@ final class MusicService {
         recentMenuCache = nil
     }
 
-    /// Songs sorted by 0 Title / 1 Artist / 2 Duration / 3 Recently Added,
-    /// with an id tiebreaker (Swift's sort is not stable).
+    /// Songs sorted by 0 Title / 1 Artist / 2 Duration / 3 Recently Added
+    /// (by libraryAddedDate — releaseDate is the ORIGINAL release year, so
+    /// freshly added old tracks would sort deep into the list), with an id
+    /// tiebreaker (Swift's sort is not stable).
     func songsSorted(by sort: Int) -> [Song] {
         let list = songs
         func stable(_ key: (Song) -> String) -> [Song] {
@@ -165,7 +177,7 @@ final class MusicService {
         switch sort {
         case 1: return stable { $0.artistName }
         case 2: return list.sorted { ($0.duration ?? 0) != ($1.duration ?? 0) ? ($0.duration ?? 0) < ($1.duration ?? 0) : $0.id.rawValue < $1.id.rawValue }
-        case 3: return list.sorted { ($0.releaseDate ?? .distantPast) != ($1.releaseDate ?? .distantPast) ? ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) : $0.id.rawValue < $1.id.rawValue }
+        case 3: return list.sorted { ($0.libraryAddedDate ?? .distantPast) != ($1.libraryAddedDate ?? .distantPast) ? ($0.libraryAddedDate ?? .distantPast) > ($1.libraryAddedDate ?? .distantPast) : $0.id.rawValue < $1.id.rawValue }
         default: return stable { $0.title }
         }
     }
@@ -188,50 +200,50 @@ final class MusicService {
     }
 
     func songsMenuItems(sort: Int) -> [MenuItem] {
-        if let c = songsMenuCache, c.sort == sort, c.count == songs.count { return c.items }
+        if let c = songsMenuCache, c.generation == generation, c.sort == sort { return c.items }
         let items = songsSorted(by: sort).map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName, showsChevron: false) }
-        songsMenuCache = (sort, songs.count, items)
+        songsMenuCache = (generation, sort, items)
         return items
     }
 
     func albumsMenuItems(sort: Int) -> [MenuItem] {
-        if let c = albumsMenuCache, c.sort == sort, c.count == albums.count { return c.items }
+        if let c = albumsMenuCache, c.generation == generation, c.sort == sort { return c.items }
         let items = albumsSorted(by: sort).map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
-        albumsMenuCache = (sort, albums.count, items)
+        albumsMenuCache = (generation, sort, items)
         return items
     }
 
     func artistsMenuItems() -> [MenuItem] {
-        if let c = artistsMenuCache, c.count == artists.count { return c.items }
+        if let c = artistsMenuCache, c.generation == generation { return c.items }
         let items = artists
             .sorted { $0.name.lowercased() != $1.name.lowercased() ? $0.name.lowercased() < $1.name.lowercased() : $0.id.rawValue < $1.id.rawValue }
             .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
-        artistsMenuCache = (artists.count, items)
+        artistsMenuCache = (generation, items)
         return items
     }
 
     func playlistsMenuItems() -> [MenuItem] {
-        if let c = playlistsMenuCache, c.count == playlists.count { return c.items }
+        if let c = playlistsMenuCache, c.generation == generation { return c.items }
         let items = playlists
             .sorted { $0.name.lowercased() != $1.name.lowercased() ? $0.name.lowercased() < $1.name.lowercased() : $0.id.rawValue < $1.id.rawValue }
             .map { MenuItem(id: $0.id.rawValue, title: $0.name) }
-        playlistsMenuCache = (playlists.count, items)
+        playlistsMenuCache = (generation, items)
         return items
     }
 
     func genresMenuItems() -> [MenuItem] {
-        if let c = genresMenuCache, c.count == albums.count { return c.items }
+        if let c = genresMenuCache, c.generation == generation { return c.items }
         let items = genres
             .sorted { $0.lowercased() != $1.lowercased() ? $0.lowercased() < $1.lowercased() : $0 < $1 }
             .map { MenuItem(id: $0, title: $0) }
-        genresMenuCache = (albums.count, items)
+        genresMenuCache = (generation, items)
         return items
     }
 
     func recentMenuItems() -> [MenuItem] {
-        if let c = recentMenuCache, c.count == albums.count { return c.items }
+        if let c = recentMenuCache, c.generation == generation { return c.items }
         let items = recentlyAdded.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
-        recentMenuCache = (albums.count, items)
+        recentMenuCache = (generation, items)
         return items
     }
 
