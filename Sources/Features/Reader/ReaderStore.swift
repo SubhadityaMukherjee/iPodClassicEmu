@@ -93,6 +93,16 @@ final class ReaderStore {
             persist()
             d.set(true, forKey: "reader.pageStepMigrated")
         }
+        // Line-boundary pages turned the page count per tick into whole
+        // pages (Small = 1 page — the old full-page feel). Reset everyone
+        // to it once; per-book choices made after this apply freely.
+        if !d.bool(forKey: "reader.linePageMigrated") {
+            for i in books.indices where books[i].kind == .epub {
+                books[i].scrollStep = 0
+            }
+            persist()
+            d.set(true, forKey: "reader.linePageMigrated")
+        }
     }
 
     /// Root folder for all imported books.
