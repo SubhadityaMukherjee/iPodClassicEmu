@@ -159,28 +159,29 @@ struct BookScreen: View {
     @State private var panelIsSettings = false
     @State private var panelSelection = 0
     @State private var toast = ""
+    @State private var highlights: [BookHighlight] = []
+    @State private var selectedText = ""
     @State private var epubController = EpubController()
     @State private var pdfController = PDFBookController()
 
     private var isPDF: Bool { book?.kind == .pdf }
 
+    private static let dimOverlays: [Double] = [0, 0.18, 0.38]
+
     var body: some View {
         ZStack {
             if let book {
-                if book.kind == .pdf {
-                    PDFBookView(url: Self.pdfURL(for: book), controller: pdfController,
-                                initialPage: book.chapterIndex, continuous: book.pdfContinuous)
-                } else {
-                    EpubWebView(
-                        chapter: chapters.indices.contains(book.chapterIndex) ? chapters[book.chapterIndex] : nil,
-                        bookDir: Self.epubDir(for: book),
-                        book: book,
-                        restoreFraction: book.scrollFraction,
-                        controller: epubController
-                    )
-                }
+                content(book: book)
+                    .overlay(Color.black.opacity(Self.dimOverlays[min(max(book.dim, 0), 2)])
+                        .allowsHitTesting(false))
+                bookProgressBar(book)
+                    .zIndex(1)
                 if panelOpen {
                     ModalHost { panel }
+                        .zIndex(2)
+                }
+                if !selectedText.isEmpty && !panelOpen {
+                    selectionBar
                         .zIndex(2)
                 }
                 if !toast.isEmpty {
@@ -199,6 +200,7 @@ struct BookScreen: View {
                 book = model.reader.book(id: bookID)
                 if book?.kind == .epub {
                     chapters = EpubParser.load(bookDir: Self.epubDir(for: book!))
+                    highlights = HighlightStore.load(bookID: bookID, kind: .epub)
                 }
             }
             model.transportClaimedByScreen = true
@@ -207,6 +209,96 @@ struct BookScreen: View {
             model.transportClaimedByScreen = false
             saveLocation()
         }
+    }
+
+    @ViewBuilder
+    private func content(book: ReaderStore.Book) -> some View {
+        if book.kind == .pdf {
+            PDFBookView(url: Self.pdfURL(for: book), controller: pdfController,
+                        initialPage: book.chapterIndex, continuous: book.pdfContinuous)
+        } else {
+            EpubWebView(
+                chapter: chapters.indices.contains(book.chapterIndex) ? chapters[book.chapterIndex] : nil,
+                bookDir: Self.epubDir(for: book),
+                book: book,
+                restoreFraction: book.scrollFraction,
+                controller: epubController,
+                highlightTexts: highlights.filter { $0.chapter == book.chapterIndex }.map(\.text),
+                onSelection: { text in
+                    withAnimation(.easeOut(duration: 0.15)) { selectedText = text }
+                }
+            )
+        }
+    }
+
+    /// Thin whole-book progress line pinned to the bottom edge (chapter/
+    /// page granularity, like the music progress bar but smaller).
+    private func bookProgressBar(_ book: ReaderStore.Book) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.black.opacity(0.12))
+                Capsule().fill(SelectionGradient())
+                    .frame(width: max(4, geo.size.width * progressFraction(book)))
+            }
+            .frame(height: 3)
+            .frame(maxWidth: .infinity, alignment: .bottom)
+        }
+        .frame(height: 3)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 2)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .allowsHitTesting(false)
+    }
+
+    private func progressFraction(_ book: ReaderStore.Book) -> Double {
+        if book.kind == .pdf, let count = pdfController.document?.pageCount, count > 0 {
+            return (Double(min(book.chapterIndex, count - 1)) + 0.5) / Double(count)
+        }
+        guard !chapters.isEmpty else { return 0 }
+        return (Double(min(book.chapterIndex, chapters.count - 1)) + 0.5) / Double(chapters.count)
+    }
+
+    /// Touch action bar shown while text is selected in an EPUB.
+    private var selectionBar: some View {
+        VStack(spacing: 6) {
+            Text(selectedText)
+                .lineLimit(2)
+                .font(Theme.font(11, .medium))
+                .foregroundStyle(Theme.inkDim)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(width: 250, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(white: 0.95))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.black.opacity(0.2), lineWidth: 0.8))
+                )
+            HStack(spacing: 10) {
+                Button(action: saveHighlight) {
+                    capsuleLabel("Highlight", primary: true)
+                }
+                .buttonStyle(.plain)
+                Button {
+                    epubController.clearSelection()
+                    withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
+                } label: {
+                    capsuleLabel("Cancel", primary: false)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, 36)
+    }
+
+    private func capsuleLabel(_ text: String, primary: Bool) -> some View {
+        Text(text)
+            .font(Theme.font(12, .bold))
+            .foregroundStyle(primary ? Color.white : Theme.ink)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(primary ? AnyShapeStyle(SelectionGradient())
+                                               : AnyShapeStyle(Color(white: 0.82))))
     }
 
     static func epubDir(for book: ReaderStore.Book) -> URL {
@@ -233,8 +325,12 @@ struct BookScreen: View {
     private var bookSettings: [BookSetting] {
         guard let book else { return [] }
         if book.kind == .pdf {
-            return [BookSetting(id: "view", title: "View", values: ["Continuous", "One Page"],
-                                index: book.pdfContinuous ? 0 : 1)]
+            return [
+                BookSetting(id: "view", title: "View", values: ["Continuous", "One Page"],
+                            index: book.pdfContinuous ? 0 : 1),
+                BookSetting(id: "dim", title: "Screen", values: ["Bright", "Dim", "Darker"],
+                            index: min(max(book.dim, 0), 2)),
+            ]
         }
         let sizeIndex = max(0, Self.fontSizes.firstIndex(of: book.fontSize) ?? 1)
         return [
@@ -243,6 +339,7 @@ struct BookScreen: View {
             BookSetting(id: "spacing", title: "Line Spacing", values: ["Compact", "Normal", "Wide"], index: min(max(book.lineSpacing, 0), 2)),
             BookSetting(id: "margin", title: "Margins", values: ["Narrow", "Normal", "Wide"], index: min(max(book.margin, 0), 2)),
             BookSetting(id: "scroll", title: "Scroll Step", values: ["Small", "Medium", "Large"], index: min(max(book.scrollStep, 0), 2)),
+            BookSetting(id: "dim", title: "Screen", values: ["Bright", "Dim", "Darker"], index: min(max(book.dim, 0), 2)),
         ]
     }
 
@@ -309,14 +406,18 @@ struct BookScreen: View {
                 pdfController.goToPage(page)
                 book?.chapterIndex = page
             }
+            saveLocation()
         } else {
             let idx = Int(id.dropFirst("ch.".count)) ?? 0
-            if chapters.indices.contains(idx) {
-                book?.chapterIndex = idx
-                book?.scrollFraction = 0
+            if chapters.indices.contains(idx), var b = book {
+                b.chapterIndex = idx
+                b.scrollFraction = 0
+                book = b
+                // Persist directly; sampling the old chapter's fraction
+                // here would mis-restore the new one.
+                model.reader.update(b)
             }
         }
-        saveLocation()
         closePanel()
     }
 
@@ -343,6 +444,8 @@ struct BookScreen: View {
             epubController.applyStyle(to: b)
         case "scroll":
             b.scrollStep = wrapped(min(max(b.scrollStep, 0), 2), 3)
+        case "dim":
+            b.dim = wrapped(min(max(b.dim, 0), 2), 3)
         default:
             break
         }
@@ -352,11 +455,42 @@ struct BookScreen: View {
 
     // MARK: Actions
 
+    /// Wraps the current selection in a persistent mark, stores it with the
+    /// book, and appends it to the book's Highlights note.
+    private func saveHighlight() {
+        guard var b = book, b.kind == .epub else { return }
+        epubController.wrapSelection { text in
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
+            guard !trimmed.isEmpty else { return }
+            let highlight = BookHighlight(id: UUID().uuidString, chapter: b.chapterIndex, text: trimmed)
+            highlights.append(highlight)
+            HighlightStore.save(highlights, bookID: b.id, kind: b.kind)
+            appendHighlightToNotes(highlight, book: b)
+            showToast("Highlighted")
+        }
+    }
+
+    /// Mirror into Documents/Notes so highlights read as a notes file.
+    private func appendHighlightToNotes(_ highlight: BookHighlight, book: ReaderStore.Book) {
+        let noteName = "\(book.title) - Highlights"
+        if !FileManager.default.fileExists(atPath: model.notes.fileURL(for: noteName).path) {
+            model.notes.write(noteName, "Highlights from \"\(book.title)\"\n")
+        }
+        let chapterTitle = chapters.indices.contains(highlight.chapter)
+            ? chapters[highlight.chapter].title
+            : "Chapter \(highlight.chapter + 1)"
+        let body = model.notes.read(noteName)
+        model.notes.write(noteName, "\(body)\n— \(chapterTitle)\n\"\(highlight.text)\"\n")
+    }
+
     private func stepChapter(_ delta: Int) {
         guard var b = book else { return }
         if b.kind == .pdf {
             if delta > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
             b.chapterIndex = pdfController.currentPageIndex
+            book = b
+            saveLocation()
         } else {
             let next = b.chapterIndex + delta
             guard chapters.indices.contains(next) else {
@@ -365,9 +499,12 @@ struct BookScreen: View {
             }
             b.chapterIndex = next
             b.scrollFraction = 0
+            book = b
+            // Persist directly — saveLocation() would sample the OLD
+            // chapter's scroll fraction (async callback) and the new
+            // chapter would restore near its bottom.
+            model.reader.update(b)
         }
-        book = b
-        saveLocation()
     }
 
     /// Asks the web view for the current scroll position, then persists.
@@ -402,6 +539,13 @@ struct BookScreen: View {
                 moveListSelection(&panelSelection, count: panelRows.count, delta: d, settings: settings)
             } else if isPDF {
                 if d > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
+                // currentPage settles asynchronously; keep the progress
+                // bar honest.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if self.book?.kind == .pdf {
+                        self.book?.chapterIndex = self.pdfController.currentPageIndex
+                    }
+                }
             } else {
                 // Instant viewport-fraction jumps track the wheel 1:1.
                 let step = Self.scrollFractions[min(max(book?.scrollStep ?? 1, 0), Self.scrollFractions.count - 1)]
@@ -453,6 +597,18 @@ final class EpubController {
         webView?.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
     }
 
+    /// Wraps the current selection in persistent marks; returns its text.
+    func wrapSelection(completion: @escaping (String) -> Void) {
+        webView?.evaluateJavaScript(HighlightJS.wrapSelection) { value, _ in
+            let text = value as? String ?? ""
+            DispatchQueue.main.async { completion(text) }
+        }
+    }
+
+    func clearSelection() {
+        webView?.evaluateJavaScript(HighlightJS.clearSelection, completionHandler: nil)
+    }
+
     func scrollFraction(completion: @escaping (Double) -> Void) {
         let js = "document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) : 1"
         webView?.evaluateJavaScript(js) { value, _ in
@@ -472,7 +628,7 @@ final class EpubController {
         (function(){
           var s = document.getElementById('ipod-reader-css');
           if (!s) { s = document.createElement('style'); s.id = 'ipod-reader-css'; document.head.appendChild(s); }
-          s.textContent = "html{scroll-behavior:auto !important;font-size:\(book.fontSize)px !important;} body{font-size:\(book.fontSize)px !important;line-height:\(lineHeight) !important;font-family:\(family) !important;padding:\(padding)px !important;} p,div,li,blockquote,section,article,aside,td,th,dd,dt,figcaption,pre,code{font-size:inherit !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
+          s.textContent = "html{scroll-behavior:auto !important;font-size:\(book.fontSize)px !important;} body{font-size:\(book.fontSize)px !important;line-height:\(lineHeight) !important;font-family:\(family) !important;padding:\(padding)px !important;} p,div,li,blockquote,section,article,aside,td,th,dd,dt,figcaption,pre,code{font-size:inherit !important;} mark.ipod-hl{background:rgba(255,208,0,0.45) !important;color:inherit !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
         })()
         """
     }
@@ -485,19 +641,26 @@ enum ReaderScrollStep {
 
 /// Reflowing EPUB document view. Chapters are XHTML rendered natively by
 /// the web view (reflow is inherent); we inject a reader stylesheet built
-/// from the book's settings and restore the saved scroll position on load.
+/// from the book's settings, restore the saved scroll position on load,
+/// watch text selection (highlighting), and re-wrap saved highlights.
 struct EpubWebView: UIViewRepresentable {
     let chapter: EpubChapter?
     let bookDir: URL
     let book: ReaderStore.Book
     let restoreFraction: Double
     let controller: EpubController
+    var highlightTexts: [String] = []
+    var onSelection: ((String) -> Void)?
 
     func makeUIView(context: Context) -> WKWebView {
         let wv = WKWebView(frame: .zero)
         wv.navigationDelegate = context.coordinator
         wv.scrollView.indicatorStyle = .black
         wv.backgroundColor = .systemBackground
+        let cfg = wv.configuration.userContentController
+        cfg.addUserScript(WKUserScript(source: HighlightJS.selectionWatch,
+                                       injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        cfg.add(context.coordinator, name: "selection")
         controller.webView = wv
         if let chapter {
             context.coordinator.loadedURL = chapter.url
@@ -521,7 +684,7 @@ struct EpubWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: EpubWebView
         var loadedURL: URL?
         var appliedStyle: ReaderStore.Book?
@@ -530,9 +693,19 @@ struct EpubWebView: UIViewRepresentable {
             self.parent = parent
         }
 
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard message.name == "selection", let text = message.body as? String else { return }
+            DispatchQueue.main.async { self.parent.onSelection?(text) }
+        }
+
         func webView(_ webview: WKWebView, didFinish navigation: WKNavigation!) {
-            // Inject the reader stylesheet, then restore the saved scroll.
+            // Inject the reader stylesheet, restore highlights, then the
+            // saved scroll position.
             webview.evaluateJavaScript(EpubController.cssJS(for: parent.book), completionHandler: nil)
+            if !parent.highlightTexts.isEmpty {
+                webview.evaluateJavaScript(HighlightJS.restore(texts: parent.highlightTexts), completionHandler: nil)
+            }
             let fraction = parent.restoreFraction
             let js = "document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollTo(0, \(fraction) * (document.documentElement.scrollHeight - window.innerHeight)) : window.scrollTo(0,0)"
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {

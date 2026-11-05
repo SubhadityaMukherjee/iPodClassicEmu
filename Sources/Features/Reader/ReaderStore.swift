@@ -22,11 +22,12 @@ final class ReaderStore {
         var margin: Int            // epub: 0 narrow, 1 normal, 2 wide
         var scrollStep: Int        // epub: 0 small, 1 medium, 2 full page
         var pdfContinuous: Bool    // pdf: continuous scroll vs one page
+        var dim: Int               // 0 bright, 1 dim, 2 darker (screen overlay)
 
         init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
              scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
              lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 1,
-             pdfContinuous: Bool = true) {
+             pdfContinuous: Bool = true, dim: Int = 0) {
             self.id = id
             self.kind = kind
             self.title = title
@@ -38,6 +39,7 @@ final class ReaderStore {
             self.margin = margin
             self.scrollStep = scrollStep
             self.pdfContinuous = pdfContinuous
+            self.dim = dim
         }
 
         /// Tolerates books persisted by older versions (missing keys).
@@ -54,6 +56,7 @@ final class ReaderStore {
             margin = try c.decodeIfPresent(Int.self, forKey: .margin) ?? 1
             scrollStep = try c.decodeIfPresent(Int.self, forKey: .scrollStep) ?? 1
             pdfContinuous = try c.decodeIfPresent(Bool.self, forKey: .pdfContinuous) ?? true
+            dim = try c.decodeIfPresent(Int.self, forKey: .dim) ?? 0
         }
     }
 
