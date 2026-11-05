@@ -75,6 +75,7 @@ final class RecorderModel {
         pausedTotal = 0
         segmentStart = Date()
         startTimer()
+        LiveActivityManager.shared.recorderStarted()
         loadRecordings()
     }
 
@@ -83,6 +84,7 @@ final class RecorderModel {
         recorder?.pause()
         pausedTotal += Date().timeIntervalSince(segmentStart)
         isPaused = true
+        LiveActivityManager.shared.recorderPaused(elapsed: pausedTotal)
     }
 
     func resume() {
@@ -90,6 +92,7 @@ final class RecorderModel {
         recorder?.record()
         segmentStart = Date()
         isPaused = false
+        LiveActivityManager.shared.recorderResumed(base: pausedTotal)
     }
 
     func stop() {
@@ -101,6 +104,7 @@ final class RecorderModel {
         isRecording = false
         isPaused = false
         stopTimer()
+        LiveActivityManager.shared.recorderEnded()
         deactivateSessionIfNeeded()
         loadRecordings()
     }

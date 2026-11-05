@@ -28,6 +28,7 @@
 		5EC6D52A802E1514CAE174A1 /* NowPlayingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */; };
 		62CB048E8A6943482DD8D1F8 /* TickSounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16CC36E7096FECFA8123BA8 /* TickSounds.swift */; };
 		6CBA67E33C845F4D22F2422D /* MusicScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D783A264CBB399887431ACB /* MusicScreens.swift */; };
+		7B50BFDA85F41723706F0125 /* iPodClassicWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7F8ADF4FC8E0E7C16628F2EA /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9362F34A0BC5DC660638C04 /* CameraModel.swift */; };
 		82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2252DE6110093E2FF64B7404 /* CRTOverlay.swift */; };
 		84BE9FB1EF58F9433F774C38 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FF7E771867E7BE0B289EE5 /* AppModel.swift */; };
@@ -36,19 +37,24 @@
 		926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */; };
 		9CA1FF167852EF7379AE269A /* PlayerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70FD912BBA672A8037F0ED9F /* PlayerModel.swift */; };
 		A467174044A38878D19727C9 /* NotesScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0ED83C7A1A44EB591609791 /* NotesScreens.swift */; };
+		A9627673D222586D1FCEE6A5 /* TrackLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFBE5E801AF3FDB135D7DD3 /* TrackLiveActivityWidget.swift */; };
 		A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA58EF527B138B0EF70E505F /* WheelHaptics.swift */; };
 		AE14F2C8C6963CBBCAE6E874 /* ClocksScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3471A066596E32FEE25ED63B /* ClocksScreens.swift */; };
 		AE5B4F6578F64B17100A878D /* ExtrasScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 366D24A2D067433E923558F7 /* ExtrasScreens.swift */; };
 		AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B37641D1E5AA57A45A02D07 /* TimeFormat.swift */; };
+		AEBF95D90A2A55989C2F7BF4 /* iPodClassicWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47CFD786881A4C8FC43D00DB /* iPodClassicWidgets.swift */; };
 		BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */; };
 		CCE5269ADD98979ED5F089DB /* ClockFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE0B67D71510C6279340644 /* ClockFace.swift */; };
 		CE6E87EC8A810CF7BF7AA62F /* AlarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8919784990F005864723A97 /* AlarmStore.swift */; };
 		CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9168F602DF28123A3C7389 /* RecorderModel.swift */; };
 		CF5321B4390A5BE161626910 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 90462DBBAE1970378F420CEE /* Assets.xcassets */; };
+		CF75043444DF6D0ED71EE84F /* TrackActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */; };
+		D125AB206DD4B1FE8D5E9041 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */; };
 		D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */; };
 		E00856FD393CADE5D770BA48 /* MediaVolumeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */; };
 		E2D217A7A044EB9CB4696610 /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E080A36D7C3483C01ABF12C1 /* DeviceView.swift */; };
 		E821E9DB1EEC0479B053A20F /* AlarmRingerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */; };
+		E954CC287B67D09481ED552D /* TrackActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */; };
 		EEB1F20EF65FFEEE9D31DF66 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83813FFB62AFA2BA71D7B05D /* HomeScreen.swift */; };
 		F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */; };
 		F9E16E555874477D62C613D3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2803B556B5B7050105E7CFB4 /* Theme.swift */; };
@@ -57,6 +63,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		1B0308898AC177CE73D1F64D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 71574A89CE8CF4AB0F83A735 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BF132D00C6E6D5765927A408;
+			remoteInfo = iPodClassicWidgets;
+		};
 		6BC59B5FB470443B0B7A8379 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 71574A89CE8CF4AB0F83A735 /* Project object */;
@@ -73,10 +86,25 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		55CD7969043736BB6C04B520 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7B50BFDA85F41723706F0125 /* iPodClassicWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		002EA79AA1F8371F29742EE8 /* QASeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QASeed.swift; sourceTree = "<group>"; };
 		06464256EE519A5BD50EA73F /* iPodClassicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodClassicApp.swift; sourceTree = "<group>"; };
 		0C9168F602DF28123A3C7389 /* RecorderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderModel.swift; sourceTree = "<group>"; };
+		0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackActivityAttributes.swift; sourceTree = "<group>"; };
 		0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */ = {isa = PBXFileReference; path = AlarmBeep.caf; sourceTree = "<group>"; };
 		1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmRingerOverlay.swift; sourceTree = "<group>"; };
 		1D783A264CBB399887431ACB /* MusicScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicScreens.swift; sourceTree = "<group>"; };
@@ -90,7 +118,9 @@
 		3A54E7E9C330E86065492453 /* CoverFlowScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverFlowScreen.swift; sourceTree = "<group>"; };
 		3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iPodClassic.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		45DA368CF25B19FEF8CE837C /* NotesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
+		47CFD786881A4C8FC43D00DB /* iPodClassicWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodClassicWidgets.swift; sourceTree = "<group>"; };
 		483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreTests.swift; sourceTree = "<group>"; };
+		4AFBE5E801AF3FDB135D7DD3 /* TrackLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackLiveActivityWidget.swift; sourceTree = "<group>"; };
 		4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraScreen.swift; sourceTree = "<group>"; };
 		4DF62CF32F140AD7C1A61F7C /* iPodClassicUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = iPodClassicUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4EC998CD72BCE921ABFBE36B /* MusicService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicService.swift; sourceTree = "<group>"; };
@@ -112,6 +142,8 @@
 		BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingScreen.swift; sourceTree = "<group>"; };
 		C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRouter.swift; sourceTree = "<group>"; };
 		C6461E37C6B4E93CC838424E /* WheelInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelInput.swift; sourceTree = "<group>"; };
+		CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = iPodClassicWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
 		D0ED83C7A1A44EB591609791 /* NotesScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesScreens.swift; sourceTree = "<group>"; };
 		D17DE565AD80520CFE579A08 /* PhotosScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosScreens.swift; sourceTree = "<group>"; };
@@ -169,6 +201,7 @@
 				38EC3AA5879EA27E592945C2 /* AppSettings.swift */,
 				E06640F863889753F8AADBCC /* CameraShortcut.swift */,
 				06464256EE519A5BD50EA73F /* iPodClassicApp.swift */,
+				CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -212,6 +245,15 @@
 			path = Clocks;
 			sourceTree = "<group>";
 		};
+		4DE9726AB375877A79F9D1B3 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				47CFD786881A4C8FC43D00DB /* iPodClassicWidgets.swift */,
+				4AFBE5E801AF3FDB135D7DD3 /* TrackLiveActivityWidget.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
 		53ABCC61A93DD51566C6656D /* Device */ = {
 			isa = PBXGroup;
 			children = (
@@ -251,12 +293,22 @@
 			path = Sounds;
 			sourceTree = "<group>";
 		};
+		9C03FDF5D96BA36D2A47CA6A /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		9DAAEF682E99F7256888CADF = {
 			isa = PBXGroup;
 			children = (
 				04A5467E191243D32C7D81CD /* Resources */,
+				9C03FDF5D96BA36D2A47CA6A /* Shared */,
 				F085F35B1670587DB7F462C0 /* Sources */,
 				ED32E8449E10EA79CBB7EE2B /* Tests */,
+				4DE9726AB375877A79F9D1B3 /* Widgets */,
 				D8A095556DCBD5F361F6000F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -321,6 +373,7 @@
 				3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */,
 				2252FD3DDEC10A47D988C6D3 /* iPodClassicTests.xctest */,
 				4DF62CF32F140AD7C1A61F7C /* iPodClassicUITests.xctest */,
+				CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -394,10 +447,12 @@
 			buildPhases = (
 				67984661CA647BB3F990E140 /* Sources */,
 				122B8894AECEF6AD3E7895A3 /* Resources */,
+				55CD7969043736BB6C04B520 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AECAC51F949A76931E78AB51 /* PBXTargetDependency */,
 			);
 			name = iPodClassic;
 			packageProductDependencies = (
@@ -405,6 +460,23 @@
 			productName = iPodClassic;
 			productReference = 3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */;
 			productType = "com.apple.product-type.application";
+		};
+		BF132D00C6E6D5765927A408 /* iPodClassicWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07010A7D1F0FB21A030962BC /* Build configuration list for PBXNativeTarget "iPodClassicWidgets" */;
+			buildPhases = (
+				C7B86928B092A3DD2B280F2B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = iPodClassicWidgets;
+			packageProductDependencies = (
+			);
+			productName = iPodClassicWidgets;
+			productReference = CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		CEE6AE9F4BEB6E7AD6D19E4C /* iPodClassicUITests */ = {
 			isa = PBXNativeTarget;
@@ -441,6 +513,10 @@
 						DevelopmentTeam = 365U99GNTQ;
 						ProvisioningStyle = Automatic;
 					};
+					BF132D00C6E6D5765927A408 = {
+						DevelopmentTeam = 365U99GNTQ;
+						ProvisioningStyle = Automatic;
+					};
 					CEE6AE9F4BEB6E7AD6D19E4C = {
 						DevelopmentTeam = 365U99GNTQ;
 						ProvisioningStyle = Automatic;
@@ -463,6 +539,7 @@
 			projectRoot = "";
 			targets = (
 				9A29DF893980B70CC4EABB5B /* iPodClassic */,
+				BF132D00C6E6D5765927A408 /* iPodClassicWidgets */,
 				5D16D3A353808887BED0863D /* iPodClassicTests */,
 				CEE6AE9F4BEB6E7AD6D19E4C /* iPodClassicUITests */,
 			);
@@ -506,6 +583,7 @@
 				E2D217A7A044EB9CB4696610 /* DeviceView.swift in Sources */,
 				AE5B4F6578F64B17100A878D /* ExtrasScreens.swift in Sources */,
 				EEB1F20EF65FFEEE9D31DF66 /* HomeScreen.swift in Sources */,
+				D125AB206DD4B1FE8D5E9041 /* LiveActivityManager.swift in Sources */,
 				E00856FD393CADE5D770BA48 /* MediaVolumeController.swift in Sources */,
 				54710389A162814D393AAE41 /* MenuComponents.swift in Sources */,
 				6CBA67E33C845F4D22F2422D /* MusicScreens.swift in Sources */,
@@ -526,6 +604,7 @@
 				62CB048E8A6943482DD8D1F8 /* TickSounds.swift in Sources */,
 				AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */,
 				10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */,
+				E954CC287B67D09481ED552D /* TrackActivityAttributes.swift in Sources */,
 				A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */,
 				0ADDDACB18BA7302F69083ED /* WheelInput.swift in Sources */,
 				183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */,
@@ -548,6 +627,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C7B86928B092A3DD2B280F2B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF75043444DF6D0ED71EE84F /* TrackActivityAttributes.swift in Sources */,
+				A9627673D222586D1FCEE6A5 /* TrackLiveActivityWidget.swift in Sources */,
+				AEBF95D90A2A55989C2F7BF4 /* iPodClassicWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -560,6 +649,11 @@
 			isa = PBXTargetDependency;
 			target = 9A29DF893980B70CC4EABB5B /* iPodClassic */;
 			targetProxy = 6BC59B5FB470443B0B7A8379 /* PBXContainerItemProxy */;
+		};
+		AECAC51F949A76931E78AB51 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BF132D00C6E6D5765927A408 /* iPodClassicWidgets */;
+			targetProxy = 1B0308898AC177CE73D1F64D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -803,9 +897,42 @@
 			};
 			name = Debug;
 		};
+		F66EFC80C9794AB02815DD9C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = Widgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ipodclassic.app.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F719E49E0AF0C90F27E6E50A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = Widgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ipodclassic.app.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		07010A7D1F0FB21A030962BC /* Build configuration list for PBXNativeTarget "iPodClassicWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F66EFC80C9794AB02815DD9C /* Debug */,
+				F719E49E0AF0C90F27E6E50A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		0C9C38BCBA92CE96DA405EA7 /* Build configuration list for PBXProject "iPodClassic" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
