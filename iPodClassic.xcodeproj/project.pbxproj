@@ -36,6 +36,7 @@
 		89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59116EF21FFA3688484F038F /* RecorderScreens.swift */; };
 		8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */; };
 		926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */; };
+		9C4C9202AFABDDB4C51444A2 /* ReaderHighlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */; };
 		9CA1FF167852EF7379AE269A /* PlayerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70FD912BBA672A8037F0ED9F /* PlayerModel.swift */; };
 		9F9E7B9E9A605FDA3A8D05B1 /* ReaderStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */; };
 		A467174044A38878D19727C9 /* NotesScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0ED83C7A1A44EB591609791 /* NotesScreens.swift */; };
@@ -143,6 +144,7 @@
 		90462DBBAE1970378F420CEE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A16CC36E7096FECFA8123BA8 /* TickSounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickSounds.swift; sourceTree = "<group>"; };
 		A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenView.swift; sourceTree = "<group>"; };
+		B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHighlights.swift; sourceTree = "<group>"; };
 		B7CEBDD3E18661EEC5335B6E /* Tick.caf */ = {isa = PBXFileReference; path = Tick.caf; sourceTree = "<group>"; };
 		B9E142990608C64F576307AC /* TickSoft.caf */ = {isa = PBXFileReference; path = TickSoft.caf; sourceTree = "<group>"; };
 		BA58EF527B138B0EF70E505F /* WheelHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelHaptics.swift; sourceTree = "<group>"; };
@@ -384,6 +386,7 @@
 			isa = PBXGroup;
 			children = (
 				C7F775252FC095655EE129D8 /* EpubContainer.swift */,
+				B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */,
 				7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */,
 				C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */,
 			);
@@ -619,6 +622,7 @@
 				56BE29D96A4FF46D3EBF2E5B /* PhotosScreens.swift in Sources */,
 				9CA1FF167852EF7379AE269A /* PlayerModel.swift in Sources */,
 				0B5BE9ABA8833A94B6A38943 /* QASeed.swift in Sources */,
+				9C4C9202AFABDDB4C51444A2 /* ReaderHighlights.swift in Sources */,
 				C33C03ED0D677C9F137A329C /* ReaderScreens.swift in Sources */,
 				9F9E7B9E9A605FDA3A8D05B1 /* ReaderStore.swift in Sources */,
 				CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */,
