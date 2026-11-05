@@ -177,7 +177,7 @@ struct BookScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             // Reading area: strictly between the title bar and the progress
             // bar row — the bar never overlays the text, at any offset.
             ZStack {
@@ -289,13 +289,13 @@ struct BookScreen: View {
     private func bookProgressBar(_ book: ReaderStore.Book) -> some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.black.opacity(0.12))
+                Capsule().fill(Color.black.opacity(0.25))
                 Capsule().fill(SelectionGradient())
-                    .frame(width: max(4, geo.size.width * progressFraction(book)))
+                    .frame(width: max(5, geo.size.width * progressFraction(book)))
             }
         }
-        .frame(height: 3)
-        .padding(.horizontal, 12)
+        .frame(height: 4)
+        .padding(.horizontal, 10)
     }
 
     private func progressFraction(_ book: ReaderStore.Book) -> Double {
@@ -660,17 +660,24 @@ struct BookScreen: View {
 /// Command handle for the parent screen to drive the web view.
 final class EpubController {
     weak var webView: WKWebView?
+    /// Body line height in points (from the applied style), so wheel steps
+    /// can snap to whole lines — pages then end at complete lines instead
+    /// of cutting one at the viewport edge.
+    var linePixelHeight: CGFloat = 24
 
-    /// Instant, viewport-precise scrolling through the native scroll view:
-    /// a tick moves exactly one readable screenful (the area between the
-    /// top/bottom insets), so text never lands under the bars.
+    /// Page-stepped scroll snapped to whole lines: a tick moves a multiple
+    /// of the line height that fits the readable area, so the last line of
+    /// every page is complete, with clean whitespace before the edge.
     func scrollByPage(fraction: Double) {
         guard let scrollView = webView?.scrollView else { return }
-        let readable = max(120, scrollView.bounds.height
-                            - scrollView.contentInset.top
-                            - scrollView.contentInset.bottom)
+        let lh = max(8, linePixelHeight)
+        let readable = scrollView.bounds.height
+            - scrollView.contentInset.top
+            - scrollView.contentInset.bottom
+        let linesPerPage = max(1, Int(readable / lh))
+        let lines = max(1, Int((fraction * Double(linesPerPage)).rounded()))
         var offset = scrollView.contentOffset
-        offset.y += readable * fraction
+        offset.y += CGFloat(lines) * lh
         let maxY = max(0, scrollView.contentSize.height + scrollView.contentInset.bottom
                         - scrollView.bounds.height)
         offset.y = min(max(offset.y, -scrollView.contentInset.top), maxY)
@@ -678,6 +685,8 @@ final class EpubController {
     }
 
     func applyStyle(to book: ReaderStore.Book) {
+        linePixelHeight = CGFloat((Double(book.fontSize)
+            * Double(EpubController.lineHeightMultiplier(book))).rounded())
         webView?.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
     }
 
@@ -701,11 +710,15 @@ final class EpubController {
         }
     }
 
+    /// The unitless CSS line-height multiplier for a book's spacing setting.
+    static func lineHeightMultiplier(_ book: ReaderStore.Book) -> Double {
+        [1.4, 1.55, 1.75][min(max(book.lineSpacing, 0), 2)]
+    }
+
     static func cssJS(for book: ReaderStore.Book) -> String {
         let families = ["Georgia,'Times New Roman',serif", "-apple-system,'Helvetica Neue',sans-serif"]
         let family = families[min(max(book.fontFamily, 0), families.count - 1)]
-        let lineHeights = [1.4, 1.55, 1.75]
-        let lineHeight = lineHeights[min(max(book.lineSpacing, 0), lineHeights.count - 1)]
+        let lineHeight = lineHeightMultiplier(book)
         let paddings = [10, 16, 24]
         let padding = paddings[min(max(book.margin, 0), paddings.count - 1)]
         return """
@@ -757,6 +770,8 @@ struct EpubWebView: UIViewRepresentable {
                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         cfg.add(context.coordinator, name: "selection")
         controller.webView = wv
+        controller.linePixelHeight = CGFloat((Double(book.fontSize)
+            * Double(EpubController.lineHeightMultiplier(book))).rounded())
         if let chapter {
             context.coordinator.loadedURL = chapter.url
             context.coordinator.appliedStyle = book
