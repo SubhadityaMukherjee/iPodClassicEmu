@@ -10,6 +10,8 @@ final class AlarmStore: ObservableObject {
     @Published var hour: Int { didSet { persist(); if enabled { schedule() } } }       // 1…12
     @Published var minute: Int { didSet { persist(); if enabled { schedule() } } }     // 0…59
     @Published var isPM: Bool { didSet { persist(); if enabled { schedule() } } }
+    /// True when notifications are denied — the alarm cannot ring.
+    @Published private(set) var permissionDenied = false
 
     private let d = UserDefaults.standard
     private enum K { static let enabled = "alarm.enabled"; static let hour = "alarm.hour"; static let minute = "alarm.minute"; static let pm = "alarm.pm" }
@@ -19,6 +21,9 @@ final class AlarmStore: ObservableObject {
         hour = d.object(forKey: K.hour) as? Int ?? 7
         minute = d.object(forKey: K.minute) as? Int ?? 0
         isPM = d.bool(forKey: K.pm)
+        // Insurance: make sure a pending request exists on every launch —
+        // reinstalling the request is free and heals any dropped state.
+        if enabled { schedule() }
     }
 
     /// 24-hour hour for display/scheduling.
@@ -39,12 +44,24 @@ final class AlarmStore: ObservableObject {
         d.set(isPM, forKey: K.pm)
     }
 
-    /// Requests notification permission if needed, then (re)schedules.
+    /// Verifies notification permission, then (re)schedules. Never silently
+    /// gives up: the outcome is published so the alarm screen can warn.
     func schedule() {
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, _ in
-            guard granted else { return }
-            self?.installRequest()
+        center.getNotificationSettings { [weak self] settings in
+            guard let self else { return }
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                DispatchQueue.main.async { self.permissionDenied = false }
+                self.installRequest()
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                    DispatchQueue.main.async { self.permissionDenied = !granted }
+                    if granted { self.installRequest() }
+                }
+            default:
+                DispatchQueue.main.async { self.permissionDenied = true }
+            }
         }
     }
 
@@ -54,6 +71,8 @@ final class AlarmStore: ObservableObject {
         content.body = "iPodClassic Alarm Clock"
         content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmBeep.caf"))
         content.categoryIdentifier = "ALARM"
+        // Break through Focus / Do Not Disturb (user can still opt out).
+        content.interruptionLevel = .timeSensitive
 
         var comps = DateComponents()
         comps.hour = hour24
@@ -61,7 +80,11 @@ final class AlarmStore: ObservableObject {
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
 
         let request = UNNotificationRequest(identifier: "alarm.daily", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                WheelEventLog.log("alarm schedule failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     func cancel() {
@@ -75,6 +98,7 @@ final class AlarmStore: ObservableObject {
         content.body = "iPodClassic Alarm Clock"
         content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmBeep.caf"))
         content.categoryIdentifier = "ALARM"
+        content.interruptionLevel = .timeSensitive
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 9 * 60, repeats: false)
         let request = UNNotificationRequest(identifier: "alarm.snooze", content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)

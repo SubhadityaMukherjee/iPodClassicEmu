@@ -26,6 +26,7 @@ struct ScreenView: View {
 /// music is playing) — brushed metal like the original.
 struct TitleBarView: View {
     @Environment(AppModel.self) private var model
+    @ObservedObject private var alarm = AlarmStore.shared
     @State private var now = Date()
 
     var body: some View {
@@ -41,6 +42,13 @@ struct TitleBarView: View {
                 Image(systemName: "lock.fill")
                     .font(Theme.font(10.5, .bold))
                     .foregroundStyle(Color(red: 0.55, green: 0.30, blue: 0.10))
+                    .padding(.trailing, 6)
+            }
+
+            if alarm.enabled {
+                Image(systemName: "alarm.clock.fill")
+                    .font(Theme.font(9.5, .medium))
+                    .foregroundStyle(Theme.inkDim)
                     .padding(.trailing, 6)
             }
 

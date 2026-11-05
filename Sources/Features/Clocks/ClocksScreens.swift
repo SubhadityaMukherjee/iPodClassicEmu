@@ -61,6 +61,14 @@ struct AlarmScreen: View {
 
             alarmToggle
                 .padding(.bottom, 8)
+
+            if alarm.enabled && alarm.permissionDenied {
+                Text("Notifications are off — alarm won't ring.\nAllow them in Settings.")
+                    .font(Theme.font(11, .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.red.opacity(0.85))
+                    .padding(.bottom, 6)
+            }
         }
         .onWheel { handle($0) }
     }
