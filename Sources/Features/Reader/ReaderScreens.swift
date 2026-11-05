@@ -3,6 +3,7 @@ import PDFKit
 import WebKit
 import UniformTypeIdentifiers
 import UIKit
+import os
 
 /// Reader menu: "Add from Files" plus the imported books.
 struct ReaderScreen: View {
@@ -217,6 +218,28 @@ struct BookScreen: View {
                     chapters = EpubParser.load(bookDir: Self.epubDir(for: book!))
                     highlights = HighlightStore.load(bookID: bookID, kind: .epub)
                 }
+                // QA hook: open a specific chapter (visual checks).
+                if let cs = ProcessInfo.processInfo.environment["READER_CHAPTER"],
+                   let c = Int(cs), chapters.indices.contains(c) {
+                    book?.chapterIndex = c
+                }
+                // QA hook: perform N page turns after load (visual checks).
+                if let ts = ProcessInfo.processInfo.environment["READER_TICKS"],
+                   let n = Int(ts), book?.kind == .epub {
+                    let controller = epubController
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        for i in 0..<n {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * Double(i)) {
+                                controller.scrollByPages(1)
+                            }
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * Double(n) + 0.3) {
+                            controller.scrollFraction { f in
+                                Logger(subsystem: "com.ipodclassic.app", category: "qa").notice("TICKS DONE fraction=\(f, privacy: .public)")
+                            }
+                        }
+                    }
+                }
             }
             // PDFKit posts selection changes; surface them in the
             // highlight bar (only one PDF view exists in the app).
@@ -372,7 +395,6 @@ struct BookScreen: View {
     }
 
     private static let fontSizes = [15, 17, 19, 22, 25]
-    private static let scrollFractions = [0.4, 0.7, 1.0]
 
     private var bookSettings: [BookSetting] {
         guard let book else { return [] }
@@ -623,8 +645,10 @@ struct BookScreen: View {
                 }
             } else {
                 // Instant viewport-fraction jumps track the wheel 1:1.
-                let step = Self.scrollFractions[min(max(book?.scrollStep ?? 1, 0), Self.scrollFractions.count - 1)]
-                epubController.scrollByPage(fraction: d > 0 ? step : -step)
+                // Column paging: one wheel tick turns a page (or several,
+                // per the Scroll Step setting). Instant, no animation.
+                let pages = [1, 2, 3][min(max(book?.scrollStep ?? 0, 0), 2)]
+                epubController.scrollByPages(d > 0 ? pages : -pages)
             }
         case .select:
             if panelOpen {
@@ -661,56 +685,17 @@ struct BookScreen: View {
 final class EpubController {
     weak var webView: WKWebView?
 
-    /// Instant vertical scroll that turns whole text lines: the browser
-    /// itself (caretRangeFromPoint) reports the rendered line box at the
-    /// window edge and the scroll lands exactly on its boundary — no
-    /// assumed line grid, so paragraph margins, headings and images never
-    /// break the alignment. Falls back to a viewport step when the edge
-    /// hits a gap. `fraction` selects direction and page count (0.4 → 1
-    /// page, 1.0 → ~2-3 pages) matching the Scroll Step setting.
-    func scrollByPage(fraction: Double) {
-        let js = """
-        (function(){
-          var COUNT = Math.max(1, Math.round(\(abs(fraction)) * 2.5));
-          var TOP = 8, BOTTOM = 8;
-          var H = window.innerHeight;
-          var max = document.documentElement.scrollHeight - H;
-          if (max <= 0) return;
-          var down = \(fraction) >= 0;
-          for (var i = 0; i < COUNT; i++) {
-            if (down) {
-              var r = document.caretRangeFromPoint(24, H - BOTTOM - 2);
-              var target = null;
-              if (r && r.startContainer) {
-                var el = r.startContainer.parentElement;
-                if (el && el !== document.body) {
-                  var rect = el.getBoundingClientRect();
-                  if (rect && rect.height > 0 && rect.height < H * 0.8) {
-                    target = rect.bottom + window.scrollY - TOP;
-                  }
-                }
-              }
-              window.scrollTo(0, target != null ? Math.min(max, target)
-                                                : Math.min(max, window.scrollY + H * 0.75));
-            } else {
-              var r2 = document.caretRangeFromPoint(24, TOP + 2);
-              var target2 = null;
-              if (r2 && r2.startContainer) {
-                var el2 = r2.startContainer.parentElement;
-                if (el2 && el2 !== document.body) {
-                  var rect2 = el2.getBoundingClientRect();
-                  if (rect2 && rect2.height > 0 && rect2.height < H * 0.8) {
-                    target2 = rect2.top + window.scrollY - H;
-                  }
-                }
-              }
-              window.scrollTo(0, target2 != null ? Math.max(0, target2)
-                                                 : Math.max(0, window.scrollY - H * 0.75));
-            }
-          }
-        })()
-        """
-        webView?.evaluateJavaScript(js, completionHandler: nil)
+    /// Turns `count` pages (negative = backwards). A column period is one
+    /// viewport width, so integer multiples land exactly on page starts.
+    /// Scrolled NATIVELY: window.scrollBy is unreliable for horizontal
+    /// overflow in WKWebView (the native scroll view ignores it), while
+    /// its contentSize does include the columns.
+    /// Turns `count` pages (negative = backwards). A column period is one
+    /// viewport width, so integer multiples land exactly on page starts.
+    /// Scrolled through the DOM — WebKit owns the horizontal offset and
+    /// reverts native scrollView writes.
+    func scrollByPages(_ count: Int) {
+        webView?.evaluateJavaScript("window.scrollBy(window.innerWidth * \(count), 0)", completionHandler: nil)
     }
 
     func applyStyle(to book: ReaderStore.Book) {
@@ -729,34 +714,54 @@ final class EpubController {
         webView?.evaluateJavaScript(HighlightJS.clearSelection, completionHandler: nil)
     }
 
+    /// Current position as a fraction of pages through the chapter
+    /// (native horizontal offset / range — no JS round trip).
     func scrollFraction(completion: @escaping (Double) -> Void) {
-        let js = "document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) : 1"
-        webView?.evaluateJavaScript(js) { value, _ in
-            let f = (value as? NSNumber)?.doubleValue ?? 0
-            DispatchQueue.main.async { completion(min(max(f, 0), 1)) }
+        guard let scrollView = webView?.scrollView else {
+            completion(0)
+            return
         }
+        let maxScroll = max(0, scrollView.contentSize.width - scrollView.bounds.width)
+        let fraction = maxScroll > 0 ? scrollView.contentOffset.x / maxScroll : 1
+        completion(min(max(fraction, 0), 1))
     }
 
+    /// Jumps to the page nearest to `fraction` through the chapter (DOM
+    /// scroll — WebKit reverts native horizontal offsets).
+    func restorePosition(fraction: Double) {
+        let js = """
+        (function(){
+          var period = window.innerWidth;
+          var max = document.documentElement.scrollWidth - window.innerWidth;
+          if (max <= 0) { window.scrollTo(0, 0); return; }
+          var maxIdx = Math.max(1, Math.round(max / period));
+          var idx = Math.round(\(fraction) * maxIdx);
+          window.scrollTo(idx * period, 0);
+        })()
+        """
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// Reader stylesheet: viewport-sized columns (true pages). Body is
+    /// one viewport tall, so the browser fills columns with COMPLETE
+    /// lines only; side margins come from body padding + an equal column
+    /// gap, giving every page identical breathing room.
     static func cssJS(for book: ReaderStore.Book) -> String {
         let families = ["Georgia,'Times New Roman',serif", "-apple-system,'Helvetica Neue',sans-serif"]
         let family = families[min(max(book.fontFamily, 0), families.count - 1)]
         let lineHeights = [1.4, 1.55, 1.75]
         let lineHeight = lineHeights[min(max(book.lineSpacing, 0), lineHeights.count - 1)]
         let paddings = [10, 16, 24]
-        let padding = paddings[min(max(book.margin, 0), paddings.count - 1)]
+        let side = paddings[min(max(book.margin, 0), paddings.count - 1)]
+        let vPad = book.fontSize / 2 + 8
         return """
         (function(){
           var s = document.getElementById('ipod-reader-css');
           if (!s) { s = document.createElement('style'); s.id = 'ipod-reader-css'; document.head.appendChild(s); }
-          s.textContent = "html{scroll-behavior:auto !important;font-size:\(book.fontSize)px !important;-webkit-text-size-adjust:100% !important;} body{font-size:\(book.fontSize)px !important;line-height:\(lineHeight) !important;font-family:\(family) !important;padding:\(padding)px !important;text-align:left !important;overflow-wrap:break-word !important;-webkit-hyphens:auto !important;hyphens:auto !important;orphans:2 !important;widows:2 !important;} p,div,li,blockquote,section,article,aside,td,th,dd,dt,figcaption,pre,code{font-size:inherit !important;} mark.ipod-hl{background:rgba(255,208,0,0.45) !important;color:inherit !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
+          s.textContent = "html{scroll-behavior:auto !important;font-size:\(book.fontSize)px !important;-webkit-text-size-adjust:100% !important;} body{margin:\(vPad)px \(side)px !important;height:calc(100vh - \(2 * vPad)px) !important;column-width:calc(100vw - \(2 * side)px) !important;column-gap:\(2 * side)px !important;column-fill:auto !important;font-size:\(book.fontSize)px !important;line-height:\(lineHeight) !important;font-family:\(family) !important;text-align:left !important;overflow-wrap:break-word !important;-webkit-hyphens:auto !important;hyphens:auto !important;orphans:2 !important;widows:2 !important;} p,div,li,blockquote,section,article,aside,td,th,dd,dt,figcaption,h1,h2,h3,h4,h5,h6{font-size:inherit !important;text-align:left !important;} mark.ipod-hl{background:rgba(255,208,0,0.45) !important;color:inherit !important;} img,svg,video{max-width:100% !important;height:auto !important;} pre,code{white-space:pre-wrap !important;word-break:break-word !important;}";
         })()
         """
     }
-}
-
-/// Wheel scroll fractions for the scroll-step setting (S/M/L).
-enum ReaderScrollStep {
-    static let fractions = [0.4, 0.7, 1.0]
 }
 
 /// Reflowing EPUB document view. Chapters are XHTML rendered natively by
@@ -777,17 +782,26 @@ struct EpubWebView: UIViewRepresentable {
         wv.navigationDelegate = context.coordinator
         wv.scrollView.indicatorStyle = .black
         wv.backgroundColor = .systemBackground
-        // Vertical reading scroll: no bounce overshoot, no safe-area
-        // shrinkage; insets pad the document's ends (the progress bar
-        // lives below the reading area in its own row).
+        // Pages are horizontal columns: no bounce overshoot, no insets —
+        // the column layout reserves its own breathing room.
         wv.scrollView.bounces = false
         wv.scrollView.contentInsetAdjustmentBehavior = .never
-        wv.scrollView.contentInset = UIEdgeInsets(
-            top: CGFloat(book.fontSize) + 8,
-            left: 0,
-            bottom: 12,
-            right: 0)
+        wv.scrollView.contentInset = .zero
+        // Books without <meta viewport> lay out at 980px (desktop width),
+        // so the visible 384pt window shows only a slice of each page.
+        // Force the layout viewport to the device width before first use.
+        let viewportScript = WKUserScript(source: """
+        document.addEventListener('DOMContentLoaded', function(){
+          if (!document.querySelector('meta[name=viewport]')) {
+            var m = document.createElement('meta');
+            m.name = 'viewport';
+            m.content = 'width=device-width, initial-scale=1';
+            document.head.appendChild(m);
+          }
+        });
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         let cfg = wv.configuration.userContentController
+        cfg.addUserScript(viewportScript)
         cfg.addUserScript(WKUserScript(source: HighlightJS.selectionWatch,
                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         cfg.add(context.coordinator, name: "selection")
@@ -839,10 +853,16 @@ struct EpubWebView: UIViewRepresentable {
                 webview.evaluateJavaScript(HighlightJS.restore(texts: parent.highlightTexts), completionHandler: nil)
             }
             let fraction = parent.restoreFraction
-            let js = "document.documentElement.scrollHeight > window.innerHeight + 1 ? window.scrollTo(0, \(fraction) * (document.documentElement.scrollHeight - window.innerHeight)) : window.scrollTo(0,0)"
-            webview.evaluateJavaScript(js, completionHandler: nil)
+            let controller = parent.controller
+            controller.restorePosition(fraction: fraction)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                webview.evaluateJavaScript(js, completionHandler: nil)
+                // Correct the first restore if layout was still settling —
+                // but NEVER yank back if reading already started (the
+                // entry position would stomp the current page).
+                if let scrollView = controller.webView?.scrollView,
+                   scrollView.contentOffset.x < 1 {
+                    controller.restorePosition(fraction: fraction)
+                }
             }
         }
     }
