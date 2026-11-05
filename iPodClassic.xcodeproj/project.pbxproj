@@ -16,6 +16,7 @@
 		19DEF858E4721571709A6227 /* Tick.caf in Resources */ = {isa = PBXBuildFile; fileRef = B7CEBDD3E18661EEC5335B6E /* Tick.caf */; };
 		248C4E3AF18DF139E23AF446 /* TickSoft.caf in Resources */ = {isa = PBXBuildFile; fileRef = B9E142990608C64F576307AC /* TickSoft.caf */; };
 		24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC3AA5879EA27E592945C2 /* AppSettings.swift */; };
+		271C6EA4232D8A7602B1A2FE /* EpubContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F775252FC095655EE129D8 /* EpubContainer.swift */; };
 		2A24788AE5C41023F1FB9BA4 /* ScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */; };
 		37973EB02E0F882BFF436B15 /* CameraShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = E06640F863889753F8AADBCC /* CameraShortcut.swift */; };
 		3F918DA5FAD2C48FFAD5F7C5 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DA368CF25B19FEF8CE837C /* NotesStore.swift */; };
@@ -36,6 +37,7 @@
 		8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */; };
 		926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */; };
 		9CA1FF167852EF7379AE269A /* PlayerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70FD912BBA672A8037F0ED9F /* PlayerModel.swift */; };
+		9F9E7B9E9A605FDA3A8D05B1 /* ReaderStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */; };
 		A467174044A38878D19727C9 /* NotesScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0ED83C7A1A44EB591609791 /* NotesScreens.swift */; };
 		A9627673D222586D1FCEE6A5 /* TrackLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFBE5E801AF3FDB135D7DD3 /* TrackLiveActivityWidget.swift */; };
 		A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA58EF527B138B0EF70E505F /* WheelHaptics.swift */; };
@@ -43,7 +45,9 @@
 		AE5B4F6578F64B17100A878D /* ExtrasScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 366D24A2D067433E923558F7 /* ExtrasScreens.swift */; };
 		AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B37641D1E5AA57A45A02D07 /* TimeFormat.swift */; };
 		AEBF95D90A2A55989C2F7BF4 /* iPodClassicWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47CFD786881A4C8FC43D00DB /* iPodClassicWidgets.swift */; };
+		AF0B029055EBE310E79A0C5C /* E2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FFA9E69DB00DC268067DD8B /* E2ETests.swift */; };
 		BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */; };
+		C33C03ED0D677C9F137A329C /* ReaderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */; };
 		CCE5269ADD98979ED5F089DB /* ClockFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE0B67D71510C6279340644 /* ClockFace.swift */; };
 		CE6E87EC8A810CF7BF7AA62F /* AlarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8919784990F005864723A97 /* AlarmStore.swift */; };
 		CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9168F602DF28123A3C7389 /* RecorderModel.swift */; };
@@ -51,6 +55,7 @@
 		CF75043444DF6D0ED71EE84F /* TrackActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */; };
 		D125AB206DD4B1FE8D5E9041 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */; };
 		D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */; };
+		D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF076EEBD7582FD738F82631 /* FeatureTests.swift */; };
 		E00856FD393CADE5D770BA48 /* MediaVolumeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */; };
 		E2D217A7A044EB9CB4696610 /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E080A36D7C3483C01ABF12C1 /* DeviceView.swift */; };
 		E821E9DB1EEC0479B053A20F /* AlarmRingerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */; };
@@ -112,6 +117,7 @@
 		2252FD3DDEC10A47D988C6D3 /* iPodClassicTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = iPodClassicTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2803B556B5B7050105E7CFB4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		2FE4F74ACAB7D2FE7FB6BD26 /* TimerStopwatchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerStopwatchModels.swift; sourceTree = "<group>"; };
+		2FFA9E69DB00DC268067DD8B /* E2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2ETests.swift; sourceTree = "<group>"; };
 		3471A066596E32FEE25ED63B /* ClocksScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClocksScreens.swift; sourceTree = "<group>"; };
 		366D24A2D067433E923558F7 /* ExtrasScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtrasScreens.swift; sourceTree = "<group>"; };
 		38EC3AA5879EA27E592945C2 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -130,6 +136,7 @@
 		6B37641D1E5AA57A45A02D07 /* TimeFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormat.swift; sourceTree = "<group>"; };
 		6B937A3043FF83416A501A21 /* SettingsScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreens.swift; sourceTree = "<group>"; };
 		70FD912BBA672A8037F0ED9F /* PlayerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerModel.swift; sourceTree = "<group>"; };
+		7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreens.swift; sourceTree = "<group>"; };
 		826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelTapTests.swift; sourceTree = "<group>"; };
 		83813FFB62AFA2BA71D7B05D /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
 		8DE0B67D71510C6279340644 /* ClockFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockFace.swift; sourceTree = "<group>"; };
@@ -140,8 +147,10 @@
 		B9E142990608C64F576307AC /* TickSoft.caf */ = {isa = PBXFileReference; path = TickSoft.caf; sourceTree = "<group>"; };
 		BA58EF527B138B0EF70E505F /* WheelHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelHaptics.swift; sourceTree = "<group>"; };
 		BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingScreen.swift; sourceTree = "<group>"; };
+		C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderStore.swift; sourceTree = "<group>"; };
 		C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRouter.swift; sourceTree = "<group>"; };
 		C6461E37C6B4E93CC838424E /* WheelInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelInput.swift; sourceTree = "<group>"; };
+		C7F775252FC095655EE129D8 /* EpubContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubContainer.swift; sourceTree = "<group>"; };
 		CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = iPodClassicWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
@@ -151,6 +160,7 @@
 		D8919784990F005864723A97 /* AlarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmStore.swift; sourceTree = "<group>"; };
 		D9362F34A0BC5DC660638C04 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
 		DAA84631978E21F3027590F4 /* ArtworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkView.swift; sourceTree = "<group>"; };
+		DF076EEBD7582FD738F82631 /* FeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureTests.swift; sourceTree = "<group>"; };
 		E06640F863889753F8AADBCC /* CameraShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraShortcut.swift; sourceTree = "<group>"; };
 		E080A36D7C3483C01ABF12C1 /* DeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceView.swift; sourceTree = "<group>"; };
 		E6386B4A55E1B30CAE0EA14D /* PhotoLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryModel.swift; sourceTree = "<group>"; };
@@ -268,6 +278,7 @@
 		73F203B71AC9E682E132909F /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				2FFA9E69DB00DC268067DD8B /* E2ETests.swift */,
 				826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */,
 			);
 			path = UITests;
@@ -317,6 +328,7 @@
 			isa = PBXGroup;
 			children = (
 				483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */,
+				DF076EEBD7582FD738F82631 /* FeatureTests.swift */,
 			);
 			path = iPodClassicTests;
 			sourceTree = "<group>";
@@ -332,6 +344,7 @@
 				C06BA3B35B3878AC2415FFAE /* Music */,
 				78BB416E64B1F2B6F055B8E2 /* Notes */,
 				034C687AE9E5BF3FA7729C80 /* Photos */,
+				C585A99F82AF0A68B03ACC74 /* Reader */,
 				0D96BB60127C6592C3E5E844 /* Recorder */,
 				09DEE4921A132571CEB56C35 /* Settings */,
 			);
@@ -365,6 +378,16 @@
 				70FD912BBA672A8037F0ED9F /* PlayerModel.swift */,
 			);
 			path = Music;
+			sourceTree = "<group>";
+		};
+		C585A99F82AF0A68B03ACC74 /* Reader */ = {
+			isa = PBXGroup;
+			children = (
+				C7F775252FC095655EE129D8 /* EpubContainer.swift */,
+				7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */,
+				C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */,
+			);
+			path = Reader;
 			sourceTree = "<group>";
 		};
 		D8A095556DCBD5F361F6000F /* Products */ = {
@@ -581,6 +604,7 @@
 				AE14F2C8C6963CBBCAE6E874 /* ClocksScreens.swift in Sources */,
 				035595170CCC029FAD33B040 /* CoverFlowScreen.swift in Sources */,
 				E2D217A7A044EB9CB4696610 /* DeviceView.swift in Sources */,
+				271C6EA4232D8A7602B1A2FE /* EpubContainer.swift in Sources */,
 				AE5B4F6578F64B17100A878D /* ExtrasScreens.swift in Sources */,
 				EEB1F20EF65FFEEE9D31DF66 /* HomeScreen.swift in Sources */,
 				D125AB206DD4B1FE8D5E9041 /* LiveActivityManager.swift in Sources */,
@@ -595,6 +619,8 @@
 				56BE29D96A4FF46D3EBF2E5B /* PhotosScreens.swift in Sources */,
 				9CA1FF167852EF7379AE269A /* PlayerModel.swift in Sources */,
 				0B5BE9ABA8833A94B6A38943 /* QASeed.swift in Sources */,
+				C33C03ED0D677C9F137A329C /* ReaderScreens.swift in Sources */,
+				9F9E7B9E9A605FDA3A8D05B1 /* ReaderStore.swift in Sources */,
 				CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */,
 				89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */,
 				8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */,
@@ -615,6 +641,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AF0B029055EBE310E79A0C5C /* E2ETests.swift in Sources */,
 				FC441BCF22529569C9289A56 /* WheelTapTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -624,6 +651,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */,
+				D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

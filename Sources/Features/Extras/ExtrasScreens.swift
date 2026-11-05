@@ -12,6 +12,7 @@ struct ExtrasScreen: View {
         [
             MenuItem(id: "clocks", title: "Clocks"),
             MenuItem(id: "calendar", title: "Calendar"),
+            MenuItem(id: "reader", title: "Reader", symbol: "book.fill"),
             MenuItem(id: "flashlight", title: "Flashlight", symbol: "flashlight.on.fill", showsChevron: false),
         ]
     }
@@ -29,6 +30,7 @@ struct ExtrasScreen: View {
             switch items[min(selection, items.count - 1)].id {
             case "clocks": model.push(.clocks)
             case "calendar": model.push(.calendar)
+            case "reader": model.push(.reader)
             case "flashlight": model.push(.flashlight)
             default: break
             }
@@ -136,7 +138,20 @@ struct MusicSearchScreen: View {
     @EnvironmentObject private var settings: AppSettings
     @State private var query = ""
     @State private var selection = 0
+    @State private var holdOpen = false
+    @State private var holdSelection = 0
     @FocusState private var focused: Bool
+
+    private var holdItems: [MenuItem] {
+        [
+            MenuItem(id: "artist", title: "Go to Artist"),
+            MenuItem(id: "album", title: "Go to Album"),
+        ]
+    }
+
+    private var holdSong: Song? {
+        results.indices.contains(selection) ? results[selection] : nil
+    }
 
     /// Ranked matches: title-starts-with > title-contains > artist > album.
     private var results: [Song] {
@@ -162,7 +177,8 @@ struct MusicSearchScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 4) {
+        ZStack {
+            VStack(spacing: 4) {
             HStack(spacing: 5) {
                 Image(systemName: "magnifyingglass")
                     .font(Theme.font(13, .semibold))
@@ -212,8 +228,14 @@ struct MusicSearchScreen: View {
                 style: .twoLine
             )
             .frame(maxHeight: .infinity)
+            }
+            .padding(.top, 4)
+
+            if holdOpen {
+                ModalHost { holdPanel }
+                    .zIndex(2)
+            }
         }
-        .padding(.top, 4)
         .onWheel { handle($0) }
         .onAppear {
             // Focusing during the push transition corrupts the layout engine
@@ -225,18 +247,73 @@ struct MusicSearchScreen: View {
         .onDisappear { focused = false }
     }
 
+    private var holdPanel: some View {
+        ModalPanel(title: holdSong?.title ?? "Search Result", onClose: { closeHold() }) {
+            MenuList(items: holdItems, selection: holdSelection, compact: true)
+                .padding(.top, 2)
+        }
+    }
+
+    private func closeHold() {
+        withAnimation(.easeIn(duration: 0.15)) { holdOpen = false }
+    }
+
+    /// Artist page for the held song; falls back to the album page.
+    private func goToArtist() {
+        guard let song = holdSong else { return }
+        let name = song.artistName
+        let artist = model.music.artists.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame })
+            ?? model.music.artists.first(where: { $0.name.localizedCaseInsensitiveContains(name) })
+        if let artist {
+            closeHold()
+            model.push(.artistDetail(artist.id.rawValue))
+        } else {
+            goToAlbum()
+        }
+    }
+
+    private func goToAlbum() {
+        guard let song = holdSong, let album = model.music.album(forSong: song) else {
+            closeHold()
+            return
+        }
+        closeHold()
+        model.push(.albumDetail(album.id.rawValue))
+    }
+
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            guard !query.isEmpty else { return }
-            moveListSelection(&selection, count: results.count, delta: d, settings: settings)
+            if holdOpen {
+                moveListSelection(&holdSelection, count: holdItems.count, delta: d, settings: settings)
+            } else {
+                guard !query.isEmpty else { return }
+                moveListSelection(&selection, count: results.count, delta: d, settings: settings)
+            }
         case .select:
-            let list = results
-            guard list.indices.contains(selection) else { return }
-            model.player.play(list, startingAt: selection)
-            model.push(.nowPlaying)
+            if holdOpen {
+                switch holdItems[min(holdSelection, holdItems.count - 1)].id {
+                case "artist": goToArtist()
+                case "album": goToAlbum()
+                default: break
+                }
+            } else {
+                let list = results
+                guard list.indices.contains(selection) else { return }
+                model.player.play(list, startingAt: selection)
+                model.push(.nowPlaying)
+            }
+        case .centerHold:
+            guard holdSong != nil else { break }
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.85)
+            focused = false  // dismiss the keyboard so the panel is visible
+            holdSelection = 0
+            withAnimation(.easeOut(duration: 0.18)) { holdOpen = true }
         case .menu:
-            if focused {
+            if holdOpen {
+                closeHold()
+            } else if focused {
                 focused = false
             } else {
                 model.pop()

@@ -78,6 +78,8 @@ enum Route: Hashable {
     // Extras
     case extras
     case flashlight
+    case reader
+    case readerBook(String)
 
     // Search
     case musicSearch
@@ -113,6 +115,7 @@ final class AppModel {
     let camera = CameraModel()
     let recorder = RecorderModel()
     let notes = NotesStore()
+    let reader = ReaderStore.shared
     let timer = TimerModel()
     let stopwatch = StopwatchModel()
     let settings = AppSettings.shared
@@ -148,6 +151,7 @@ final class AppModel {
         case "calendar": return .calendar
         case "extras": return .extras
         case "flashlight": return .flashlight
+        case "reader": return .reader
         case "search": return .musicSearch
         case "alarm": return .alarm
         case "timer": return .timer
