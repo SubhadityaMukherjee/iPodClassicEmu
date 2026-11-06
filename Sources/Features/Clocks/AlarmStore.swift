@@ -94,11 +94,12 @@ final class AlarmStore: ObservableObject {
     private func installRequest() {
         let content = UNMutableNotificationContent()
         content.title = "Alarm"
-        content.body = "iPodClassic Alarm Clock"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmBeep.caf"))
+        content.body = "\(displayText) · \(repeatLabel)"
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmSiren.caf"))
         content.categoryIdentifier = "ALARM"
         // Break through Focus / Do Not Disturb (user can still opt out).
         content.interruptionLevel = .timeSensitive
+        content.userInfo["kind"] = "alarm"
 
         let center = UNUserNotificationCenter.current()
         let add: (UNNotificationRequest) -> Void = { request in
@@ -186,8 +187,12 @@ final class AlarmStore: ObservableObject {
         guard lastFireDay != key else { return }
         lastFireDay = key
         // The app handles today's ring; drop today's (duplicate) system
-        // notification and let schedule() re-arm tomorrow's.
-        cancel()
+        // notification — both pending AND already-delivered, or the banner
+        // would flash alongside the ringer overlay.
+        let ids = ["alarm.daily", "alarm.snooze"] + (1...7).map { "alarm.day.\($0)" }
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+        center.removeDeliveredNotifications(withIdentifiers: ids)
         stopKeepAlive()
         DispatchQueue.main.async {
             AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
@@ -199,8 +204,8 @@ final class AlarmStore: ObservableObject {
     func snooze() {
         let content = UNMutableNotificationContent()
         content.title = "Snoozed Alarm"
-        content.body = "iPodClassic Alarm Clock"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmBeep.caf"))
+        content.body = "\(displayText) · \(repeatLabel)"
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmSiren.caf"))
         content.categoryIdentifier = "ALARM"
         content.interruptionLevel = .timeSensitive
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 9 * 60, repeats: false)
@@ -244,7 +249,15 @@ final class AlarmNotificationsDelegate: NSObject, UNUserNotificationCenterDelega
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if response.notification.request.content.categoryIdentifier == "ALARM" {
-            startRinger(for: response.notification)
+            switch response.actionIdentifier {
+            case "SNOOZE_ALARM":
+                // Re-arm in 9 minutes without opening the app.
+                AlarmStore.shared.snooze()
+            case "STOP_ALARM":
+                break  // banner dismissed; nothing further
+            default:
+                startRinger(for: response.notification)
+            }
         }
         completionHandler()
     }
@@ -267,7 +280,19 @@ enum AlarmNotifications {
     static let delegate = AlarmNotificationsDelegate()
 
     static func configureDelegate() {
-        UNUserNotificationCenter.current().delegate = delegate
+        let center = UNUserNotificationCenter.current()
+        // Actionable alarm notifications: Stop / Snooze right on the
+        // banner — critical for the app-closed case, where the notification
+        // IS the alarm.
+        let stop = UNNotificationAction(identifier: "STOP_ALARM", title: "Stop",
+                                        options: [.destructive])
+        let snooze = UNNotificationAction(identifier: "SNOOZE_ALARM", title: "Snooze 9 min",
+                                          options: [])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: "ALARM", actions: [stop, snooze],
+                                   intentIdentifiers: [], options: [])
+        ])
+        center.delegate = delegate
         delegate.onStartRinger = { context in
             // Routed to the live AppModel through the shared hook.
             AppModelRouter.shared.model?.startRinger(context)
