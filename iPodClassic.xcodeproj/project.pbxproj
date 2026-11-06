@@ -33,6 +33,7 @@
 		7F8ADF4FC8E0E7C16628F2EA /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9362F34A0BC5DC660638C04 /* CameraModel.swift */; };
 		82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2252DE6110093E2FF64B7404 /* CRTOverlay.swift */; };
 		84BE9FB1EF58F9433F774C38 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FF7E771867E7BE0B289EE5 /* AppModel.swift */; };
+		891A94F7191B7BF1142A1A75 /* AlarmSiren.caf in Resources */ = {isa = PBXBuildFile; fileRef = C3E17F4B976CB99FD464BC72 /* AlarmSiren.caf */; };
 		89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59116EF21FFA3688484F038F /* RecorderScreens.swift */; };
 		8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */; };
 		926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */; };
@@ -150,6 +151,7 @@
 		BA58EF527B138B0EF70E505F /* WheelHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelHaptics.swift; sourceTree = "<group>"; };
 		BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingScreen.swift; sourceTree = "<group>"; };
 		C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderStore.swift; sourceTree = "<group>"; };
+		C3E17F4B976CB99FD464BC72 /* AlarmSiren.caf */ = {isa = PBXFileReference; path = AlarmSiren.caf; sourceTree = "<group>"; };
 		C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRouter.swift; sourceTree = "<group>"; };
 		C6461E37C6B4E93CC838424E /* WheelInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelInput.swift; sourceTree = "<group>"; };
 		C7F775252FC095655EE129D8 /* EpubContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubContainer.swift; sourceTree = "<group>"; };
@@ -299,6 +301,7 @@
 			isa = PBXGroup;
 			children = (
 				0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */,
+				C3E17F4B976CB99FD464BC72 /* AlarmSiren.caf */,
 				674DFC06B8F7A1B1F904D34D /* RubberBand.caf */,
 				B7CEBDD3E18661EEC5335B6E /* Tick.caf */,
 				B9E142990608C64F576307AC /* TickSoft.caf */,
@@ -578,6 +581,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */,
+				891A94F7191B7BF1142A1A75 /* AlarmSiren.caf in Resources */,
 				CF5321B4390A5BE161626910 /* Assets.xcassets in Resources */,
 				00FA551F0D6D7CFE806DF647 /* RubberBand.caf in Resources */,
 				19DEF858E4721571709A6227 /* Tick.caf in Resources */,
