@@ -87,7 +87,7 @@ struct NowPlayingScreen: View {
     private var infoRow: some View {
         HStack(alignment: .top, spacing: 10) {
             artwork
-                .frame(width: 132, height: 132)
+                .frame(width: 132, alignment: .top)
 
             VStack(alignment: .leading, spacing: 3) {
                 MarqueeText(text: qaInfo?.title ?? song?.title ?? "Not Playing",
@@ -106,14 +106,34 @@ struct NowPlayingScreen: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// QA (FAKE_LIBRARY): draw a fake cover so simulator screenshots show
+    /// the real artwork treatment (incl. the reflection) without a library.
+    private var qaArtwork: Bool {
+        song == nil && ProcessInfo.processInfo.environment["FAKE_LIBRARY"] == "1"
+    }
+
+    /// The cover with a fading mirror image below it — the classic iPod's
+    /// glass-shelf look. No artwork: plain placeholder, no reflection.
     @ViewBuilder
     private var artwork: some View {
-        if let aw = song?.artwork {
-            ArtworkView(artwork: aw, width: 300, height: 300)
-                .frame(width: 132, height: 132)
-                .clipShape(RoundedRectangle(cornerRadius: 2))
-                .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.35), lineWidth: 0.8))
-                .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+        if song?.artwork != nil || qaArtwork {
+            VStack(spacing: 2) {
+                artworkFace
+                    .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                artworkFace
+                    .scaleEffect(y: -1)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black.opacity(0.45), location: 0),
+                                .init(color: .clear, location: 0.6),
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .frame(height: 44, alignment: .top)
+                    .clipped()
+            }
         } else {
             RoundedRectangle(cornerRadius: 2)
                 .fill(Color(white: 0.85))
@@ -125,6 +145,33 @@ struct NowPlayingScreen: View {
                 )
                 .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.2), lineWidth: 0.8))
         }
+    }
+
+    @ViewBuilder
+    private var artworkFace: some View {
+        if let aw = song?.artwork {
+            cover(for: aw)
+        } else {
+            ZStack {
+                LinearGradient(
+                    colors: [Color(red: 0.78, green: 0.36, blue: 0.20), Color(red: 0.42, green: 0.10, blue: 0.08)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                Image(systemName: "music.note")
+                    .font(Theme.font(44))
+                    .foregroundStyle(Color.white.opacity(0.9))
+            }
+            .frame(width: 132, height: 132)
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.35), lineWidth: 0.8))
+        }
+    }
+
+    private func cover(for aw: Artwork) -> some View {
+        ArtworkView(artwork: aw, width: 300, height: 300)
+            .frame(width: 132, height: 132)
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.35), lineWidth: 0.8))
     }
 
     @ViewBuilder
