@@ -92,6 +92,10 @@ final class AlarmStore: ObservableObject {
     }
 
     private func installRequest() {
+        // Clean slate first: stale requests from earlier repeat-mode
+        // toggles would otherwise ring alongside the current set (the
+        // alarm "rings twice" and resurrects after Stop).
+        cancel()
         let content = UNMutableNotificationContent()
         content.title = "Alarm"
         content.body = "\(displayText) · \(repeatLabel)"
