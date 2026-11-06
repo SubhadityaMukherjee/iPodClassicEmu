@@ -22,6 +22,11 @@ struct iPodClassicApp: App {
            let bundle = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundle)
         }
+        // QA hook: DIM_AFTER forces the idle-dim threshold in seconds
+        // (screenshots / UI tests; the sim ignores injected defaults).
+        if let s = ProcessInfo.processInfo.environment["DIM_AFTER"], let v = Int(s) {
+            AppSettings.shared.dimAfterSeconds = v
+        }
         _model = State(initialValue: AppModel())
 
         AlarmNotifications.configureDelegate()

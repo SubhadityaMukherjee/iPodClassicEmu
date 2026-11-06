@@ -239,6 +239,11 @@ struct BookScreen: View {
                    let c = Int(cs), chapters.indices.contains(c) {
                     book?.chapterIndex = c
                 }
+                // QA hook: open at an in-chapter fraction (visual checks).
+                if let fs = ProcessInfo.processInfo.environment["READER_FRACTION"],
+                   let f = Double(fs), book?.kind == .epub {
+                    book?.scrollFraction = f
+                }
                 // QA hook: perform N page turns after load (visual checks).
                 if let ts = ProcessInfo.processInfo.environment["READER_TICKS"],
                    let n = Int(ts), book?.kind == .epub {

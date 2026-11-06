@@ -5,12 +5,15 @@ import MediaPlayer
 struct DeviceView: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
-    @State private var heartbeat = Date()
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
+            let wheelSize = w * 0.66
+            // Space left in the body below the LCD (hold switch 24 + screen
+            // top padding 2 + screen height).
+            let free = max(0, h - (h * 0.016 + 26 + w * 0.955 * 0.75 + wheelSize))
             ZStack {
                 Theme.body(settings.theme).ignoresSafeArea()
 
@@ -44,10 +47,14 @@ struct DeviceView: View {
                         .shadow(color: .black.opacity(0.35), radius: 5, x: 0, y: 1)
                         .padding(.top, 2)
 
+                    // The wheel floats in the lower body like the classic's
+                    // face — wheel center lands at ~71% of screen height,
+                    // clear of both the LCD and the bottom edge.
                     Spacer(minLength: 0)
+                        .frame(height: free * 0.55)
 
                     ClickWheelView()
-                        .frame(width: w * 0.66, height: w * 0.66)
+                        .frame(width: wheelSize, height: wheelSize)
                         // Faint ambient shadow so the wheel reads as seated
                         // inside the body.
                         .background(
@@ -57,9 +64,21 @@ struct DeviceView: View {
                                 .offset(y: 2)
                                 .padding(-4)
                         )
+                        // Detached lighting: when the display dims, the wheel
+                        // sinks deeper than the screen — unlit hardware under
+                        // glass, not part of the touchscreen. Backlight
+                        // Illusion controls this detached dim.
+                        .overlay {
+                            Circle()
+                                .fill(Color.black.opacity(
+                                    isDimmed && settings.backlightIllusion ? 0.30 : 0
+                                ))
+                                .animation(.easeIn(duration: 0.3), value: isDimmed)
+                                .allowsHitTesting(false)
+                        }
 
                     Spacer(minLength: 0)
-                        .frame(height: h * 0.045)
+                        .frame(height: free * 0.45)
                 }
             }
         }
@@ -70,15 +89,18 @@ struct DeviceView: View {
             if model.screenAsleep { sleepOverlay }
         }
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
-            heartbeat = Date()
+            model.tickIdle()
         }
         .onReceive(model.controlBus.map { _ in () }) { _ in
-            // Input ends the dim immediately rather than waiting for the heartbeat.
-            heartbeat = Date()
+            // Input ends the dim immediately rather than waiting for the tick.
+            model.tickIdle()
         }
     }
 
     private var isDimmed: Bool {
+        // Reading the heartbeat (not just writing it) is what invalidates
+        // the view — SwiftUI ignores writes to state body never reads.
+        _ = model.clockTick
         let after = TimeInterval(settings.dimAfterSeconds)
         guard after > 0 else { return false }
         return model.idleSeconds > after && model.ringer == nil
@@ -135,6 +157,13 @@ struct HoldSwitchView: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    private var isDimmed: Bool {
+        _ = model.clockTick
+        let after = TimeInterval(settings.dimAfterSeconds)
+        guard after > 0 else { return false }
+        return model.idleSeconds > after && model.ringer == nil
+    }
+
     var body: some View {
         let silver = settings.theme == 1
         HStack {
@@ -170,6 +199,16 @@ struct HoldSwitchView: View {
                         .padding(.horizontal, 4)
                 }
                 .frame(width: 44, height: 18)
+                // Detached lighting: the lock sinks with the wheel, deeper
+                // than the screen (Backlight Illusion).
+                .overlay {
+                    Capsule()
+                        .fill(Color.black.opacity(
+                            isDimmed && settings.backlightIllusion ? 0.30 : 0
+                        ))
+                        .animation(.easeIn(duration: 0.3), value: isDimmed)
+                        .allowsHitTesting(false)
+                }
             }
             .buttonStyle(.plain)
         }
