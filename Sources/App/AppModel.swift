@@ -185,6 +185,7 @@ final class AppModel {
         case "recorder": return .recorder
         case "recordings": return .recordings
         case "notes": return .notes
+        case "noteEditor": return .noteEditor(QASeed.qaNoteName)
         case "clocks": return .clocks
         case "calendar": return .calendar
         case "extras": return .extras

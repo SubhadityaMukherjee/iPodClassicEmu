@@ -151,12 +151,23 @@ struct NotesListScreen: View {
 }
 
 /// Plain text editor over one note; touch typing with keyboard, autosave.
+/// The wheel scrolls the note; Done (below) or center dismisses the keyboard.
 struct NoteEditorScreen: View {
     @Environment(AppModel.self) private var model
     let fileName: String
 
     @State private var text = ""
     @State private var loaded = false
+    @State private var textView: UITextView?
+    @State private var keyboardVisible = false
+    @State private var lastScrollY: CGFloat = 0
+
+    private let scrollStep: CGFloat = 26
+
+    private var qaEnabled: Bool {
+        fileName == QASeed.qaNoteName
+            && ProcessInfo.processInfo.environment["NOTES_QA"] == "1"
+    }
 
     var body: some View {
         TextEditor(text: $text)
@@ -173,6 +184,28 @@ struct NoteEditorScreen: View {
             // Dark keyboard; explicit ink color keeps the text black.
             .environment(\.colorScheme, .dark)
             .onWheel { handle($0) }
+            .background(
+                // Anchor that hands us the TextEditor's backing UITextView
+                // so the wheel can scroll it and Done can drop the keyboard.
+                TextViewProbe { textView = $0 }
+            )
+            .overlay(alignment: .bottom) {
+                if keyboardVisible {
+                    doneButton
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                // QA readout (NOTES_QA=1): the backing text view's scroll
+                // offset, so UI tests can assert the wheel really scrolls.
+                if qaEnabled {
+                    Text("y=\(Int(lastScrollY))")
+                        .font(Theme.font(9, .bold))
+                        .foregroundStyle(Theme.inkDim)
+                        .monospacedDigit()
+                        .padding(4)
+                }
+            }
             .onChange(of: text) { _, newValue in
                 if loaded {
                     model.notes.saveDebounced(fileName, newValue)
@@ -180,7 +213,19 @@ struct NoteEditorScreen: View {
             }
             .onAppear {
                 text = model.notes.read(fileName)
+                // QA hook (NOTES_QA=1): fill the QA note with scrollable
+                // numbered text for wheel-scroll tests and screenshots.
+                if text.isEmpty, qaEnabled {
+                    text = (1...60).map { "Line \($0): the click wheel scrolls this note." }
+                        .joined(separator: "\n")
+                }
                 loaded = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.keyboardWillShowNotification)) { _ in
+                withAnimation(.easeOut(duration: 0.18)) { keyboardVisible = true }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.keyboardWillHideNotification)) { _ in
+                withAnimation(.easeIn(duration: 0.18)) { keyboardVisible = false }
             }
             .onDisappear {
                 model.notes.write(fileName, text)
@@ -193,9 +238,36 @@ struct NoteEditorScreen: View {
             }
     }
 
+    private var doneButton: some View {
+        Button {
+            textView?.resignFirstResponder()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.down")
+                Text("Done")
+            }
+            .font(Theme.font(12.5, .bold))
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color(white: 0.85)))
+            .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 8)
+    }
+
     private func handle(_ event: ControlEvent) {
-        // Typing happens by touch; the wheel steps out of the editor.
+        // Typing happens by touch; the wheel scrolls, center/Done dismiss
+        // the keyboard, MENU steps out of the editor.
         switch event {
+        case .tick(let d):
+            WheelFeedback.tick(dir: d)
+            scrollBy(d > 0 ? scrollStep : -scrollStep)
+        case .select:
+            if keyboardVisible {
+                textView?.resignFirstResponder()
+            }
         case .menu:
             model.notes.write(fileName, text)
             model.pop()
@@ -212,5 +284,56 @@ struct NoteEditorScreen: View {
         }
     }
 
+    /// Scroll the backing text view by `delta` points, clamped to the
+    /// document (adjusted insets cover the keyboard's automatic inset).
+    private func scrollBy(_ delta: CGFloat) {
+        guard let tv = textView else { return }
+        let target = clampedScrollOffset(
+            current: tv.contentOffset.y,
+            delta: delta,
+            contentHeight: tv.contentSize.height,
+            viewportHeight: tv.bounds.height,
+            topInset: tv.adjustedContentInset.top,
+            bottomInset: tv.adjustedContentInset.bottom
+        )
+        tv.setContentOffset(CGPoint(x: 0, y: target), animated: false)
+        lastScrollY = target
+    }
+
     @State private var shareText: String?
+}
+
+/// Wheel-scroll target for the notes editor: `current + delta` clamped to
+/// the document range. A short document (content shorter than the viewport)
+/// never moves. (Unit-tested: NotesScrollTests.)
+func clampedScrollOffset(current: CGFloat, delta: CGFloat, contentHeight: CGFloat,
+                         viewportHeight: CGFloat, topInset: CGFloat, bottomInset: CGFloat) -> CGFloat {
+    let lowest = -topInset
+    let highest = max(lowest, contentHeight - viewportHeight + bottomInset)
+    return min(max(current + delta, lowest), highest)
+}
+
+/// Invisible anchor that locates the TextEditor's backing UITextView: it
+/// walks up from its own layer to the first ancestor that owns one — the
+/// editor's text view, since no other TextEditor exists in the app.
+private struct TextViewProbe: UIViewRepresentable {
+    let onFound: (UITextView) -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.isUserInteractionEnabled = false
+        DispatchQueue.main.async {
+            var parent = v.superview
+            while let p = parent {
+                if let tv = p.firstSubview(ofType: UITextView.self) {
+                    onFound(tv)
+                    return
+                }
+                parent = p.superview
+            }
+        }
+        return v
+    }
+
+    func updateUIView(_ v: UIView, context: Context) {}
 }
