@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iPodClassic — a real iPod Classic, natively on iOS</title>
+<meta name="description" content="A native iOS app that puts a full iPod Classic in your pocket: real click wheel with haptics, scanlined LCD, Apple Music, a PDF/EPUB reader, camera, recorder, weekday alarms and Live Activities.">
+<style>
+  :root{
+    --bg:#0b0b0d; --panel:#151518; --ink:#e8e8ea; --dim:#9a9aa2;
+    --sel1:#3b82f6; --sel2:#1d4ed8; --line:#26262b; --paper:#f1f1f1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:#8ab4ff;text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+  header{padding:64px 0 30px;text-align:center}
+  header h1{font-size:clamp(30px,6vw,52px);margin:0 0 6px;letter-spacing:-.5px}
+  header p.sub{color:var(--dim);font-size:18px;margin:0 auto 26px;max-width:640px}
+  .hero{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin:26px 0 8px}
+  .hero img{width:230px;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.55)}
+  .cta{margin:22px 0 8px}
+  .btn{display:inline-block;background:linear-gradient(180deg,var(--sel1),var(--sel2));color:#fff;
+       padding:10px 22px;border-radius:10px;font-weight:600;margin:4px}
+  .btn:hover{text-decoration:none;filter:brightness(1.1)}
+  h2{font-size:28px;margin:56px 0 12px;letter-spacing:-.3px}
+  h3{font-size:19px;margin:26px 0 6px;color:#cfd6ff}
+  .muted{color:var(--dim)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:18px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card ul{margin:8px 0 0;padding-left:18px}
+  .card li{margin:5px 0;color:#c9c9cf}
+  .gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:18px 0}
+  .gallery figure{margin:0;text-align:center}
+  .gallery img{width:100%;border-radius:12px;border:1px solid var(--line)}
+  .gallery figcaption{color:var(--dim);font-size:13px;margin-top:6px}
+  pre{background:#0f0f12;border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto;font-size:13.5px}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  p code, li code{background:#1d1d22;border-radius:5px;padding:1px 6px;font-size:.88em}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel);color:#cfd6ff}
+  /* CSS click wheel */
+  .wheel{position:relative;width:190px;height:190px;border-radius:50%;margin:10px auto;
+         background:radial-gradient(circle at 50% 42%,#2e2e33,#1a1a1e 68%,#101013);
+         border:3px solid #060607;box-shadow:0 12px 34px rgba(0,0,0,.6)}
+  .wheel::before{content:"";position:absolute;inset:31%;border-radius:50%;background:radial-gradient(circle at 50% 40%,#0c0c0f,#000);box-shadow:inset 0 2px 6px rgba(0,0,0,.8)}
+  .wheel span{position:absolute;color:#7e7e86;font-size:12px;font-weight:600;letter-spacing:1px}
+  .wheel .menu{top:12px;left:0;right:0;text-align:center}
+  .wheel .prev{left:16px;top:46%} .wheel .next{right:12px;top:46%} .wheel .play{bottom:12px;left:0;right:0;text-align:center}
+  .wheel i{position:absolute;width:1px;height:26px;background:#3c3c42}
+  .wheel i:nth-of-type(1){left:52px;top:58px;transform:rotate(-45deg)}
+  .wheel i:nth-of-type(2){right:52px;top:58px;transform:rotate(45deg)}
+  .wheel i:nth-of-type(3){left:52px;bottom:58px;transform:rotate(45deg)}
+  .wheel i:nth-of-type(4){right:52px;bottom:58px;transform:rotate(-45deg)}
+  footer{border-top:1px solid var(--line);margin-top:64px;padding:26px 0 48px;color:var(--dim);font-size:14px}
+  @media(max-width:640px){.hero img{width:44%}}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>iPodClassic</h1>
+  <p class="sub">A native iOS app that puts a full iPod Classic in your pocket — a real click wheel with haptics and tick sounds, a scanlined LCD, the classic menus, wired to Apple Music. Plus a PDF/EPUB reader, camera, voice recorder, weekday alarms and Live Activities.</p>
+  <div class="hero">
+    <img src="screenshots/home.png" alt="Home menu">
+    <img src="screenshots/nowplaying.png" alt="Now Playing">
+    <img src="screenshots/reader.png" alt="Book reader">
+  </div>
+  <div class="cta">
+    <a class="btn" href="https://github.com/SubhadityaMukherjee/iPodClassicEmu">Source on GitHub</a>
+    <a class="btn" href="#build">Build &amp; install</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h2>The device</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="wheel">
+        <span class="menu">MENU</span><span class="prev">&#9198;</span><span class="next">&#9197;</span>
+        <span class="play">&#9654;&#10074;&#10074;</span><i></i><i></i><i></i><i></i>
+      </div>
+      <p class="muted" style="text-align:center;margin:4px 0 0">The wheel, in CSS</p>
+    </div>
+    <div class="card">
+      <ul>
+        <li><strong>Real click wheel</strong> — angle-based ticks (15°/detent), press-and-turn, hold timers with repeat, CoreHaptics feedback and click sounds</li>
+        <li><strong>LCD with CRT scanlines</strong>, backlight illusion, working Hold switch, dimmed wheel</li>
+        <li><strong>Classic quirks</strong> — MENU pops one level, MENU-hold goes home, PLAY-hold sleeps</li>
+        <li>Wheel-only navigation; deep screens stay alive like real menu drills</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Music — Apple Music via MusicKit</h2>
+  <div class="grid">
+    <div class="card"><h3>Library</h3><ul>
+      <li>Artists, albums, songs, genres, playlists, recently added</li>
+      <li>Auto-refresh on foreground and when opening Music</li>
+      <li>Cover Flow with 3D flipping covers</li>
+    </ul></div>
+    <div class="card"><h3>Playback</h3><ul>
+      <li>Now Playing: marquee text, wheel volume, scrub, shuffle, repeat</li>
+      <li>Background playback; tracks auto-advance in sync, even backgrounded</li>
+      <li><strong>Queue</strong>: hold center on a song → play next; Up Next list with jump-to-entry</li>
+      <li><strong>AirPlay</strong> from the hold menu</li>
+    </ul></div>
+    <div class="card"><h3>Search</h3><ul>
+      <li>Ranked results: title &gt; artist &gt; album</li>
+      <li>Hold center on a result → jump to the artist or album</li>
+    </ul></div>
+  </div>
+
+  <h2>Clocks</h2>
+  <div class="grid">
+    <div class="card"><h3>Alarms</h3><ul>
+      <li>iPhone-style weekday repeats (S M T W T F S; none = daily)</li>
+      <li>In-app ringer with Snooze/Stop; fires via notifications even when closed</li>
+    </ul></div>
+    <div class="card"><h3>Timer &amp; Stopwatch</h3><ul>
+      <li><strong>Live Activities</strong> on the lock screen and Dynamic Island</li>
+      <li>Timer flips to “Done” if it fires while backgrounded</li>
+    </ul></div>
+  </div>
+
+  <h2>Reader — PDF &amp; EPUB</h2>
+  <div class="grid">
+    <div class="card"><h3>Reading</h3><ul>
+      <li>Import from the Files app; stays on-device</li>
+      <li>True page-based EPUB reading — pages hold complete lines only, one tick = one page</li>
+      <li>Font 11–25 px, serif/sans, line spacing, margins, screen dimming</li>
+      <li>PDFs via PDFKit (continuous or one-page), wheel-driven</li>
+    </ul></div>
+    <div class="card"><h3>Memory &amp; marks</h3><ul>
+      <li>Chapter titles from the book’s own table of contents</li>
+      <li>Position survives force-quits and app updates (autosave + background flush)</li>
+      <li>Page-accurate whole-book progress bar</li>
+      <li>Highlights persist and mirror into a Notes file; PDF highlights are written into the PDF itself</li>
+    </ul></div>
+  </div>
+
+  <h2>Everything else</h2>
+  <div class="grid">
+    <div class="card"><h3>Camera</h3><ul><li>Wheel zoom, prev/next = aspect ratio, hold = lens flip, center = capture</li></ul></div>
+    <div class="card"><h3>Voice Memos</h3><ul><li>Background-safe long recordings, pause/resume, playback, share sheet</li></ul></div>
+    <div class="card"><h3>Photos &amp; Notes</h3><ul><li>Photo grid + full-screen detail; Notes editor with autosave, visible in Files</li></ul></div>
+    <div class="card"><h3>Extras</h3><ul><li>Calendar, flashlight, About; settings for haptics, wheel, display, playback, themes</li></ul></div>
+  </div>
+
+  <h2>Screenshots</h2>
+  <div class="gallery">
+    <figure><img src="screenshots/music.png" alt=""><figcaption>Music menu</figcaption></figure>
+    <figure><img src="screenshots/songs.png" alt=""><figcaption>Songs</figcaption></figure>
+    <figure><img src="screenshots/queue.png" alt=""><figcaption>Song options / Up Next</figcaption></figure>
+    <figure><img src="screenshots/search.png" alt=""><figcaption>Search</figcaption></figure>
+    <figure><img src="screenshots/alarm.png" alt=""><figcaption>Alarm repeats</figcaption></figure>
+    <figure><img src="screenshots/timer.png" alt=""><figcaption>Timer</figcaption></figure>
+    <figure><img src="screenshots/reader_settings.png" alt=""><figcaption>Book settings</figcaption></figure>
+    <figure><img src="screenshots/notes.png" alt=""><figcaption>Notes</figcaption></figure>
+    <figure><img src="screenshots/photos.png" alt=""><figcaption>Photos</figcaption></figure>
+    <figure><img src="screenshots/recorder.png" alt=""><figcaption>Voice memos</figcaption></figure>
+    <figure><img src="screenshots/camera.png" alt=""><figcaption>Camera (needs a device)</figcaption></figure>
+    <figure><img src="screenshots/extras.png" alt=""><figcaption>Extras</figcaption></figure>
+    <figure><img src="screenshots/settings.png" alt=""><figcaption>Settings</figcaption></figure>
+  </div>
+
+  <h2 id="build">Build &amp; install</h2>
+  <p>Requirements: <strong>Xcode 26+</strong> (iOS 18 SDK), <a href="https://github.com/yonyz/xcodegen"><code>xcodegen</code></a>, an Apple ID for signing (the free Personal Team works), and a <strong>physical iPhone</strong> for music, camera, haptics and Live Activities.</p>
+<pre><code>brew install xcodegen
+xcodegen generate                    # regenerate the .xcodeproj from project.yml
+open iPodClassic.xcodeproj           # set your signing team, then Run
+
+# or headless:
+xcodebuild -project iPodClassic.xcodeproj -scheme iPodClassic \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
+
+# on your device:
+xcodebuild -project iPodClassic.xcodeproj -scheme iPodClassic \
+  -destination 'id=&lt;YOUR-UDID&gt;' -allowProvisioningUpdates build
+xcrun devicectl device install app --device &lt;YOUR-UDID&gt; \
+  ~/Library/Developer/Xcode/DerivedData/iPodClassic-*/Build/Products/Debug-iphoneos/iPodClassic.app</code></pre>
+
+  <h2 id="tests">Tests &amp; QA hooks</h2>
+  <pre><code>xcodebuild -project iPodClassic.xcodeproj -scheme iPodClassic \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test</code></pre>
+  <p>Unit tests cover time formatting, wheel geometry, alarm math and weekday repeats, the player model, the reader store, ZIP/EPUB extraction and parsing, and the highlight store. UI tests drive the click wheel with real touch events end to end.</p>
+  <p>Launch-environment hooks (also used for the screenshots on this page):</p>
+  <table>
+    <tr><th>Hook</th><th>Effect</th></tr>
+    <tr><td><code>RESET_DEFAULTS=1</code></td><td>Clear all persisted settings/stores</td></tr>
+    <tr><td><code>START_ROUTE=&lt;route&gt;</code></td><td>Open a screen directly (<code>music</code>, <code>songs</code>, <code>nowplaying</code>, <code>alarm</code>, <code>camera</code>, …); <code>readerLast</code> reopens the last book</td></tr>
+    <tr><td><code>FAKE_LIBRARY=1</code></td><td>Seed 300 fake songs + a fake Now Playing track (MusicKit items can’t be constructed in tests)</td></tr>
+    <tr><td><code>ALARM_FIRE_SECONDS=N</code></td><td>Fire the ringer N seconds after launch</td></tr>
+    <tr><td><code>READER_IMPORT=&lt;file&gt;</code> <code>READER_CHAPTER=&lt;n&gt;</code> <code>READER_TICKS=&lt;n&gt;</code></td><td>EPUB harness: import a book, open a chapter, turn N pages</td></tr>
+    <tr><td><code>NOW_PLAYING_PANEL=1</code> / <code>BOOK_SETTINGS=1</code></td><td>Open the Now Playing / Book Settings hold-panels</td></tr>
+  </table>
+
+  <h2 id="architecture">Architecture in one paragraph</h2>
+  <p><code>project.yml</code> is the source of truth (the <code>.xcodeproj</code> is generated). Input flows one way: <code>ClickWheelView</code> → <code>AppModel.handle(ControlEvent)</code> → a Combine <code>controlBus</code> → only the top screen reacts. Every screen is a <code>Route</code> on a navigation stack; deep screens stay alive so state survives pops, exactly like drilling into menus on the real device. Features live in self-contained folders under <code>Sources/Features/</code> (Music, Photos, Camera, Recorder, Notes, Clocks, Extras, Reader, Settings). A widget-extension target (<code>iPodClassicWidgets</code>) renders the Live Activities. The full contributor guide — including hard-won MusicKit, PDFKit and Swift→JS gotchas — lives in <a href="https://github.com/SubhadityaMukherjee/iPodClassicEmu/blob/main/AGENTS.md">AGENTS.md</a>.</p>
+
+  <h2 id="origin">Origin</h2>
+  <p>The app began as a one-page brief (<a href="https://github.com/SubhadityaMukherjee/iPodClassicEmu/blob/main/agent.md">agent.md</a>) describing the device, the features and a folder of reference screenshots — then grew feature by feature (branch → build → test → merge) with AI coding agents doing the implementation. The original reference images are not included in this repository.</p>
+
+  <h2 id="faq">FAQ</h2>
+  <div class="grid">
+    <div class="card"><h3>Does music work without Apple Music?</h3><p class="muted">The Music features mirror your Apple Music library through MusicKit — a synced library (subscription or local-synced songs) is required.</p></div>
+    <div class="card"><h3>Why is the camera black in the simulator?</h3><p class="muted">Simulators have no camera hardware. The app shows a friendly notice; run on a device for the real viewfinder.</p></div>
+    <div class="card"><h3>Where do my books and notes live?</h3><p class="muted">In the app’s Documents folder, visible in the Files app. Nothing is uploaded anywhere.</p></div>
+    <div class="card"><h3>Do the Live Activities need anything special?</h3><p class="muted">They work on device out of the box (lock screen + Dynamic Island). Simulators can render them, but the Island needs hardware.</p></div>
+  </div>
+
+</main>
+
+<footer class="wrap">
+  <p>A personal hobby project — <strong>not affiliated with or endorsed by Apple</strong>. iPod classic is a trademark of Apple Inc. Music features use Apple’s standard MusicKit access; your library data stays on your device.</p>
+  <p><a href="https://github.com/SubhadityaMukherjee/iPodClassicEmu">GitHub</a> · <a href="https://github.com/SubhadityaMukherjee/iPodClassicEmu/blob/main/README.md">README</a> · <a href="https://github.com/SubhadityaMukherjee/iPodClassicEmu/blob/main/AGENTS.md">AGENTS.md</a></p>
+</footer>
+</body>
+</html>

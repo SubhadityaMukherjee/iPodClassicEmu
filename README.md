@@ -8,7 +8,7 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
   <img src="docs/screenshots/reader.png" width="230" alt="Book reader" />
 </p>
 
-> This project started as a personal design brief ([`agent.md`](agent.md)) and was built iteratively with AI coding agents. See [Origin](#origin) for how it came together.
+> This project started as a personal design brief ([`agent.md`](agent.md)) and was built iteratively with AI coding agents. See [Origin](#origin) for how it came together. 📖 Full documentation site: **https://subhadityamukherjee.github.io/iPodClassicEmu/**
 
 ## Features
 
@@ -65,6 +65,7 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
   <img src="docs/screenshots/music.png" width="230" alt="Music menu" />
   <img src="docs/screenshots/photos.png" width="230" alt="Photos" />
   <img src="docs/screenshots/recorder.png" width="230" alt="Voice recorder" />
+  <img src="docs/screenshots/camera.png" width="230" alt="Camera" />
   <img src="docs/screenshots/extras.png" width="230" alt="Extras" />
   <img src="docs/screenshots/settings.png" width="230" alt="Settings" />
 </p>
