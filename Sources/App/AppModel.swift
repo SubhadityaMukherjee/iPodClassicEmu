@@ -142,6 +142,33 @@ final class AppModel {
                   name == "readerLast", let first = reader.books.first {
             stack = [.readerBook(first.id)]
         }
+
+        // QA hook: ALARM_ENABLE arms (1) or disarms (0) the alarm from any
+        // launch (bell/keep-alive screenshot checks).
+        if let qaAlarm = ProcessInfo.processInfo.environment["ALARM_ENABLE"] {
+            let store = AlarmStore.shared
+            if qaAlarm == "1", !store.enabled {
+                store.enabled = true
+            } else if qaAlarm == "0", store.enabled {
+                store.enabled = false
+            }
+            store.schedule()
+        }
+
+        // QA hook: AUTOPLAY shuffle-plays the real library at launch
+        // (device screenshots — ApplicationMusicPlayer is a simulator
+        // no-op, so this only bites on hardware).
+        if ProcessInfo.processInfo.environment["AUTOPLAY"] == "1" {
+            Task { @MainActor in
+                await music.refreshIfStale()
+                let songs = music.songs
+                guard !songs.isEmpty else { return }
+                player.shufflePlay(songs)
+                if stack.last != .nowPlaying {
+                    stack.append(.nowPlaying)
+                }
+            }
+        }
     }
 
     static func route(named name: String) -> Route? {
@@ -267,6 +294,13 @@ final class AppModel {
     var idleSeconds: TimeInterval { Date().timeIntervalSince(lastInputAt) }
 
     func markActivity() { lastInputAt = Date() }
+
+    /// UI heartbeat so idle-dim thresholds re-evaluate every couple of
+    /// seconds. Views must READ this (tracked) — writing plain @State that
+    /// body never reads no longer invalidates a SwiftUI view.
+    private(set) var clockTick = Date()
+
+    func tickIdle() { clockTick = Date() }
 
     func startRinger(_ context: RingerContext) {
         ringer = context

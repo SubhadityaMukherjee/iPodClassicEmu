@@ -84,10 +84,8 @@ struct AlarmScreen: View {
         .onAppear {
             // Ask for notification permission while the user is right here.
             alarm.schedule()
-            // QA hook: arm the alarm (bell/keep-alive screenshot checks).
-            if ProcessInfo.processInfo.environment["ALARM_ENABLE"] == "1", !alarm.enabled {
-                alarm.enabled = true
-            }
+            // (ALARM_ENABLE arm/disarm now lives in AppModel.init so it
+            // applies on every launch, not just this screen.)
             // QA hook: fire the ringer after N seconds for UI tests.
             if let s = ProcessInfo.processInfo.environment["ALARM_FIRE_SECONDS"], let secs = Double(s), secs > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + secs) {
