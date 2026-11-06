@@ -21,4 +21,8 @@ enum QASeed {
     static let previewSong = (title: "Africa", artist: "Toto", album: "Toto IV")
     static let previewDuration = 295.0
     static let previewTime = 96.0
+
+    /// Notes editor QA target (START_ROUTE=noteEditor + NOTES_QA=1): a fixed
+    /// note name the editor fills with numbered scroll-test text.
+    static let qaNoteName = "QA Note"
 }

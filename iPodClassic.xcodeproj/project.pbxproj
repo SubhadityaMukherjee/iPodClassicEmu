@@ -34,6 +34,7 @@
 		7F8ADF4FC8E0E7C16628F2EA /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9362F34A0BC5DC660638C04 /* CameraModel.swift */; };
 		82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2252DE6110093E2FF64B7404 /* CRTOverlay.swift */; };
 		84BE9FB1EF58F9433F774C38 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FF7E771867E7BE0B289EE5 /* AppModel.swift */; };
+		8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */; };
 		89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59116EF21FFA3688484F038F /* RecorderScreens.swift */; };
 		8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */; };
 		926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */; };
@@ -58,6 +59,7 @@
 		D125AB206DD4B1FE8D5E9041 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */; };
 		D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */; };
 		D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF076EEBD7582FD738F82631 /* FeatureTests.swift */; };
+		DA1FEB709FB893BD0D45B8DF /* NotesEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E266621CE1581D432D96D171 /* NotesEditorTests.swift */; };
 		E00856FD393CADE5D770BA48 /* MediaVolumeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */; };
 		E2D217A7A044EB9CB4696610 /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E080A36D7C3483C01ABF12C1 /* DeviceView.swift */; };
 		E821E9DB1EEC0479B053A20F /* AlarmRingerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */; };
@@ -164,9 +166,11 @@
 		D8919784990F005864723A97 /* AlarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmStore.swift; sourceTree = "<group>"; };
 		D9362F34A0BC5DC660638C04 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
 		DAA84631978E21F3027590F4 /* ArtworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkView.swift; sourceTree = "<group>"; };
+		DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesScrollTests.swift; sourceTree = "<group>"; };
 		DF076EEBD7582FD738F82631 /* FeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureTests.swift; sourceTree = "<group>"; };
 		E06640F863889753F8AADBCC /* CameraShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraShortcut.swift; sourceTree = "<group>"; };
 		E080A36D7C3483C01ABF12C1 /* DeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceView.swift; sourceTree = "<group>"; };
+		E266621CE1581D432D96D171 /* NotesEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesEditorTests.swift; sourceTree = "<group>"; };
 		E6386B4A55E1B30CAE0EA14D /* PhotoLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryModel.swift; sourceTree = "<group>"; };
 		E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaVolumeController.swift; sourceTree = "<group>"; };
 		F0A7AB9F78390A8680299570 /* ClickWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickWheelView.swift; sourceTree = "<group>"; };
@@ -283,6 +287,7 @@
 			isa = PBXGroup;
 			children = (
 				2FFA9E69DB00DC268067DD8B /* E2ETests.swift */,
+				E266621CE1581D432D96D171 /* NotesEditorTests.swift */,
 				826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */,
 			);
 			path = UITests;
@@ -334,6 +339,7 @@
 			children = (
 				483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */,
 				DF076EEBD7582FD738F82631 /* FeatureTests.swift */,
+				DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */,
 			);
 			path = iPodClassicTests;
 			sourceTree = "<group>";
@@ -650,6 +656,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AF0B029055EBE310E79A0C5C /* E2ETests.swift in Sources */,
+				DA1FEB709FB893BD0D45B8DF /* NotesEditorTests.swift in Sources */,
 				FC441BCF22529569C9289A56 /* WheelTapTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -660,6 +667,7 @@
 			files = (
 				F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */,
 				D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */,
+				8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
