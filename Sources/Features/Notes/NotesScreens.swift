@@ -165,6 +165,11 @@ struct NoteEditorScreen: View {
             .scrollContentBackground(.hidden)
             .background(PaperBackground())
             .padding(.horizontal, 4)
+            .onAppear {
+                // Grey scroll indicator — the default renders white on
+                // the paper background.
+                UITextView.appearance().indicatorStyle = .black
+            }
             // Dark keyboard; explicit ink color keeps the text black.
             .environment(\.colorScheme, .dark)
             .onWheel { handle($0) }

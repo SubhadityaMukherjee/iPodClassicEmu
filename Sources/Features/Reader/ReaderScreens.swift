@@ -177,6 +177,11 @@ struct BookScreen: View {
     @State private var pdfSelectionToken: NSObjectProtocol?
     @State private var epubController = EpubController()
     @State private var pdfController = PDFBookController()
+    /// Pages per chapter (0 = not measured yet) for whole-book progress.
+    @State private var chapterPages: [Int] = []
+    /// Live in-chapter position, updated on page turns so the progress
+    /// bar tracks pages, not just chapters.
+    @State private var liveFraction = 0.0
 
     private var isPDF: Bool { book?.kind == .pdf }
 
@@ -222,11 +227,12 @@ struct BookScreen: View {
             .allowsHitTesting(false))
         .onWheel { handle($0) }
         .onAppear {
-            if book == nil {
-                book = model.reader.book(id: bookID)
+            if book == nil {                book = model.reader.book(id: bookID)
                 if book?.kind == .epub {
                     chapters = EpubParser.load(bookDir: Self.epubDir(for: book!))
                     highlights = HighlightStore.load(bookID: bookID, kind: .epub)
+                    liveFraction = book?.scrollFraction ?? 0
+                    startPageMeasure(book!)
                 }
                 // QA hook: open a specific chapter (visual checks).
                 if let cs = ProcessInfo.processInfo.environment["READER_CHAPTER"],
@@ -276,6 +282,10 @@ struct BookScreen: View {
                 pdfSelectionToken = nil
             }
             saveLocation()
+        }
+        .onChange(of: styleStamp) { _, _ in
+            // Font/margin changes reflow every chapter — re-measure pages.
+            if let b = book { startPageMeasure(b) }
         }
         .onChange(of: scenePhase) { _, phase in
             // Leaving the foreground (or quitting) — flush the position;
@@ -336,7 +346,43 @@ struct BookScreen: View {
             return (Double(min(book.chapterIndex, count - 1)) + 0.5) / Double(count)
         }
         guard !chapters.isEmpty else { return 0 }
-        return (Double(min(book.chapterIndex, chapters.count - 1)) + 0.5) / Double(chapters.count)
+        let ch = min(book.chapterIndex, chapters.count - 1)
+        // Unmeasured chapters count as the average of measured ones
+        // (converges to exact as the background measurement finishes).
+        let measured = chapterPages.filter { $0 > 0 }
+        let fallback = measured.isEmpty ? 12.0 : Double(measured.reduce(0, +)) / Double(measured.count)
+        let pages = chapters.indices.map { i in
+            chapterPages.indices.contains(i) && chapterPages[i] > 0
+                ? Double(chapterPages[i]) : fallback
+        }
+        let before = pages.prefix(ch).reduce(0, +)
+        let total = max(pages.reduce(0, +), 1)
+        return min(1, (before + liveFraction * pages[ch]) / total)
+    }
+
+    private var styleStamp: String {
+        "\(book?.fontSize ?? 0)|\(book?.fontFamily ?? 0)|\(book?.lineSpacing ?? 0)|\(book?.margin ?? 0)"
+    }
+
+    /// Measures page counts for every chapter (offscreen, background) so
+    /// whole-book progress is page-accurate. Re-runs when style changes.
+    private func startPageMeasure(_ b: ReaderStore.Book) {
+        guard b.kind == .epub else { return }
+        chapterPages = Array(repeating: 0, count: max(chapters.count, 1))
+        let dir = Self.epubDir(for: b)
+        let chs = chapters
+        let styleKey = "\(b.fontSize)|\(b.fontFamily)|\(b.lineSpacing)|\(b.margin)"
+        Task {
+            let counts = await EpubPageMeasurer.measureAll(
+                chapters: chs, bookDir: dir, book: b,
+                viewport: epubController.webView?.bounds.size ?? .zero)
+            guard !Task.isCancelled else { return }
+            let current = book
+            let currentKey = "\(current?.fontSize ?? 0)|\(current?.fontFamily ?? 0)|\(current?.lineSpacing ?? 0)|\(current?.margin ?? 0)"
+            if currentKey == styleKey, counts.count == chapterPages.count {
+                chapterPages = counts
+            }
+        }
     }
 
     /// Touch action bar shown while text is selected in an EPUB.
@@ -606,6 +652,7 @@ struct BookScreen: View {
             }
             b.chapterIndex = next
             b.scrollFraction = 0
+            liveFraction = 0
             book = b
             // Persist directly — saveLocation() would sample the OLD
             // chapter's scroll fraction (async callback) and the new
@@ -642,6 +689,7 @@ struct BookScreen: View {
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
+            WheelFeedback.tick(dir: d)
             if panelOpen {
                 moveListSelection(&panelSelection, count: panelRows.count, delta: d, settings: settings)
             } else if isPDF {
@@ -659,6 +707,9 @@ struct BookScreen: View {
                 // per the Scroll Step setting). Instant, no animation.
                 let pages = [1, 2, 3][min(max(book?.scrollStep ?? 0, 0), 2)]
                 epubController.scrollByPages(d > 0 ? pages : -pages)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    epubController.scrollFraction { self.liveFraction = $0 }
+                }
             }
         case .select:
             if panelOpen {
@@ -690,6 +741,46 @@ struct BookScreen: View {
 }
 
 // MARK: - EPUB rendering
+
+/// Counts pages of every chapter by loading each one in a hidden web
+/// view with the same reader CSS — whole-book progress without having
+/// visited every chapter first.
+enum EpubPageMeasurer {
+    static func measureAll(chapters: [EpubChapter], bookDir: URL,
+                           book: ReaderStore.Book, viewport: CGSize) async -> [Int] {
+        guard viewport.width > 50, viewport.height > 50 else { return [] }
+        let host: WKWebView? = await MainActor.run {
+            guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first,
+                let root = scene.keyWindow?.rootViewController?.view else { return nil }
+            let wv = WKWebView(frame: CGRect(origin: .zero, size: viewport))
+            wv.isHidden = true
+            wv.isUserInteractionEnabled = false
+            root.addSubview(wv)
+            return wv
+        }
+        guard let wv = host else { return [] }
+        defer { Task { @MainActor in wv.removeFromSuperview() } }
+        var counts: [Int] = []
+        for ch in chapters {
+            if Task.isCancelled { break }
+            await MainActor.run { wv.loadFileURL(ch.url, allowingReadAccessTo: bookDir) }
+            for _ in 0..<30 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                let ready = (try? await wv.evaluateJavaScript("document.readyState")) as? String
+                if ready == "complete" { break }
+            }
+            await MainActor.run {
+                wv.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let n = ((try? await wv.evaluateJavaScript(
+                "Math.max(1, Math.ceil((document.documentElement.scrollWidth - window.innerWidth) / window.innerWidth) + 1)")) as? NSNumber)?.intValue ?? 1
+            counts.append(max(1, n))
+        }
+        return counts
+    }
+}
 
 /// Command handle for the parent screen to drive the web view.
 final class EpubController {

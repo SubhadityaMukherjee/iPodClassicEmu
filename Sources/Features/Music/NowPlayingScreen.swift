@@ -1,5 +1,6 @@
 import SwiftUI
 import MusicKit
+import AVKit
 
 /// Classic Now Playing: artwork on the left, track info on the right (title
 /// marquees when too long), progress bar below; wheel adjusts volume.
@@ -14,6 +15,7 @@ struct NowPlayingScreen: View {
     @State private var playlistSelection = 0
     @State private var queueMode = false
     @State private var queueSelection = 0
+    @State private var airplayMode = false
     @State private var toast = ""
 
     private var player: PlayerModel { model.player }
@@ -189,6 +191,7 @@ struct NowPlayingScreen: View {
             MenuItem(id: "queue", title: "Up Next (\(player.upNext.count))"),
             MenuItem(id: "artist", title: "Go to Artist"),
             MenuItem(id: "album", title: "Go to Album"),
+            MenuItem(id: "airplay", title: "AirPlay"),
         ]
     }
 
@@ -216,6 +219,10 @@ struct NowPlayingScreen: View {
                     emptyText: "Queue Empty"
                 )
                 .padding(.top, 2)
+            } else if airplayMode {
+                AirPlayPicker()
+                    .frame(width: 220, height: 60)
+                    .padding(.top, 4)
             } else {
                 MenuList(items: optionItems, selection: menuSelection, compact: true)
                     .padding(.top, 2)
@@ -224,7 +231,10 @@ struct NowPlayingScreen: View {
     }
 
     private var panelTitle: String {
-        playlistMode ? "Add to Playlist" : (queueMode ? "Up Next" : "Song Options")
+        playlistMode ? "Add to Playlist"
+            : queueMode ? "Up Next"
+            : airplayMode ? "AirPlay"
+            : "Song Options"
     }
 
     private func closeMenu() {
@@ -232,6 +242,7 @@ struct NowPlayingScreen: View {
             menuOpen = false
             playlistMode = false
             queueMode = false
+            airplayMode = false
         }
     }
 
@@ -295,6 +306,8 @@ struct NowPlayingScreen: View {
                     moveListSelection(&playlistSelection, count: playlists.count, delta: d, settings: settings)
                 } else if queueMode {
                     moveListSelection(&queueSelection, count: player.upNext.count, delta: d, settings: settings)
+                } else if airplayMode {
+                    // No rows to move in the route picker.
                 } else {
                     moveListSelection(&menuSelection, count: optionItems.count, delta: d, settings: settings)
                 }
@@ -325,6 +338,8 @@ struct NowPlayingScreen: View {
                         withAnimation(.easeOut(duration: 0.18)) { queueMode = true }
                     case "artist": Task { await goToArtist() }
                     case "album": Task { await goToAlbum() }
+                    case "airplay":
+                        withAnimation(.easeOut(duration: 0.18)) { airplayMode = true }
                     default: break
                     }
                 }
@@ -338,6 +353,7 @@ struct NowPlayingScreen: View {
             menuSelection = 0
             playlistMode = false
             queueMode = false
+            airplayMode = false
             withAnimation(.easeOut(duration: 0.18)) { menuOpen = true }
         case .menu:
             if menuOpen {
@@ -351,6 +367,33 @@ struct NowPlayingScreen: View {
         default:
             break
         }
+    }
+}
+
+/// System AirPlay route picker. AVRoutePickerView normally needs a
+/// literal tap on its internal button; there's no programmatic API, so
+/// we send the button's own touch action shortly after it mounts.
+struct AirPlayPicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView(frame: CGRect(x: 0, y: 0, width: 220, height: 60))
+        v.prioritizesVideoDevices = false
+        v.tintColor = UIColor(Theme.ink)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            if let button = v.firstSubview(ofType: UIButton.self) {
+                button.sendActions(for: .touchUpInside)
+            }
+        }
+        return v
+    }
+
+    func updateUIView(_ v: AVRoutePickerView, context: Context) {}
+}
+
+extension UIView {
+    func firstSubview<T: UIView>(ofType type: T.Type) -> T? {
+        if let found = subviews.compactMap({ $0 as? T }).first { return found }
+        for s in subviews { if let f = s.firstSubview(ofType: type) { return f } }
+        return nil
     }
 }
 

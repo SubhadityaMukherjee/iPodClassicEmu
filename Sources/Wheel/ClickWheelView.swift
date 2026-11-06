@@ -59,6 +59,7 @@ private struct WheelFace: View {
 
             GeometryReader { geo in
                 let d = min(geo.size.width, geo.size.height)
+                let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 Circle()
                     .fill(RadialGradient(colors: [Theme.wheelCenter(t), t == 1 ? Color(white: 0.72) : .black], center: .center, startRadius: 0, endRadius: d / 3))
                     .frame(width: d * 0.365, height: d * 0.365)
@@ -68,6 +69,19 @@ private struct WheelFace: View {
                             .frame(width: d * 0.365, height: d * 0.365)
                             .position(x: geo.size.width / 2, y: geo.size.height / 2)
                     )
+                // Button seams: thin whiteish radial lines along the
+                // diagonals marking the four button sectors, with a soft
+                // dark shadow just below for a bit of depth.
+                Path { p in
+                    for angle in [45.0, 135.0, 225.0, 315.0] {
+                        let rad = angle * .pi / 180
+                        let r0 = d * 0.205, r1 = d * 0.462
+                        p.move(to: CGPoint(x: c.x + r0 * sin(rad), y: c.y - r0 * cos(rad)))
+                        p.addLine(to: CGPoint(x: c.x + r1 * sin(rad), y: c.y - r1 * cos(rad)))
+                    }
+                }
+                .stroke(Color.white.opacity(0.20), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+                .shadow(color: .black.opacity(0.45), radius: 1.2, x: 0, y: 1.2)
             }
 
             zoneLabel(.menu) {
