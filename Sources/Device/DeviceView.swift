@@ -27,6 +27,12 @@ struct DeviceView: View {
                                 HoldScreenOverlay()
                                     .transition(.opacity)
                             }
+                            // Ringer confined to the LCD — the click wheel
+                            // stays visible and drives Snooze/Stop.
+                            if let ringer = model.ringer {
+                                AlarmRingerOverlay(context: ringer)
+                                    .transition(.opacity)
+                            }
                         }
                         // Subtle inset: soft shadow + dark bevel so the LCD
                         // reads as recessed into the body.
@@ -62,15 +68,6 @@ struct DeviceView: View {
         }
         .overlay {
             if model.screenAsleep { sleepOverlay }
-        }
-        .overlay {
-            if let ringer = model.ringer {
-                // Ringer confined to the LCD, and it never swallows touches —
-                // input is wheel-driven (Snooze/Stop via the click wheel).
-                AlarmRingerOverlay(context: ringer)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
         }
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             heartbeat = Date()

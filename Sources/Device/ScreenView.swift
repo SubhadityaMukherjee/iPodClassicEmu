@@ -47,8 +47,8 @@ struct TitleBarView: View {
 
             if alarm.enabled {
                 Image(systemName: "alarm.clock.fill")
-                    .font(Theme.font(9.5, .medium))
-                    .foregroundStyle(Theme.inkDim)
+                    .font(Theme.font(11, .semibold))
+                    .foregroundStyle(Theme.ink)
                     .padding(.trailing, 6)
             }
 
