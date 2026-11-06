@@ -191,7 +191,7 @@ final class RingerManager {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default, options: [.duckOthers])
         try? session.setActive(true)
-        guard let url = Bundle.main.url(forResource: "AlarmSiren", withExtension: "caf") else { return }
+        guard let url = Bundle.main.url(forResource: "AlarmTone", withExtension: "caf") else { return }
         audioPlayer = try? AVAudioPlayer(contentsOf: url)
         audioPlayer?.numberOfLoops = -1
         audioPlayer?.volume = 1.0

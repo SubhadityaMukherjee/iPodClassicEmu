@@ -95,7 +95,7 @@ final class AlarmStore: ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = "Alarm"
         content.body = "\(displayText) · \(repeatLabel)"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmSiren.caf"))
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmTone.caf"))
         content.categoryIdentifier = "ALARM"
         // Break through Focus / Do Not Disturb (user can still opt out).
         content.interruptionLevel = .timeSensitive
@@ -205,7 +205,7 @@ final class AlarmStore: ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = "Snoozed Alarm"
         content.body = "\(displayText) · \(repeatLabel)"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmSiren.caf"))
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmTone.caf"))
         content.categoryIdentifier = "ALARM"
         content.interruptionLevel = .timeSensitive
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 9 * 60, repeats: false)
