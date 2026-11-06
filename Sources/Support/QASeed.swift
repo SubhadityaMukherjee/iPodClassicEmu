@@ -14,4 +14,11 @@ enum QASeed {
 
     static var songs: [FakeSong] = []
     static var active: Bool { !songs.isEmpty }
+
+    /// Static track info for QA screenshots of Now Playing (real playback
+    /// is impossible in the simulator — ApplicationMusicPlayer is a no-op
+    /// without a library).
+    static let previewSong = (title: "Africa", artist: "Toto", album: "Toto IV")
+    static let previewDuration = 295.0
+    static let previewTime = 96.0
 }
