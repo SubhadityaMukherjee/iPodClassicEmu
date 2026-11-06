@@ -15,7 +15,7 @@ struct ClickWheelView: View {
         GeometryReader { geo in
             let d = min(geo.size.width, geo.size.height)
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-            WheelFace(pressed: pressedZone)
+            WheelFace()
                 .frame(width: d, height: d)
                 .contentShape(Circle())
                 .gesture(
@@ -41,7 +41,6 @@ struct ClickWheelView: View {
 // MARK: - Wheel face drawing
 
 private struct WheelFace: View {
-    let pressed: WheelZone?
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
@@ -69,9 +68,9 @@ private struct WheelFace: View {
                             .frame(width: d * 0.365, height: d * 0.365)
                             .position(x: geo.size.width / 2, y: geo.size.height / 2)
                     )
-                // Button seams: thin whiteish radial lines along the
-                // diagonals marking the four button sectors, with a soft
-                // dark shadow just below for a bit of depth.
+                // Button seams: thin dark-grey radial lines along the
+                // diagonals marking the four button sectors — a touch
+                // darker than the wheel face, not black.
                 Path { p in
                     for angle in [45.0, 135.0, 225.0, 315.0] {
                         let rad = angle * .pi / 180
@@ -80,8 +79,7 @@ private struct WheelFace: View {
                         p.addLine(to: CGPoint(x: c.x + r1 * sin(rad), y: c.y - r1 * cos(rad)))
                     }
                 }
-                .stroke(Color.white.opacity(0.20), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-                .shadow(color: .black.opacity(0.45), radius: 1.2, x: 0, y: 1.2)
+                .stroke(Color.black.opacity(0.30), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
             }
 
             zoneLabel(.menu) {
@@ -111,8 +109,7 @@ private struct WheelFace: View {
     @ViewBuilder
     private func zoneLabel<Content: View>(_ zone: WheelZone, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .foregroundStyle(pressed == zone ? Theme.wheelLabelLit(settings.theme) : Theme.wheelLabel(settings.theme))
-            .animation(.easeOut(duration: 0.08), value: pressed)
+            .foregroundStyle(Theme.wheelLabel(settings.theme))
             .offset(zoneOffset(zone))
     }
 
