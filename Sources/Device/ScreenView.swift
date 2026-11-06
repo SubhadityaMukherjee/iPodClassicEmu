@@ -45,13 +45,6 @@ struct TitleBarView: View {
                     .padding(.trailing, 6)
             }
 
-            if alarm.enabled {
-                Image(systemName: "alarm.clock.fill")
-                    .font(Theme.font(11, .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .padding(.trailing, 6)
-            }
-
             Text(TimeFormat.clock(now))
                 .font(Theme.barClock(14))
                 .foregroundStyle(Theme.ink)
@@ -60,6 +53,15 @@ struct TitleBarView: View {
             Spacer(minLength: 10)
 
             playGlyph
+
+            // Armed alarm: bell beside the battery, like the classic's
+            // status icon — visible on every screen.
+            if alarm.enabled {
+                Image(systemName: "bell.fill")
+                    .font(Theme.font(11, .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.trailing, 5)
+            }
 
             BatteryIcon(level: model.batteryLevel, charging: model.batteryCharging)
         }
