@@ -1,6 +1,8 @@
 # iPodClassic
 
-A native iOS app that puts a full iPod Classic in your pocket: a real click wheel with haptics and tick sounds, a scanlined LCD, and the classic menus — wired to **Apple Music**, plus a PDF/EPUB book reader, camera, voice recorder, weekday alarms, and Live Activities.
+A native iOS app that puts a full iPod Classic in your pocket: a real click wheel with haptics and tick sounds, a scanlined LCD, and the classic menus — wired to **Apple Music** (you need a subscription), plus a PDF/EPUB book reader, camera, voice recorder, weekday alarms, and Live Activities.
+
+I wanted this not just because I wanted the vibes of an iPod but mainly because it takes away so much of the distraction of my phone. I can use it with Guided access and it has basically all the normal things I need. If I need anything else, I can just quit Guided access or swipe out.
 
 <p align="center">
   <img src="docs/screenshots/home.png" width="230" alt="Home menu" />
@@ -8,16 +10,18 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
   <img src="docs/screenshots/reader.png" width="230" alt="Book reader" />
 </p>
 
-> This project started as a personal design brief ([`agent.md`](agent.md)) and was built iteratively with AI coding agents. See [Origin](#origin) for how it came together. 📖 Full documentation site: **https://subhadityamukherjee.github.io/iPodClassicEmu/**
+> Full documentation site: **<https://subhadityamukherjee.github.io/iPodClassicEmu/>**
 
 ## Features
 
 **The device feel**
+
 - Full-device UI: black (or silver) body, working Hold switch, LCD with subtle CRT scanlines and backlight illusion
 - Real click wheel: angle-based scroll ticks (15°/detent), press-and-turn, hold timers with repeat, CoreHaptics tick feedback and click sounds, subtle sector seams and a dimmed wheel like real hardware
 - Wheel-only navigation with the classic quirks: MENU pops one level, MENU-hold goes home, PLAY-hold sleeps
 
 **Music (Apple Music via MusicKit)**
+
 - Artists, albums, songs, genres, playlists, recently added — synced from your Apple Music library, and refreshed whenever you open Music or foreground the app
 - Cover Flow with 3D flipping covers and numbered track overlay
 - Now Playing with marquee text, volume on the wheel, scrubbing, shuffle and repeat
@@ -33,6 +37,7 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
 </p>
 
 **Clocks**
+
 - Classic alarm clock with iPhone-style weekday repeats (S M T W T F S; none selected = daily), in-app ringer with Snooze/Stop, notification-backed so it fires even when the app is closed
 - Timer and Stopwatch — each with a **Live Activity**: live countdown/elapsed time on the lock screen and Dynamic Island, timer flips to "Done" when it fires in the background
 
@@ -42,6 +47,7 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
 </p>
 
 **Reader**
+
 - Import PDFs and EPUBs from the Files app; everything stays on-device
 - True page-based EPUB reading: pages filled with complete lines only (no half-cut text ever), one wheel tick = one page turn, adjustable font size (11–25 px), serif/sans, line spacing, margins, and screen dimming
 - PDFs render via PDFKit with continuous or one-page mode
@@ -54,7 +60,9 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
 </p>
 
 **Everything else**
+
 - Camera with wheel zoom, aspect-ratio switching (prev/next), lens flip (hold), wheel-driven capture — just like the real thing
+- You can map the camera in this app to your action button as well!
 - Photos grid + full-screen detail
 - Voice recorder: background-safe long recordings, pause/resume, playback, share sheet
 - Notes editor with autosave; files visible in the Files app
@@ -134,13 +142,8 @@ docs/screenshots/           app screenshots
 
 Input flows one way: `ClickWheelView` → `AppModel.handle(ControlEvent)` → a Combine `controlBus` → only the top screen reacts. Every screen is a `Route` on the navigation stack; deep screens stay alive so state survives pops, exactly like drilling into menus on the real device. More detail for contributors lives in [`AGENTS.md`](AGENTS.md).
 
-## Origin
-
-The app began as a one-page brief ([`agent.md`](agent.md)) describing the device, the features, and a folder of reference screenshots — then grew feature by feature (branch → build → test → merge) with AI coding agents doing the implementation. The original reference images are not included in this repository.
-
 ## Notes & legal
 
 - This is a personal hobby project and is **not affiliated with or endorsed by Apple**. iPod classic is a trademark of Apple Inc.
 - Music features require MusicKit entitlements and an Apple Music-associated Apple ID; your library data stays within Apple's standard MusicKit access on your own device.
 - Books, notes, and recordings you import live in the app's Documents folder and sync to the Files app; nothing is uploaded anywhere.
-- No license is granted yet — all rights reserved by the author until a license file is added.
