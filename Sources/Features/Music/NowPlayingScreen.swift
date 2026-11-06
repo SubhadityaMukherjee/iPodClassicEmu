@@ -22,6 +22,17 @@ struct NowPlayingScreen: View {
     private var song: Song? { player.currentSong }
     private var playlists: [Playlist] { model.music.playlists }
 
+    /// QA screenshot support (FAKE_LIBRARY): a convincing static preview
+    /// when nothing is really playing.
+    private var qaInfo: (title: String, artist: String, album: String)? {
+        song == nil && ProcessInfo.processInfo.environment["FAKE_LIBRARY"] == "1"
+            ? QASeed.previewSong : nil
+    }
+    private var qaPlayback: (time: Double, duration: Double, playing: Bool)? {
+        song == nil && ProcessInfo.processInfo.environment["FAKE_LIBRARY"] == "1"
+            ? (QASeed.previewTime, QASeed.previewDuration, true) : nil
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 6) {
@@ -59,6 +70,13 @@ struct NowPlayingScreen: View {
             }
         }
         .onWheel { handle($0) }
+        .onAppear {
+            // QA hook: open the song-options panel for screenshots.
+            if ProcessInfo.processInfo.environment["NOW_PLAYING_PANEL"] == "1" {
+                menuSelection = 0
+                menuOpen = true
+            }
+        }
     }
 
     // MARK: Layout
@@ -72,13 +90,13 @@ struct NowPlayingScreen: View {
                 .frame(width: 132, height: 132)
 
             VStack(alignment: .leading, spacing: 3) {
-                MarqueeText(text: song?.title ?? "Not Playing",
+                MarqueeText(text: qaInfo?.title ?? song?.title ?? "Not Playing",
                             font: Theme.font(16.5, .bold),
                             color: Theme.ink)
-                MarqueeText(text: song?.artistName ?? "",
+                MarqueeText(text: qaInfo?.artist ?? song?.artistName ?? "",
                             font: Theme.font(14, .medium),
                             color: Theme.inkDim)
-                MarqueeText(text: song?.albumTitle ?? "",
+                MarqueeText(text: qaInfo?.album ?? song?.albumTitle ?? "",
                             font: Theme.font(13, .medium),
                             color: Theme.inkDim.opacity(0.85))
             }
@@ -123,13 +141,17 @@ struct NowPlayingScreen: View {
 
     private var progressBar: some View {
         GeometryReader { geo in
-            let progress = player.duration > 0 ? player.playbackTime / player.duration : 0
+            let qa = qaPlayback
+            let time = qa?.time ?? player.playbackTime
+            let duration = qa?.duration ?? player.duration
+            let playing = qa?.playing ?? player.isPlaying
+            let progress = duration > 0 ? time / duration : 0
             VStack(spacing: 3) {
                 HStack {
-                    Text(TimeFormat.mss(player.playbackTime))
+                    Text(TimeFormat.mss(time))
                         .monospacedDigit()
                     Spacer()
-                    Text(player.isPlaying ? "-\(TimeFormat.mss(max(0, player.duration - player.playbackTime)))" : TimeFormat.mss(player.duration))
+                    Text(playing ? "-\(TimeFormat.mss(max(0, duration - time)))" : TimeFormat.mss(duration))
                         .monospacedDigit()
                 }
                 .font(Theme.font(12.5, .semibold))

@@ -256,6 +256,14 @@ struct BookScreen: View {
                         }
                     }
                 }
+                // QA hook: open the book settings panel (screenshots).
+                if ProcessInfo.processInfo.environment["BOOK_SETTINGS"] == "1" {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        panelIsSettings = true
+                        panelSelection = 0
+                        panelOpen = true
+                    }
+                }
             }
             // PDFKit posts selection changes; surface them in the
             // highlight bar (only one PDF view exists in the app).

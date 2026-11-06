@@ -1,11 +1,11 @@
 # iPodClassic
 
-A native iOS app that puts a full iPod Classic in your pocket: a real click wheel with haptics and tick sounds, a scanlined LCD, and the classic menus — wired to **Apple Music**, plus a camera, voice recorder, alarms, and a book reader.
+A native iOS app that puts a full iPod Classic in your pocket: a real click wheel with haptics and tick sounds, a scanlined LCD, and the classic menus — wired to **Apple Music**, plus a PDF/EPUB book reader, camera, voice recorder, weekday alarms, and Live Activities.
 
 <p align="center">
-  <img src="docs/screenshots/home.png" width="280" alt="Home menu" />
-  <img src="docs/screenshots/songs.png" width="280" alt="Songs list" />
-  <img src="docs/screenshots/nowplaying.png" width="280" alt="Now Playing" />
+  <img src="docs/screenshots/home.png" width="230" alt="Home menu" />
+  <img src="docs/screenshots/nowplaying.png" width="230" alt="Now Playing" />
+  <img src="docs/screenshots/reader.png" width="230" alt="Book reader" />
 </p>
 
 > This project started as a personal design brief ([`agent.md`](agent.md)) and was built iteratively with AI coding agents. See [Origin](#origin) for how it came together.
@@ -14,27 +14,44 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
 
 **The device feel**
 - Full-device UI: black (or silver) body, working Hold switch, LCD with subtle CRT scanlines and backlight illusion
-- Real click wheel: angle-based scroll ticks (15°/detent), press-and-turn, hold timers with repeat, CoreHaptics tick feedback and click sounds, dimmed wheel like real hardware
+- Real click wheel: angle-based scroll ticks (15°/detent), press-and-turn, hold timers with repeat, CoreHaptics tick feedback and click sounds, subtle sector seams and a dimmed wheel like real hardware
 - Wheel-only navigation with the classic quirks: MENU pops one level, MENU-hold goes home, PLAY-hold sleeps
 
 **Music (Apple Music via MusicKit)**
-- Artists, albums, songs, genres, playlists, recently added — synced from your Apple Music library
+- Artists, albums, songs, genres, playlists, recently added — synced from your Apple Music library, and refreshed whenever you open Music or foreground the app
 - Cover Flow with 3D flipping covers and numbered track overlay
 - Now Playing with marquee text, volume on the wheel, scrubbing, shuffle and repeat
 - Playback keeps working in the background; Now Playing follows auto-advance and manual skips even while backgrounded
 - **Queue**: hold the center button on any song row to "play next"; Now Playing → hold center → Up Next shows the whole queue and can jump to any entry
 - **Search**: ranked results (title > artist > album); hold center on a result to jump to the artist or album
+- **AirPlay** from Now Playing → hold center
+
+<p align="center">
+  <img src="docs/screenshots/songs.png" width="230" alt="Songs list" />
+  <img src="docs/screenshots/queue.png" width="230" alt="Song options / queue" />
+  <img src="docs/screenshots/search.png" width="230" alt="Search" />
+</p>
 
 **Clocks**
 - Classic alarm clock with iPhone-style weekday repeats (S M T W T F S; none selected = daily), in-app ringer with Snooze/Stop, notification-backed so it fires even when the app is closed
 - Timer and Stopwatch — each with a **Live Activity**: live countdown/elapsed time on the lock screen and Dynamic Island, timer flips to "Done" when it fires in the background
 
+<p align="center">
+  <img src="docs/screenshots/alarm.png" width="230" alt="Alarm with weekday repeats" />
+  <img src="docs/screenshots/timer.png" width="230" alt="Timer" />
+</p>
+
 **Reader**
 - Import PDFs and EPUBs from the Files app; everything stays on-device
-- EPUBs reflow with adjustable font size, serif/sans font, line spacing, margins, and page-step scrolling (wheel = exact page steps)
+- True page-based EPUB reading: pages filled with complete lines only (no half-cut text ever), one wheel tick = one page turn, adjustable font size (11–25 px), serif/sans, line spacing, margins, and screen dimming
 - PDFs render via PDFKit with continuous or one-page mode
-- Chapter navigation (titles come from the book's own table of contents), per-book position memory, thin whole-book progress line, screen dimming for night reading
-- **Highlights**: select text, tap Highlight — marks persist across sessions (text-anchored, reflow-proof) and are mirrored into a Notes file you can open in the Files app
+- Chapter navigation with titles from the book's own table of contents; per-book position memory that survives force-quits and app updates
+- Page-accurate whole-book progress bar; highlights (EPUB and PDF) persist and mirror into a Notes file; hold center for per-book settings
+
+<p align="center">
+  <img src="docs/screenshots/reader_settings.png" width="230" alt="Book settings" />
+  <img src="docs/screenshots/notes.png" width="230" alt="Notes" />
+</p>
 
 **Everything else**
 - Camera with wheel zoom, aspect-ratio switching (prev/next), lens flip (hold), wheel-driven capture — just like the real thing
@@ -43,6 +60,14 @@ A native iOS app that puts a full iPod Classic in your pocket: a real click whee
 - Notes editor with autosave; files visible in the Files app
 - Calendar, flashlight, and an About screen
 - Settings for haptics, wheel behavior, display (CRT/scanlines/dim), playback, and themes
+
+<p align="center">
+  <img src="docs/screenshots/music.png" width="230" alt="Music menu" />
+  <img src="docs/screenshots/photos.png" width="230" alt="Photos" />
+  <img src="docs/screenshots/recorder.png" width="230" alt="Voice recorder" />
+  <img src="docs/screenshots/extras.png" width="230" alt="Extras" />
+  <img src="docs/screenshots/settings.png" width="230" alt="Settings" />
+</p>
 
 ## Requirements
 
@@ -85,7 +110,7 @@ xcodebuild -project iPodClassic.xcodeproj -scheme iPodClassic \
 - **Unit tests** (`Tests/iPodClassicTests/`) cover time formatting, wheel geometry, alarm math and weekday repeats, the player model, the reader store, ZIP/EPUB extraction and parsing, and the highlight store.
 - **UI tests** (`Tests/UITests/`) drive the click wheel with real touch events and verify navigation, the alarm ringer, search, and the reader end to end.
 
-The app exposes launch-environment hooks for testing: `RESET_DEFAULTS=1`, `START_ROUTE=<route>`, `FAKE_LIBRARY=1` (seed songs, since MusicKit items can't be constructed in tests), and `ALARM_FIRE_SECONDS=N` (fires the ringer after N seconds).
+The app exposes launch-environment hooks for testing and screenshots: `RESET_DEFAULTS=1`, `START_ROUTE=<route>` (plus `readerLast` to reopen the last book), `FAKE_LIBRARY=1` (seed songs and a fake Now Playing track — MusicKit items can't be constructed in tests), `ALARM_FIRE_SECONDS=N`, `READER_IMPORT=<file>` + `READER_CHAPTER=<n>` + `READER_TICKS=<n>` for EPUB harness runs, `NOW_PLAYING_PANEL=1` / `BOOK_SETTINGS=1` to open the hold-panels. `scripts/round_corners.swift` rounds screenshot corners for the README.
 
 ## Project structure
 
@@ -98,14 +123,15 @@ Sources/
   UI/                       theme, menus, modal panels, artwork
   Features/                 one self-contained folder per feature
     Music/  Photos/  Camera/  Recorder/  Notes/  Clocks/  Extras/  Reader/  Settings/
+  Support/                  QA seed data for tests and screenshots
 Shared/                     activity attributes shared with the widget target
 Widgets/                    Live Activity widget extension
 Tests/                      unit + UI tests
-scripts/                    icon generator
+scripts/                    icon generator, screenshot post-processing
 docs/screenshots/           app screenshots
 ```
 
-Input flows one way: `ClickWheelView` → `AppModel.handle(ControlEvent)` → a Combine `controlBus` → only the top screen reacts. Every screen is a `Route` on the navigation stack; deep screens stay alive so state survives pops, exactly like drilling into menus on the real device.
+Input flows one way: `ClickWheelView` → `AppModel.handle(ControlEvent)` → a Combine `controlBus` → only the top screen reacts. Every screen is a `Route` on the navigation stack; deep screens stay alive so state survives pops, exactly like drilling into menus on the real device. More detail for contributors lives in [`AGENTS.md`](AGENTS.md).
 
 ## Origin
 
@@ -115,4 +141,5 @@ The app began as a one-page brief ([`agent.md`](agent.md)) describing the device
 
 - This is a personal hobby project and is **not affiliated with or endorsed by Apple**. iPod classic is a trademark of Apple Inc.
 - Music features require MusicKit entitlements and an Apple Music-associated Apple ID; your library data stays within Apple's standard MusicKit access on your own device.
+- Books, notes, and recordings you import live in the app's Documents folder and sync to the Files app; nothing is uploaded anywhere.
 - No license is granted yet — all rights reserved by the author until a license file is added.
