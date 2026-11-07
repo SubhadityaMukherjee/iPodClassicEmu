@@ -53,6 +53,12 @@ struct iPodClassicApp: App {
                         if model.alarms.enabled { model.alarms.startKeepAlive() }
                     case .active:
                         model.alarms.stopKeepAlive()
+                        // Returning to the foreground is activity. The
+                        // process stays alive in the background (playback
+                        // audio session), so idleSeconds keeps growing
+                        // while away — without this the screen would come
+                        // back already dimmed.
+                        model.markActivity()
                         // Library may have changed while we were gone.
                         Task { await model.music.refreshIfStale() }
                     default:
