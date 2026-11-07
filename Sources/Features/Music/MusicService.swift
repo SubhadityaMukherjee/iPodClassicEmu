@@ -64,34 +64,47 @@ final class MusicService {
         loading = true
         defer { loading = false }
 
-        var fetchedAlbums = (try? await MusicLibraryRequest<Album>().response())?.items.compactMap { $0 } ?? []
-        fetchedAlbums.sort { a, b in
-            if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
-                return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
+        // Fetches stay on the caller's actor; the compact + sort blocks run
+        // DETACHED. Localized collation over a whole library takes hundreds
+        // of milliseconds per section, and this reload fires while the
+        // Music menu push animates (refreshIfStale on appear) — inline
+        // sorting visibly stuttered the animation on large libraries.
+        let albumResponse = try? await MusicLibraryRequest<Album>().response()
+        albums = await Task.detached(priority: .userInitiated) {
+            (albumResponse?.items.compactMap { $0 } ?? []).sorted { a, b in
+                if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
+                    return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
+                }
+                return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
             }
-            return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
-        }
-        albums = fetchedAlbums
+        }.value
 
-        var fetchedArtists = (try? await MusicLibraryRequest<Artist>().response())?.items.compactMap { $0 } ?? []
-        fetchedArtists.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        artists = fetchedArtists
-
-        var fetchedSongs = (try? await MusicLibraryRequest<Song>().response())?.items.compactMap { $0 } ?? []
-        fetchedSongs.sort { a, b in
-            if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
-                return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
+        let artistResponse = try? await MusicLibraryRequest<Artist>().response()
+        artists = await Task.detached(priority: .userInitiated) {
+            (artistResponse?.items.compactMap { $0 } ?? []).sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-            if (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") != .orderedSame {
-                return (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") == .orderedAscending
-            }
-            return (a.trackNumber ?? 0) < (b.trackNumber ?? 0)
-        }
-        songs = fetchedSongs
+        }.value
 
-        var fetchedPlaylists = (try? await MusicLibraryRequest<Playlist>().response())?.items.compactMap { $0 } ?? []
-        fetchedPlaylists.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        playlists = fetchedPlaylists
+        let songResponse = try? await MusicLibraryRequest<Song>().response()
+        songs = await Task.detached(priority: .userInitiated) {
+            (songResponse?.items.compactMap { $0 } ?? []).sorted { a, b in
+                if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
+                    return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
+                }
+                if (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") != .orderedSame {
+                    return (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") == .orderedAscending
+                }
+                return (a.trackNumber ?? 0) < (b.trackNumber ?? 0)
+            }
+        }.value
+
+        let playlistResponse = try? await MusicLibraryRequest<Playlist>().response()
+        playlists = await Task.detached(priority: .userInitiated) {
+            (playlistResponse?.items.compactMap { $0 } ?? []).sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        }.value
 
         clearMenuCaches()
         loaded = true
