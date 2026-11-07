@@ -168,6 +168,86 @@ enum MusicListKind {
 
 /// Wheel-driven list over one library section. Header rows (Play All,
 /// Shuffle All, Sort By) sit full-width on top, like the album page.
+/// Hold-center options for a song row (song lists, album and playlist
+/// detail): a shared panel + input handler so all three screens behave
+/// alike. Play Next puts the song immediately after the current entry;
+/// Add to Queue appends it behind everything already up next.
+@Observable
+final class SongHoldState {
+    /// A real MusicKit song, or (sim QA only — MusicKit Songs can't be
+    /// constructed app-side) just a seed title so the panel is exercisable.
+    enum Pending {
+        case song(Song)
+        case qaTitle(String)
+    }
+
+    private(set) var pending: Pending?
+    private(set) var selection = 0
+
+    var isShowing: Bool { pending != nil }
+
+    /// Consumes wheel events while the panel is up; returns false when
+    /// the panel is closed so the screen handles the event itself.
+    @discardableResult
+    func handle(_ event: ControlEvent, player: PlayerModel, toast: @escaping (String) -> Void) -> Bool {
+        guard pending != nil else { return false }
+        switch event {
+        case .tick(let d):
+            selection = min(2, max(0, selection + (d > 0 ? 1 : -1)))
+            WheelFeedback.tick(dir: d)
+        case .select:
+            defer { pending = nil }
+            switch selection {
+            case 0:
+                if case .song(let s) = pending {
+                    toast(player.addToQueue(s, mode: .next) ? "Playing Next" : "Nothing Playing")
+                } else {
+                    toast("Nothing Playing")
+                }
+            case 1:
+                if case .song(let s) = pending {
+                    toast(player.addToQueue(s, mode: .end) ? "Added to Queue" : "Nothing Playing")
+                } else {
+                    toast("Nothing Playing")
+                }
+            default:
+                break
+            }
+        case .menu, .menuHold:
+            pending = nil
+        default:
+            break
+        }
+        return true
+    }
+
+    func begin(_ song: Song) {
+        pending = .song(song)
+        selection = 0
+    }
+
+    /// Sim QA entry point (FAKE_LIBRARY): no real Song exists, so the
+    /// panel opens title-only and queueing toasts "Nothing Playing".
+    func beginQA(title: String) {
+        pending = .qaTitle(title)
+        selection = 0
+    }
+
+    var panel: some View {
+        ModalPanel(title: "Song Options", onClose: { self.pending = nil }) {
+            VStack(spacing: 0) {
+                MenuRow(item: MenuItem(id: "h.next", title: "Play Next", showsChevron: false), selected: self.selection == 0)
+                    .frame(height: 30.5)
+                MenuRow(item: MenuItem(id: "h.queue", title: "Add to Queue", showsChevron: false), selected: self.selection == 1)
+                    .frame(height: 30.5)
+                MenuRow(item: MenuItem(id: "h.cancel", title: "Cancel", showsChevron: false), selected: self.selection == 2)
+                    .frame(height: 30.5)
+            }
+            .padding(.top, 2)
+        }
+    }
+}
+
 struct MusicListScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
@@ -175,6 +255,7 @@ struct MusicListScreen: View {
 
     @State private var selection = 0
     @State private var toast = ""
+    @State private var hold = SongHoldState()
 
     private static let songSortLabels = ["Title", "Artist", "Duration", "Recently Added"]
     private static let albumSortLabels = ["Title", "Artist", "Recently Added"]
@@ -258,6 +339,10 @@ struct MusicListScreen: View {
                 ToastCapsule(text: toast)
                     .zIndex(2)
             }
+            if hold.isShowing {
+                ModalHost { hold.panel }
+                    .zIndex(2)
+            }
         }
         .onWheel { handle($0) }
         .onAppear {
@@ -291,6 +376,7 @@ struct MusicListScreen: View {
     // MARK: Input
 
     private func handle(_ event: ControlEvent) {
+        if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
         case .tick(let d):
             moveListSelection(&selection, count: allItems.count, delta: d, settings: settings)
@@ -301,17 +387,20 @@ struct MusicListScreen: View {
                 selectEntry(at: selection - headerItems.count)
             }
         case .centerHold:
-            // Hold on a song row: add to queue ("play next").
+            // Hold on a song row: queue options (Play Next / Add to Queue).
             guard kind == .songs else { break }
             let idx = selection - headerItems.count
-            let songs = sortedSongs
-            guard songs.indices.contains(idx) else { break }
             WheelHaptics.shared.ensureRunning()
             WheelHaptics.shared.buttonPress(strength: 0.85)
-            if model.player.addToQueue(songs[idx]) {
-                showToast("Added to Queue")
+            if QASeed.active {
+                // Seed rows have no MusicKit Song; the panel still opens
+                // (title-only) so QA can exercise it end-to-end.
+                guard QASeed.songs.indices.contains(idx) else { break }
+                hold.beginQA(title: QASeed.songs[idx].title)
             } else {
-                showToast("Nothing Playing")
+                let songs = sortedSongs
+                guard songs.indices.contains(idx) else { break }
+                hold.begin(songs[idx])
             }
         case .menu:
             model.pop()
@@ -515,6 +604,7 @@ struct AlbumDetailScreen: View {
     @State private var selection = 0
     @State private var tracks: [Song] = []
     @State private var toast = ""
+    @State private var hold = SongHoldState()
 
     private var album: Album? { model.music.album(albumID) }
 
@@ -534,6 +624,10 @@ struct AlbumDetailScreen: View {
             }
             if !toast.isEmpty {
                 ToastCapsule(text: toast)
+                    .zIndex(2)
+            }
+            if hold.isShowing {
+                ModalHost { hold.panel }
                     .zIndex(2)
             }
         }
@@ -569,22 +663,19 @@ struct AlbumDetailScreen: View {
     private var totalRows: Int { headerItems.count + tracks.count }
 
     private func handle(_ event: ControlEvent) {
+        if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
         case .tick(let d):
             moveListSelection(&selection, count: totalRows, delta: d, settings: settings)
         case .select:
             activateCurrent()
         case .centerHold:
-            // Hold a track row: add to queue ("play next").
+            // Hold a track row: queue options (Play Next / Add to Queue).
             let idx = selection - headerItems.count
             guard tracks.indices.contains(idx) else { break }
             WheelHaptics.shared.ensureRunning()
             WheelHaptics.shared.buttonPress(strength: 0.85)
-            if model.player.addToQueue(tracks[idx]) {
-                showToast("Added to Queue")
-            } else {
-                showToast("Nothing Playing")
-            }
+            hold.begin(tracks[idx])
         case .menu:
             model.pop()
         default:
@@ -623,6 +714,7 @@ struct PlaylistDetailScreen: View {
     @State private var selection = 0
     @State private var tracks: [Song] = []
     @State private var toast = ""
+    @State private var hold = SongHoldState()
 
     private var playlist: Playlist? { model.music.playlist(playlistID) }
 
@@ -646,6 +738,10 @@ struct PlaylistDetailScreen: View {
                 ToastCapsule(text: toast)
                     .zIndex(2)
             }
+            if hold.isShowing {
+                ModalHost { hold.panel }
+                    .zIndex(2)
+            }
         }
         .onWheel { handle($0) }
         .task(id: playlistID) {
@@ -663,6 +759,7 @@ struct PlaylistDetailScreen: View {
     }
 
     private func handle(_ event: ControlEvent) {
+        if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
         case .tick(let d):
             moveListSelection(&selection, count: totalRows, delta: d, settings: settings)
@@ -683,15 +780,12 @@ struct PlaylistDetailScreen: View {
                 }
             }
         case .centerHold:
+            // Hold a track row: queue options (Play Next / Add to Queue).
             let idx = selection - headerItems.count
             guard tracks.indices.contains(idx) else { break }
             WheelHaptics.shared.ensureRunning()
             WheelHaptics.shared.buttonPress(strength: 0.85)
-            if model.player.addToQueue(tracks[idx]) {
-                showToast("Added to Queue")
-            } else {
-                showToast("Nothing Playing")
-            }
+            hold.begin(tracks[idx])
         case .menu:
             model.pop()
         default:

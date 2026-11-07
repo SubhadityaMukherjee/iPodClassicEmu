@@ -19,6 +19,7 @@
 		24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC3AA5879EA27E592945C2 /* AppSettings.swift */; };
 		271C6EA4232D8A7602B1A2FE /* EpubContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F775252FC095655EE129D8 /* EpubContainer.swift */; };
 		2A24788AE5C41023F1FB9BA4 /* ScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */; };
+		3745E1CB511E64BEE553FC6B /* ReaderFontTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06E5B68A6556EACB64528E07 /* ReaderFontTests.swift */; };
 		37973EB02E0F882BFF436B15 /* CameraShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = E06640F863889753F8AADBCC /* CameraShortcut.swift */; };
 		3F918DA5FAD2C48FFAD5F7C5 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DA368CF25B19FEF8CE837C /* NotesStore.swift */; };
 		48A1D433ED95B265BA9FFF8E /* MusicService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC998CD72BCE921ABFBE36B /* MusicService.swift */; };
@@ -69,6 +70,7 @@
 		F9E16E555874477D62C613D3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2803B556B5B7050105E7CFB4 /* Theme.swift */; };
 		FBFCC04B6C4BCA7FE19B3ECD /* PhotoLibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6386B4A55E1B30CAE0EA14D /* PhotoLibraryModel.swift */; };
 		FC441BCF22529569C9289A56 /* WheelTapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */; };
+		FEE979444A845DCA3D51C8FE /* SongHoldStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8B1633CF255A1D13A05CF03 /* SongHoldStateTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,6 +114,7 @@
 /* Begin PBXFileReference section */
 		002EA79AA1F8371F29742EE8 /* QASeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QASeed.swift; sourceTree = "<group>"; };
 		06464256EE519A5BD50EA73F /* iPodClassicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodClassicApp.swift; sourceTree = "<group>"; };
+		06E5B68A6556EACB64528E07 /* ReaderFontTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderFontTests.swift; sourceTree = "<group>"; };
 		0C9168F602DF28123A3C7389 /* RecorderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderModel.swift; sourceTree = "<group>"; };
 		0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackActivityAttributes.swift; sourceTree = "<group>"; };
 		0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */ = {isa = PBXFileReference; path = AlarmBeep.caf; sourceTree = "<group>"; };
@@ -172,6 +175,7 @@
 		E080A36D7C3483C01ABF12C1 /* DeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceView.swift; sourceTree = "<group>"; };
 		E266621CE1581D432D96D171 /* NotesEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesEditorTests.swift; sourceTree = "<group>"; };
 		E6386B4A55E1B30CAE0EA14D /* PhotoLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryModel.swift; sourceTree = "<group>"; };
+		E8B1633CF255A1D13A05CF03 /* SongHoldStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongHoldStateTests.swift; sourceTree = "<group>"; };
 		E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaVolumeController.swift; sourceTree = "<group>"; };
 		F0A7AB9F78390A8680299570 /* ClickWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickWheelView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -340,6 +344,8 @@
 				483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */,
 				DF076EEBD7582FD738F82631 /* FeatureTests.swift */,
 				DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */,
+				06E5B68A6556EACB64528E07 /* ReaderFontTests.swift */,
+				E8B1633CF255A1D13A05CF03 /* SongHoldStateTests.swift */,
 			);
 			path = iPodClassicTests;
 			sourceTree = "<group>";
@@ -668,6 +674,8 @@
 				F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */,
 				D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */,
 				8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */,
+				3745E1CB511E64BEE553FC6B /* ReaderFontTests.swift in Sources */,
+				FEE979444A845DCA3D51C8FE /* SongHoldStateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

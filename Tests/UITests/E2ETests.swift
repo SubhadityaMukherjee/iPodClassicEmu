@@ -105,11 +105,21 @@ final class E2ETests: XCTestCase {
                 .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
         }
         // Walk past the three header rows onto the first song row, then
-        // hold center. Without playback nothing can be queued and nothing
-        // may navigate — the screen must stay put (no crash, no push).
+        // hold center: the queue-options panel must open. Without playback
+        // nothing can be queued and nothing may navigate — the screen must
+        // stay put (no crash, no push).
         for _ in 0..<3 { tick() }
         let center = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         center.press(forDuration: 0.8)
+        XCTAssertTrue(app.staticTexts["Play Next"].waitForExistence(timeout: 3),
+                      "hold on a song row did not open the queue options panel")
+        XCTAssertTrue(app.staticTexts["Add to Queue"].exists, "queue options panel missing Add to Queue")
+
+        // Select "Play Next" (row 0): nothing is playing under FAKE_LIBRARY,
+        // so it must toast "Nothing Playing" and close without navigating.
+        center.tap()
+        XCTAssertTrue(app.staticTexts["Nothing Playing"].waitForExistence(timeout: 3),
+                      "Play Next without playback should toast Nothing Playing")
         XCTAssertTrue(app.staticTexts["Song 000"].waitForExistence(timeout: 2),
                       "hold on a song row kicked us off the songs screen")
         XCTAssertFalse(app.staticTexts["Not Playing"].exists || app.buttons["Done"].exists,

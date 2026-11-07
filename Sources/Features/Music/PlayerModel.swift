@@ -110,12 +110,24 @@ final class PlayerModel {
         }
     }
 
-    /// Adds a song to play immediately after the current one.
+    /// Where a held song lands in the Up Next queue.
+    enum QueueAddMode {
+        case next  // immediately after the current entry
+        case end   // after everything already queued
+    }
+
+    /// Adds a song to the queue: `.next` plays right after the current
+    /// one, `.end` queues behind everything already up next.
     /// Returns false when nothing is playing (no queue to attach to).
     @discardableResult
-    func addToQueue(_ song: Song) -> Bool {
+    func addToQueue(_ song: Song, mode: QueueAddMode = .next) -> Bool {
         guard isPlaying else { return false }
-        Task { try? await player.queue.insert(song, position: .afterCurrentEntry) }
+        Task {
+            try? await player.queue.insert(
+                song,
+                position: mode == .next ? .afterCurrentEntry : .tail
+            )
+        }
         return true
     }
 

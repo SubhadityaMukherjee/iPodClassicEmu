@@ -17,7 +17,7 @@ final class ReaderStore {
         var chapterIndex: Int      // epub: spine index; pdf: page index
         var scrollFraction: Double // epub: position within the chapter
         var fontSize: Int          // epub: CSS body font size in px
-        var fontFamily: Int        // epub: 0 serif, 1 sans
+        var fontFamily: Int        // epub: index into fontFamilies (0..count-1)
         var lineSpacing: Int       // epub: 0 compact, 1 normal, 2 wide
         var margin: Int            // epub: 0 narrow, 1 normal, 2 wide
         var scrollStep: Int        // epub: 0 small, 1 medium, 2 full page
@@ -58,6 +58,19 @@ final class ReaderStore {
             pdfContinuous = try c.decodeIfPresent(Bool.self, forKey: .pdfContinuous) ?? true
             dim = try c.decodeIfPresent(Int.self, forKey: .dim) ?? 0
         }
+
+        /// EPUB font choices (persisted as `fontFamily` index): display
+        /// names for the settings row and CSS stacks for the web view.
+        /// Indexes are shared by both arrays — keep them in sync.
+        static let fontFamilyNames = ["Serif", "Sans", "Iowan", "Baskerville", "Avenir", "Typewriter"]
+        static let fontFamilyStacks = [
+            "Georgia,'Times New Roman',serif",
+            "-apple-system,'Helvetica Neue',sans-serif",
+            "'Iowan Old Style','Palatino',serif",
+            "'Baskerville','Times New Roman',serif",
+            "'Avenir Next','Helvetica Neue',sans-serif",
+            "'American Typewriter','Courier New',serif",
+        ]
     }
 
     enum ImportError: LocalizedError {

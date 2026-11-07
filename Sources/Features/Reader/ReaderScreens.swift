@@ -244,6 +244,12 @@ struct BookScreen: View {
                    let f = Double(fs), book?.kind == .epub {
                     book?.scrollFraction = f
                 }
+                // QA hook: force a font family index (visual checks of the
+                // font setting; the styleKey machinery applies it on load).
+                if let vis = ProcessInfo.processInfo.environment["READER_FONT"],
+                   let v = Int(vis), book?.kind == .epub {
+                    book?.fontFamily = v
+                }
                 // QA hook: perform N page turns after load (visual checks).
                 if let ts = ProcessInfo.processInfo.environment["READER_TICKS"],
                    let n = Int(ts), book?.kind == .epub {
@@ -478,7 +484,8 @@ struct BookScreen: View {
         let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
         return [
             BookSetting(id: "size", title: "Font Size", values: Self.fontSizes.map { "\($0) px" }, index: sizeIndex),
-            BookSetting(id: "family", title: "Font", values: ["Serif", "Sans"], index: min(max(book.fontFamily, 0), 1)),
+            BookSetting(id: "family", title: "Font", values: ReaderStore.Book.fontFamilyNames,
+                        index: min(max(book.fontFamily, 0), ReaderStore.Book.fontFamilyNames.count - 1)),
             BookSetting(id: "spacing", title: "Line Spacing", values: ["Compact", "Normal", "Wide"], index: min(max(book.lineSpacing, 0), 2)),
             BookSetting(id: "margin", title: "Margins", values: ["Narrow", "Normal", "Wide"], index: min(max(book.margin, 0), 2)),
             BookSetting(id: "scroll", title: "Scroll Step", values: ["Small", "Medium", "Large"], index: min(max(book.scrollStep, 0), 2)),
@@ -577,7 +584,8 @@ struct BookScreen: View {
             b.fontSize = Self.fontSizes[wrapped(idx, Self.fontSizes.count)]
             epubController.applyStyle(to: b)
         case "family":
-            b.fontFamily = wrapped(min(max(b.fontFamily, 0), 1), 2)
+            b.fontFamily = wrapped(min(max(b.fontFamily, 0), ReaderStore.Book.fontFamilyNames.count - 1),
+                                   ReaderStore.Book.fontFamilyNames.count)
             epubController.applyStyle(to: b)
         case "spacing":
             b.lineSpacing = wrapped(min(max(b.lineSpacing, 0), 2), 3)
@@ -870,8 +878,9 @@ final class EpubController {
     /// lines only; side margins come from body padding + an equal column
     /// gap, giving every page identical breathing room.
     static func cssJS(for book: ReaderStore.Book) -> String {
-        let families = ["Georgia,'Times New Roman',serif", "-apple-system,'Helvetica Neue',sans-serif"]
-        let family = families[min(max(book.fontFamily, 0), families.count - 1)]
+        let family = ReaderStore.Book.fontFamilyStacks[
+            min(max(book.fontFamily, 0), ReaderStore.Book.fontFamilyStacks.count - 1)
+        ]
         let lineHeights = [1.4, 1.55, 1.75]
         let lineHeight = lineHeights[min(max(book.lineSpacing, 0), lineHeights.count - 1)]
         let paddings = [10, 16, 24]
