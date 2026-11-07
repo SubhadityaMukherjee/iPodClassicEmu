@@ -39,4 +39,26 @@ final class ReaderFontTests: XCTestCase {
         let book = try! JSONDecoder().decode(ReaderStore.Book.self, from: Data(json.utf8))
         XCTAssertEqual(book.fontFamily, 1)
     }
+
+    func testCssCarriesSizeSpacingAndMargins() {
+        // Guards the Swift→JS string interpolation (the double-backslash
+        // escape bug once silently dropped every style here).
+        let book = ReaderStore.Book(id: "t", kind: .epub, title: "T",
+                                    fontSize: 20, fontFamily: 1, lineSpacing: 2, margin: 2)
+        let css = EpubController.cssJS(for: book)
+        XCTAssertTrue(css.contains("font-size:20px"), "body + inherit font-size must carry the px value")
+        XCTAssertTrue(css.contains("line-height:1.75"), "widest spacing maps to 1.75")
+        XCTAssertTrue(css.contains("column-gap:48px"), "margin index 2 = 24px side → 48px gap")
+        XCTAssertTrue(css.contains("column-width:calc(100vw - 48px)"))
+        XCTAssertTrue(css.contains("hyphens:auto"), "hyphenation must survive every change")
+    }
+
+    func testCssTightMarginsAndSpacing() {
+        let book = ReaderStore.Book(id: "t", kind: .epub, title: "T",
+                                    fontSize: 11, fontFamily: 0, lineSpacing: 0, margin: 0)
+        let css = EpubController.cssJS(for: book)
+        XCTAssertTrue(css.contains("font-size:11px"))
+        XCTAssertTrue(css.contains("line-height:1.4"), "compact spacing maps to 1.4")
+        XCTAssertTrue(css.contains("column-gap:20px"), "margin index 0 = 10px side → 20px gap")
+    }
 }
