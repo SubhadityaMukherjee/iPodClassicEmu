@@ -26,8 +26,17 @@ final class AlarmStore: ObservableObject {
         minute = d.object(forKey: K.minute) as? Int ?? 0
         isPM = d.bool(forKey: K.pm)
         repeatDays = Self.days(fromBitmask: d.integer(forKey: K.repeatDays))
-        // Insurance: make sure a pending request exists on every launch —
-        // reinstalling the request is free and heals any dropped state.
+        reconcile()
+    }
+
+    /// The persisted store is the single source of truth for system
+    /// notifications. Rebuilds them on every launch: cancels ALL alarm
+    /// identifiers first, then reschedules only when armed. This heals
+    /// ghosts — RESET_DEFAULTS (QA launches) clears the persisted state
+    /// but NOT the notification center, so a stale repeating trigger
+    /// would otherwise ring daily forever with nothing armed.
+    func reconcile() {
+        cancel()
         if enabled { schedule() }
     }
 
@@ -135,8 +144,11 @@ final class AlarmStore: ObservableObject {
         }
     }
 
+    /// Removes every alarm-family request: the repeating triggers, all
+    /// weekday variants, AND a pending snooze (a snoozed alarm left
+    /// pending after disable would ring 9 minutes later as a ghost).
     func cancel() {
-        let ids = ["alarm.daily"] + (1...7).map { "alarm.day.\($0)" }
+        let ids = ["alarm.daily", "alarm.snooze"] + (1...7).map { "alarm.day.\($0)" }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
