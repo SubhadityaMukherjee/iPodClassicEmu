@@ -179,9 +179,6 @@ struct DisplaySettingsScreen: View {
                 .init(id: "scan", title: "Scanlines", value: { Self.scanLabels[min(settings.scanlineIntensity, 3)] }) {
                     settings.scanlineIntensity = (settings.scanlineIntensity + 1) % 4
                 },
-                .init(id: "illusion", title: "Backlight Illusion", value: { settings.backlightIllusion ? "On" : "Off" }) {
-                    settings.backlightIllusion.toggle()
-                },
                 .init(id: "dim", title: "Dim After", value: { Self.dimLabels.first(where: { $0.1 == settings.dimAfterSeconds })?.0 ?? "Off" }) {
                     let idx = Self.dimLabels.firstIndex(where: { $0.1 == settings.dimAfterSeconds }) ?? 0
                     settings.dimAfterSeconds = Self.dimLabels[(idx + 1) % Self.dimLabels.count].1
