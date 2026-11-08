@@ -25,6 +25,9 @@ struct DeviceView: View {
                     ScreenView()
                         .frame(width: w * 0.955, height: w * 0.955 * 0.75)
                         .overlay {
+                            // Idle dim covers ONLY the LCD — the wheel and
+                            // body are hardware, not part of the lit screen.
+                            if isDimmed { dimOverlay }
                             // Hold: LCD fades out, playing art centered.
                             if model.holdActive {
                                 HoldScreenOverlay()
@@ -64,26 +67,11 @@ struct DeviceView: View {
                                 .offset(y: 2)
                                 .padding(-4)
                         )
-                        // Detached lighting: when the display dims, the wheel
-                        // sinks deeper than the screen — unlit hardware under
-                        // glass, not part of the touchscreen. Backlight
-                        // Illusion controls this detached dim.
-                        .overlay {
-                            Circle()
-                                .fill(Color.black.opacity(
-                                    isDimmed && settings.backlightIllusion ? 0.30 : 0
-                                ))
-                                .animation(.easeIn(duration: 0.3), value: isDimmed)
-                                .allowsHitTesting(false)
-                        }
 
                     Spacer(minLength: 0)
                         .frame(height: free * 0.45)
                 }
             }
-        }
-        .overlay(alignment: .top) {
-            if isDimmed { dimOverlay }
         }
         .overlay {
             if model.screenAsleep { sleepOverlay }
@@ -108,7 +96,6 @@ struct DeviceView: View {
 
     private var dimOverlay: some View {
         Color.black.opacity(0.62)
-            .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture { model.markActivity() }
             .transition(.opacity)
@@ -157,13 +144,6 @@ struct HoldSwitchView: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
-    private var isDimmed: Bool {
-        _ = model.clockTick
-        let after = TimeInterval(settings.dimAfterSeconds)
-        guard after > 0 else { return false }
-        return model.idleSeconds > after && model.ringer == nil
-    }
-
     var body: some View {
         let silver = settings.theme == 1
         HStack {
@@ -199,16 +179,6 @@ struct HoldSwitchView: View {
                         .padding(.horizontal, 4)
                 }
                 .frame(width: 44, height: 18)
-                // Detached lighting: the lock sinks with the wheel, deeper
-                // than the screen (Backlight Illusion).
-                .overlay {
-                    Capsule()
-                        .fill(Color.black.opacity(
-                            isDimmed && settings.backlightIllusion ? 0.30 : 0
-                        ))
-                        .animation(.easeIn(duration: 0.3), value: isDimmed)
-                        .allowsHitTesting(false)
-                }
             }
             .buttonStyle(.plain)
         }

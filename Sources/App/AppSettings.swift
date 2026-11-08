@@ -14,7 +14,6 @@ final class AppSettings: ObservableObject {
     private enum K {
         static let crt = "display.crt"
         static let scanlines = "display.scanlines"
-        static let backlightIllusion = "display.illusion"
         static let dimAfter = "display.dimAfter"      // seconds; 0 = never
         static let haptics = "wheel.haptics"
         static let scrollHaptics = "wheel.scrollHaptics" // 0 off 1 light 2 medium 3 strong
@@ -43,10 +42,6 @@ final class AppSettings: ObservableObject {
     /// Scanline intensity 0–3 (off, subtle, medium, strong).
     var scanlineIntensity: Int {
         get { int(K.scanlines, 1) } set { objectWillChange.send(); store(newValue, K.scanlines) }
-    }
-    /// Wheel & lock dim in inverse contrast to the screen.
-    var backlightIllusion: Bool {
-        get { bool(K.backlightIllusion, true) } set { objectWillChange.send(); store(newValue, K.backlightIllusion) }
     }
     /// Seconds of inactivity before the screen dims; 0 = never.
     var dimAfterSeconds: Int {
