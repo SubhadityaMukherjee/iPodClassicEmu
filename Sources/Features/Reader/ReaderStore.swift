@@ -26,7 +26,7 @@ final class ReaderStore {
 
         init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
              scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
-             lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 2,
+             lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 0,
              pdfContinuous: Bool = true, dim: Int = 0) {
             self.id = id
             self.kind = kind
@@ -54,7 +54,7 @@ final class ReaderStore {
             fontFamily = try c.decodeIfPresent(Int.self, forKey: .fontFamily) ?? 0
             lineSpacing = try c.decodeIfPresent(Int.self, forKey: .lineSpacing) ?? 1
             margin = try c.decodeIfPresent(Int.self, forKey: .margin) ?? 1
-            scrollStep = try c.decodeIfPresent(Int.self, forKey: .scrollStep) ?? 1
+            scrollStep = try c.decodeIfPresent(Int.self, forKey: .scrollStep) ?? 0
             pdfContinuous = try c.decodeIfPresent(Bool.self, forKey: .pdfContinuous) ?? true
             dim = try c.decodeIfPresent(Int.self, forKey: .dim) ?? 0
         }
@@ -115,6 +115,16 @@ final class ReaderStore {
             }
             persist()
             d.set(true, forKey: "reader.linePageMigrated")
+        }
+        // One-time: books created while the default scroll step was 2
+        // ("Large" = 3 pages per tick) skipped pages on every wheel notch —
+        // the user reads page-by-page. Heal those to 1 page per tick.
+        if !d.bool(forKey: "reader.newBookStepMigrated") {
+            for i in books.indices where books[i].kind == .epub && books[i].scrollStep == 2 {
+                books[i].scrollStep = 0
+            }
+            persist()
+            d.set(true, forKey: "reader.newBookStepMigrated")
         }
     }
 

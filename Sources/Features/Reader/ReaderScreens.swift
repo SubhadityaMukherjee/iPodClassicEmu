@@ -818,6 +818,21 @@ final class EpubController {
     /// reverts native scrollView writes.
     func scrollByPages(_ count: Int) {
         webView?.evaluateJavaScript("window.scrollBy(window.innerWidth * \(count), 0)", completionHandler: nil)
+        if ProcessInfo.processInfo.environment["READER_DEBUG"] == "1" {
+            webView?.evaluateJavaScript("""
+            (function(){
+              var b = document.body.getBoundingClientRect();
+              return JSON.stringify({innerW: window.innerWidth, innerH: window.innerHeight,
+                clientW: document.documentElement.clientWidth,
+                scrollW: document.documentElement.scrollWidth,
+                bodyX: b.x, bodyW: b.width, dpr: window.devicePixelRatio,
+                visualScale: window.visualViewport ? window.visualViewport.scale : null,
+                visualW: window.visualViewport ? window.visualViewport.width : null});
+            })()
+            """) { v, _ in
+                Logger(subsystem: "com.ipodclassic.app", category: "reader-debug").notice("GEOM \(v as? String ?? "?", privacy: .public)")
+            }
+        }
     }
 
     func applyStyle(to book: ReaderStore.Book) {

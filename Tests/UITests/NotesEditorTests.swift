@@ -53,5 +53,23 @@ final class NotesEditorTests: XCTestCase {
         // Done must drop the keyboard (probe → resignFirstResponder).
         done.tap()
         XCTAssertTrue(done.waitForNonExistence(timeout: 5), "Done did not dismiss the keyboard")
+
+        // Regression: SwiftUI may recreate the backing UITextView across
+        // keyboard transitions; the wheel must still scroll afterwards.
+        let postKeyboardY = Int(readout.label.dropFirst(2)) ?? -999
+        for _ in 0..<3 {
+            origin.withOffset(CGVector(dx: 64, dy: 64))
+                .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
+        }
+        var rescrolledY = -999
+        for _ in 0..<10 {
+            if readout.exists, let y = Int(readout.label.dropFirst(2)), y > postKeyboardY {
+                rescrolledY = y
+                break
+            }
+            usleep(200_000)
+        }
+        XCTAssertTrue(rescrolledY > postKeyboardY,
+                      "Wheel ticks stopped scrolling after a keyboard cycle (y=\(postKeyboardY) → \(rescrolledY))")
     }
 }

@@ -18,6 +18,22 @@ struct ScreenView: View {
             RoundedRectangle(cornerRadius: 2)
                 .stroke(Color.black.opacity(0.85), lineWidth: 2)
         )
+        // Recessed LCD: dark rim just inside every edge, strongest at the
+        // top (the bezel above casts into the glass) — reads as an inset
+        // screen seated into the body.
+        .overlay(
+            ZStack {
+                LinearGradient(colors: [.black.opacity(0.38), .clear],
+                               startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.16))
+                LinearGradient(colors: [.black.opacity(0.16), .clear],
+                               startPoint: .bottom, endPoint: UnitPoint(x: 0.5, y: 0.92))
+                LinearGradient(colors: [.black.opacity(0.15), .clear],
+                               startPoint: .leading, endPoint: UnitPoint(x: 0.06, y: 0.5))
+                LinearGradient(colors: [.black.opacity(0.15), .clear],
+                               startPoint: .trailing, endPoint: UnitPoint(x: 0.94, y: 0.5))
+            }
+            .allowsHitTesting(false)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 2))
     }
 }

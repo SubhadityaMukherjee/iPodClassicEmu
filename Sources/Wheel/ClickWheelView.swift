@@ -139,6 +139,24 @@ final class WheelCoordinator {
 
     /// Degrees of rotation per detent.
     private let tickDegrees = 15.0
+    /// Adaptive scroll: smoothed angular speed (°/s) of the current spin,
+    /// and the time of the last move event feeding it.
+    private var degreesPerSecond = 0.0
+    private var lastMoveAt = Date()
+
+    /// Rows advanced per detent at a given spin speed — the real wheel's
+    /// adaptive scrolling: a slow roll steps one row, a fast flick flies.
+    /// Kept conservative so a single quick detent-flick stays 1 row.
+    /// Direction-agnostic: the sign of `speed` is ignored.
+    static func rowsPerDetent(speed: Double) -> Int {
+        switch abs(speed) {
+        case ..<300: return 1
+        case ..<700: return 2
+        case ..<1200: return 3
+        case ..<2000: return 4
+        default: return 6
+        }
+    }
 
     private enum Mode {
         case scroll
@@ -188,6 +206,8 @@ final class WheelCoordinator {
                 startAngle = angle
                 lastAngle = angle
                 accumulated = 0
+                degreesPerSecond = 0
+                lastMoveAt = Date()
             }
         case .center:
             break
@@ -232,6 +252,9 @@ final class WheelCoordinator {
         accumulated = 0
         startAngle = angle
         lastAngle = angle
+        // Every new touch starts a slow roll; speed builds as it spins.
+        degreesPerSecond = 0
+        lastMoveAt = time
         holdFired = false
         convertedToScroll = false
 
@@ -281,13 +304,28 @@ final class WheelCoordinator {
     // MARK: Scroll
 
     private func scrolled(to angle: Double, send: (ControlEvent) -> Void) {
+        let now = Date()
         let d = angleDelta(from: lastAngle, to: angle)
         lastAngle = angle
+        // Smoothed angular speed: instantaneous °/s over the event gap,
+        // EMA-weighted so one fast event doesn't jump the multiplier. A
+        // long pause (> 0.5 s) means the spin stopped — start fresh.
+        let dt = now.timeIntervalSince(lastMoveAt)
+        lastMoveAt = now
+        if dt >= 0.5 {
+            degreesPerSecond = 0
+        } else if dt > 0.004 {
+            let instant = abs(d) / dt
+            degreesPerSecond = degreesPerSecond == 0
+                ? instant
+                : degreesPerSecond * 0.65 + instant * 0.35
+        }
         accumulated += d
+        let rows = Self.rowsPerDetent(speed: degreesPerSecond)
         while abs(accumulated) >= tickDegrees {
             let dir: Int = accumulated > 0 ? 1 : -1
             accumulated -= Double(dir) * tickDegrees
-            send(.tick(dir))
+            for _ in 0..<rows { send(.tick(dir)) }
         }
     }
 
@@ -343,6 +381,7 @@ final class WheelCoordinator {
         holdFired = false
         convertedToScroll = false
         accumulated = 0
+        degreesPerSecond = 0
         pressedZone = nil
         cancelHold()
     }
@@ -356,13 +395,23 @@ final class WheelCoordinator {
 /// Shared feed for scroll ticks so any screen can react, and so the wheel
 /// itself can trigger per-detent haptics/sounds honoring the settings.
 enum WheelFeedback {
+    /// Minimum gap between haptic/sound pulses. Adaptive scrolling emits
+    /// several ticks per detent on a fast spin (up to hundreds/s); without
+    /// a ceiling the haptic engine saturates and the purr becomes mush.
+    /// Slow rolls (~13 ticks/s) never reach this.
+    private static var lastPulseAt = Date.distantPast
+    private static let minPulseGap = 0.02
+
     static func tick(dir: Int) {
         let s = AppSettings.shared
+        let now = Date()
+        let dense = now.timeIntervalSince(lastPulseAt) < minPulseGap
+        lastPulseAt = now
         let intensities = [0.0, 0.4, 0.7, 1.0]
-        let level = s.hapticsEnabled ? intensities[min(s.scrollingHaptics, 3)] : 0
+        let level = s.hapticsEnabled && !dense ? intensities[min(s.scrollingHaptics, 3)] : 0
         WheelHaptics.shared.ensureRunning()
         WheelHaptics.shared.tick(intensity: level)
-        if s.tickSounds {
+        if s.tickSounds && !dense {
             TickSounds.shared.tick(soft: s.softTick)
         }
     }

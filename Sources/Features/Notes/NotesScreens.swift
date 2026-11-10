@@ -154,13 +154,23 @@ struct NotesListScreen: View {
 /// The wheel scrolls the note; Done (below) or center dismisses the keyboard.
 struct NoteEditorScreen: View {
     @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
     let fileName: String
 
     @State private var text = ""
     @State private var loaded = false
     @State private var textView: UITextView?
+    @State private var probeAnchor: UIView?
     @State private var keyboardVisible = false
     @State private var lastScrollY: CGFloat = 0
+    /// Hold-center options panel (font size / share).
+    @State private var optionsOpen = false
+    @State private var optionsSelection = 0
+    /// Live font-size adjust mode inside the panel: the wheel edits the
+    /// size with an instant preview; center saves, MENU cancels.
+    @State private var sizingMode = false
+    @State private var sizingDraft = 14
+    @State private var sizingBefore = 14
 
     private let scrollStep: CGFloat = 26
 
@@ -171,7 +181,7 @@ struct NoteEditorScreen: View {
 
     var body: some View {
         TextEditor(text: $text)
-            .font(Theme.font(14))
+            .font(Theme.font(CGFloat(sizingMode ? sizingDraft : settings.noteFontSize)))
             .foregroundStyle(Theme.ink)
             .scrollContentBackground(.hidden)
             .background(PaperBackground())
@@ -185,9 +195,9 @@ struct NoteEditorScreen: View {
             .environment(\.colorScheme, .dark)
             .onWheel { handle($0) }
             .background(
-                // Anchor that hands us the TextEditor's backing UITextView
-                // so the wheel can scroll it and Done can drop the keyboard.
-                TextViewProbe { textView = $0 }
+                // Anchor into the TextEditor's backing hierarchy so the
+                // wheel can scroll it and Done can drop the keyboard.
+                TextViewProbe { probeAnchor = $0 }
             )
             .overlay(alignment: .bottom) {
                 if keyboardVisible {
@@ -206,6 +216,12 @@ struct NoteEditorScreen: View {
                         .padding(4)
                 }
             }
+            .overlay {
+                if optionsOpen {
+                    ModalHost { editorOptionsPanel }
+                        .zIndex(2)
+                }
+            }
             .onChange(of: text) { _, newValue in
                 if loaded {
                     model.notes.saveDebounced(fileName, newValue)
@@ -220,6 +236,14 @@ struct NoteEditorScreen: View {
                         .joined(separator: "\n")
                 }
                 loaded = true
+                // QA hook (NOTES_PANEL=1): open the note options panel
+                // (screenshots of the hold menu).
+                if ProcessInfo.processInfo.environment["NOTES_PANEL"] == "1" {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        optionsSelection = 0
+                        withAnimation(.easeOut(duration: 0.18)) { optionsOpen = true }
+                    }
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.keyboardWillShowNotification)) { _ in
                 withAnimation(.easeOut(duration: 0.18)) { keyboardVisible = true }
@@ -240,7 +264,7 @@ struct NoteEditorScreen: View {
 
     private var doneButton: some View {
         Button {
-            textView?.resignFirstResponder()
+            resolveTextView()?.resignFirstResponder()
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.down")
@@ -259,35 +283,122 @@ struct NoteEditorScreen: View {
 
     private func handle(_ event: ControlEvent) {
         // Typing happens by touch; the wheel scrolls, center/Done dismiss
-        // the keyboard, MENU steps out of the editor.
+        // the keyboard, MENU steps out of the editor. Hold center opens
+        // the note options panel (font size / share).
         switch event {
         case .tick(let d):
             WheelFeedback.tick(dir: d)
-            scrollBy(d > 0 ? scrollStep : -scrollStep)
+            if sizingMode {
+                sizingDraft = min(24, max(11, sizingDraft + (d > 0 ? 1 : -1)))
+            } else if optionsOpen {
+                moveListSelection(&optionsSelection, count: 3, delta: d, settings: settings)
+            } else {
+                scrollBy(d > 0 ? scrollStep : -scrollStep)
+            }
         case .select:
-            if keyboardVisible {
-                textView?.resignFirstResponder()
+            if sizingMode {
+                settings.noteFontSize = sizingDraft
+                closeOptions()
+            } else if optionsOpen {
+                switch optionsSelection {
+                case 0:
+                    sizingMode = true
+                    sizingBefore = settings.noteFontSize
+                    sizingDraft = settings.noteFontSize
+                case 1:
+                    shareText = "\(fileName)\n\n\(text)"
+                    closeOptions()
+                default:
+                    closeOptions()
+                }
+            } else if keyboardVisible {
+                resolveTextView()?.resignFirstResponder()
             }
         case .menu:
-            model.notes.write(fileName, text)
-            model.pop()
+            if sizingMode {
+                sizingDraft = sizingBefore
+                closeOptions()
+            } else if optionsOpen {
+                closeOptions()
+            } else {
+                model.notes.write(fileName, text)
+                model.pop()
+            }
         case .menuHold:
-            model.notes.write(fileName, text)
-            model.popToRoot()
+            if sizingMode {
+                sizingDraft = sizingBefore
+                closeOptions()
+            } else if optionsOpen {
+                closeOptions()
+            } else {
+                model.notes.write(fileName, text)
+                model.popToRoot()
+            }
         case .centerHold:
-            // Hold center: share the note as plain text.
+            // Hold center: note options (was share-only).
+            guard !optionsOpen else { break }
             WheelHaptics.shared.ensureRunning()
             WheelHaptics.shared.buttonPress(strength: 0.9)
-            shareText = "\(fileName)\n\n\(text)"
+            keyboardVisible = false
+            resolveTextView()?.resignFirstResponder()
+            optionsSelection = 0
+            withAnimation(.easeOut(duration: 0.18)) { optionsOpen = true }
         default:
             break
         }
     }
 
+    private func closeOptions() {
+        sizingMode = false
+        withAnimation(.easeOut(duration: 0.18)) { optionsOpen = false }
+    }
+
+    private var editorOptionsPanel: some View {
+        ModalPanel(title: sizingMode ? "Font Size — Wheel to Adjust" : "Note Options",
+                   onClose: {
+                       if sizingMode { sizingDraft = sizingBefore }
+                       closeOptions()
+                   }) {
+            VStack(spacing: 0) {
+                MenuRow(item: MenuItem(id: "o.size", title: "Font Size",
+                                       detail: "\(sizingMode ? sizingDraft : settings.noteFontSize)",
+                                       showsChevron: false),
+                        selected: optionsSelection == 0)
+                    .frame(height: 30.5)
+                MenuRow(item: MenuItem(id: "o.share", title: "Share", showsChevron: false),
+                        selected: optionsSelection == 1)
+                    .frame(height: 30.5)
+                MenuRow(item: MenuItem(id: "o.cancel", title: "Cancel", showsChevron: false),
+                        selected: optionsSelection == 2)
+                    .frame(height: 30.5)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// The editor's live backing text view. The probe captures it once,
+    /// but SwiftUI can RECREATE the UITextView (keyboard transitions,
+    /// backgrounding) leaving the captured reference detached — wheel
+    /// scrolls then die silently. Re-walk from the anchor whenever the
+    /// cached view is no longer in a window.
+    private func resolveTextView() -> UITextView? {
+        if let tv = textView, tv.window != nil { return tv }
+        guard let anchor = probeAnchor else { return nil }
+        var parent = anchor.superview
+        while let p = parent {
+            if let tv = p.firstSubview(ofType: UITextView.self) {
+                textView = tv
+                return tv
+            }
+            parent = p.superview
+        }
+        return nil
+    }
+
     /// Scroll the backing text view by `delta` points, clamped to the
     /// document (adjusted insets cover the keyboard's automatic inset).
     private func scrollBy(_ delta: CGFloat) {
-        guard let tv = textView else { return }
+        guard let tv = resolveTextView() else { return }
         let target = clampedScrollOffset(
             current: tv.contentOffset.y,
             delta: delta,
@@ -313,24 +424,18 @@ func clampedScrollOffset(current: CGFloat, delta: CGFloat, contentHeight: CGFloa
     return min(max(current + delta, lowest), highest)
 }
 
-/// Invisible anchor that locates the TextEditor's backing UITextView: it
-/// walks up from its own layer to the first ancestor that owns one — the
-/// editor's text view, since no other TextEditor exists in the app.
+/// Invisible anchor into the TextEditor's backing hierarchy: the editor
+/// re-walks from it to find the CURRENT backing UITextView whenever the
+/// cached one detaches (SwiftUI can recreate the text view on keyboard
+/// transitions or backgrounding, which silently killed wheel scrolling).
 private struct TextViewProbe: UIViewRepresentable {
-    let onFound: (UITextView) -> Void
+    let onAnchor: (UIView) -> Void
 
     func makeUIView(context: Context) -> UIView {
         let v = UIView()
         v.isUserInteractionEnabled = false
         DispatchQueue.main.async {
-            var parent = v.superview
-            while let p = parent {
-                if let tv = p.firstSubview(ofType: UITextView.self) {
-                    onFound(tv)
-                    return
-                }
-                parent = p.superview
-            }
+            onAnchor(v)
         }
         return v
     }
