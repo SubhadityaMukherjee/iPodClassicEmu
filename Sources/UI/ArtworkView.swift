@@ -62,9 +62,12 @@ actor ArtworkLoader {
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             guard let img = UIImage(data: data) else { return nil }
-            let cost = img.cgImage.map { $0.bytesPerRow * $0.height } ?? data.count
-            cache.setObject(img, forKey: key, cost: cost)
-            return img
+            // Decode NOW, off the main thread: UIImage(data:) is lazy and
+            // would otherwise decode on first draw, hitching grid scrolls.
+            let decoded = img.preparingForDisplay() ?? img
+            let cost = decoded.cgImage.map { $0.bytesPerRow * $0.height } ?? data.count
+            cache.setObject(decoded, forKey: key, cost: cost)
+            return decoded
         } catch {
             return nil
         }
