@@ -808,12 +808,8 @@ final class EpubController {
     weak var webView: WKWebView?
 
     /// Turns `count` pages (negative = backwards). A column period is one
-    /// viewport width, so integer multiples land exactly on page starts.
-    /// Scrolled NATIVELY: window.scrollBy is unreliable for horizontal
-    /// overflow in WKWebView (the native scroll view ignores it), while
-    /// its contentSize does include the columns.
-    /// Turns `count` pages (negative = backwards). A column period is one
-    /// viewport width, so integer multiples land exactly on page starts.
+    /// viewport width (column + equal gap = 100vw), so integer multiples
+    /// land exactly on page starts, symmetric margins included.
     /// Scrolled through the DOM — WebKit owns the horizontal offset and
     /// reverts native scrollView writes.
     func scrollByPages(_ count: Int) {
