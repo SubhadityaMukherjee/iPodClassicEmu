@@ -29,6 +29,25 @@ struct iPodClassicApp: App {
         }
         _model = State(initialValue: AppModel())
 
+        // Force-quit / crash insurance: scenePhase .background doesn't run
+        // when the app is swiped away or killed, so persist the session on
+        // terminate too. saveSession is idempotent.
+        let sessionPlayer = model.player
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willTerminateNotification,
+            object: nil, queue: .main
+        ) { _ in sessionPlayer.saveSession() }
+
+        // Apple's artwork CDN serves long-lived cache headers, but the
+        // default shared URLCache is tiny — album grids re-downloaded
+        // covers on every scroll round-trip and relaunch. Give it room
+        // (decoded bitmaps stay bounded by ArtworkLoader's NSCache).
+        URLCache.shared = URLCache(
+            memoryCapacity: 16 * 1024 * 1024,
+            diskCapacity: 96 * 1024 * 1024,
+            diskPath: "artwork-urlcache"
+        )
+
         AlarmNotifications.configureDelegate()
         AppModelRouter.shared.model = self.model
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -50,6 +69,9 @@ struct iPodClassicApp: App {
                     // the system notification.
                     switch phase {
                     case .background:
+                        // Persist what's playing so a relaunch restores it
+                        // (queue, current track, position).
+                        model.player.saveSession()
                         if model.alarms.enabled { model.alarms.startKeepAlive() }
                     case .active:
                         model.alarms.stopKeepAlive()

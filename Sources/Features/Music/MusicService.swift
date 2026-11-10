@@ -64,51 +64,77 @@ final class MusicService {
         loading = true
         defer { loading = false }
 
-        // Fetches stay on the caller's actor; the compact + sort blocks run
-        // DETACHED. Localized collation over a whole library takes hundreds
-        // of milliseconds per section, and this reload fires while the
-        // Music menu push animates (refreshIfStale on appear) — inline
-        // sorting visibly stuttered the animation on large libraries.
-        let albumResponse = try? await MusicLibraryRequest<Album>().response()
-        albums = await Task.detached(priority: .userInitiated) {
-            (albumResponse?.items.compactMap { $0 } ?? []).sorted { a, b in
-                if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
-                    return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
-                }
-                return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
-            }
-        }.value
+        // Fetch all four sections CONCURRENTLY (each request enumerates
+        // the whole library — serial fetching stretched the reload out to
+        // the SUM of the requests), sort off-main, and publish only once:
+        // assigning the @Observable arrays mid-load re-rendered every
+        // music screen four times per reload AND left mixed-state windows
+        // (albums filled while songs was still empty — the same class of
+        // bug that made artist Shuffle All silently no-op).
+        async let albumItems = Self.fetchItems(Album.self)
+        async let artistItems = Self.fetchItems(Artist.self)
+        async let songItems = Self.fetchItems(Song.self)
+        async let playlistItems = Self.fetchItems(Playlist.self)
+        let (albumsRaw, artistsRaw, songsRaw, playlistsRaw) =
+            await (albumItems, artistItems, songItems, playlistItems)
 
-        let artistResponse = try? await MusicLibraryRequest<Artist>().response()
-        artists = await Task.detached(priority: .userInitiated) {
-            (artistResponse?.items.compactMap { $0 } ?? []).sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
+        async let sortedAlbums = Task.detached(priority: .userInitiated) {
+            Self.sortAlbums(albumsRaw)
         }.value
-
-        let songResponse = try? await MusicLibraryRequest<Song>().response()
-        songs = await Task.detached(priority: .userInitiated) {
-            (songResponse?.items.compactMap { $0 } ?? []).sorted { a, b in
-                if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
-                    return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
-                }
-                if (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") != .orderedSame {
-                    return (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") == .orderedAscending
-                }
-                return (a.trackNumber ?? 0) < (b.trackNumber ?? 0)
-            }
+        async let sortedArtists = Task.detached(priority: .userInitiated) {
+            Self.sortArtists(artistsRaw)
         }.value
-
-        let playlistResponse = try? await MusicLibraryRequest<Playlist>().response()
-        playlists = await Task.detached(priority: .userInitiated) {
-            (playlistResponse?.items.compactMap { $0 } ?? []).sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
+        async let sortedSongs = Task.detached(priority: .userInitiated) {
+            Self.sortSongs(songsRaw)
         }.value
+        async let sortedPlaylists = Task.detached(priority: .userInitiated) {
+            Self.sortPlaylists(playlistsRaw)
+        }.value
+        albums = await sortedAlbums
+        artists = await sortedArtists
+        songs = await sortedSongs
+        playlists = await sortedPlaylists
 
         clearMenuCaches()
         loaded = true
         lastLoaded = Date()
+    }
+
+    /// One whole-library fetch (nonisolated so the four `async let`
+    /// fetches run truly in parallel; sorting is detached — localized
+    /// collation over a whole library takes hundreds of milliseconds per
+    /// section).
+    private nonisolated static func fetchItems<T: MusicLibraryRequestable>(_ type: T.Type) async -> [T] {
+        (try? await MusicLibraryRequest<T>().response().items.compactMap { $0 }) ?? []
+    }
+
+    private nonisolated static func sortAlbums(_ items: [Album]) -> [Album] {
+        items.sorted { a, b in
+            if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
+                return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
+            }
+            return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+        }
+    }
+
+    private nonisolated static func sortArtists(_ items: [Artist]) -> [Artist] {
+        items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private nonisolated static func sortSongs(_ items: [Song]) -> [Song] {
+        items.sorted { a, b in
+            if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
+                return a.artistName.localizedCaseInsensitiveCompare(b.artistName) == .orderedAscending
+            }
+            if (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") != .orderedSame {
+                return (a.albumTitle ?? "").localizedCaseInsensitiveCompare(b.albumTitle ?? "") == .orderedAscending
+            }
+            return (a.trackNumber ?? 0) < (b.trackNumber ?? 0)
+        }
+    }
+
+    private nonisolated static func sortPlaylists(_ items: [Playlist]) -> [Playlist] {
+        items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     /// Deterministic fake library for wheel/scroll QA in the simulator.
@@ -157,6 +183,7 @@ final class MusicService {
     // their sort option, so a refresh always rebuilds.
 
     private var generation = 0
+    private var albumTracksCache: [String: [Song]] = [:]
     private var songsMenuCache: (generation: Int, sort: Int, items: [MenuItem])?
     private var albumsMenuCache: (generation: Int, sort: Int, items: [MenuItem])?
     private var artistsMenuCache: (generation: Int, items: [MenuItem])?
@@ -166,6 +193,7 @@ final class MusicService {
 
     func clearMenuCaches() {
         generation += 1
+        albumTracksCache = [:]
         songsMenuCache = nil
         albumsMenuCache = nil
         artistsMenuCache = nil
@@ -271,6 +299,63 @@ final class MusicService {
             .sorted { $0.artistName.localizedCaseInsensitiveCompare($1.artistName) == .orderedAscending }
     }
 
+    /// Every song for one artist page's Play All / Shuffle All: songs
+    /// credited to the artist plus the songs of their albums (guest
+    /// features whose credit string differs), deduped by ID. When the
+    /// in-memory cache can't answer it falls back to a filtered library
+    /// request — the cached `songs` array fills LAST during loadLibrary,
+    /// so a page opened mid-load (or right after launch) would otherwise
+    /// silently no-op instead of playing.
+    func songs(forArtist artist: Artist) async -> [Song] {
+        var list = songs.filter { $0.artistName.caseInsensitiveCompare(artist.name) == .orderedSame }
+        var seen = Set(list.map { $0.id.rawValue })
+        for album in albums(byArtist: artist) {
+            for song in cachedTracks(forAlbum: album) where seen.insert(song.id.rawValue).inserted {
+                list.append(song)
+            }
+        }
+        guard list.isEmpty else { return list }
+        var req = MusicLibraryRequest<Song>()
+        req.filter(matching: \.artistName, equalTo: artist.name)
+        let fetched = (try? await req.response().items.compactMap { $0 }) ?? []
+        return fetched.sorted { a, b in
+            let ta = a.albumTitle ?? "", tb = b.albumTitle ?? ""
+            if ta.localizedCaseInsensitiveCompare(tb) != .orderedSame {
+                return ta.localizedCaseInsensitiveCompare(tb) == .orderedAscending
+            }
+            return (a.trackNumber ?? 0) < (b.trackNumber ?? 0)
+        }
+    }
+
+    /// Songs behind a genre page's Play All / Shuffle All: the cached
+    /// songs of every album in the genre, deduped by ID; albums the cache
+    /// can't answer yet fall back to per-album track fetches (the cached
+    /// `songs` array fills LAST during loadLibrary).
+    func tracks(forGenre genre: String) async -> [Song] {
+        var list: [Song] = []
+        var seen = Set<String>()
+        for album in albums(inGenre: genre) {
+            let cached = cachedTracks(forAlbum: album)
+            let source = cached.isEmpty ? await tracks(forAlbum: album) : cached
+            for song in source where seen.insert(song.id.rawValue).inserted {
+                list.append(song)
+            }
+        }
+        return list
+    }
+
+    /// Fetches library songs by ID, preserving the given order (playback
+    /// restore reads persisted IDs at launch — Song objects can't be
+    /// constructed app-side, and the full library may not be cached yet).
+    func songs(withIDs ids: [String]) async -> [Song] {
+        guard !ids.isEmpty else { return [] }
+        var req = MusicLibraryRequest<Song>()
+        req.filter(matching: \.id, memberOf: ids.map { MusicItemID(rawValue: $0) })
+        let fetched = (try? await req.response().items.compactMap { $0 }) ?? []
+        let byID = Dictionary(fetched.map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
+        return ids.compactMap { byID[$0] }
+    }
+
     var genres: [String] {
         var seen = Set<String>()
         var out: [String] = []
@@ -293,10 +378,18 @@ final class MusicService {
     }
 
     /// Album tracks via the album relation (correct order, includes guests).
+    /// Cached per album ID — `with([.tracks])` is a MusicKit roundtrip, and
+    /// revisits (Go to Album, artist Play All) shouldn't repeat it. The
+    /// fallback path is deliberately NOT cached: the `songs` array it
+    /// filters may still be filling during a library load.
     func tracks(forAlbum album: Album) async -> [Song] {
+        if let cached = albumTracksCache[album.id.rawValue] { return cached }
         if let detailed = try? await album.with([.tracks]) {
             let list = Self.songs(from: detailed.tracks)
-            if !list.isEmpty { return list }
+            if !list.isEmpty {
+                albumTracksCache[album.id.rawValue] = list
+                return list
+            }
         }
         // Fallback: filter the cached song list by album title.
         return songs.filter { ($0.albumTitle ?? "") == album.title }

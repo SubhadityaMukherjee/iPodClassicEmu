@@ -168,6 +168,20 @@ final class AppModel {
                     stack.append(.nowPlaying)
                 }
             }
+        } else {
+            // Restore the last session: what played, where in it, and in
+            // what order — armed PAUSED, the user resumes with play/pause.
+            // QA hooks that build their own playback state skip this.
+            if ProcessInfo.processInfo.environment["FAKE_LIBRARY"] != "1" {
+                Task { @MainActor in
+                    music.refreshStatus()
+                    guard music.isAuthorized,
+                          let saved = PlaybackSessionStore.load(),
+                          !saved.songIDs.isEmpty else { return }
+                    let songs = await music.songs(withIDs: saved.songIDs)
+                    player.restore(songs, index: saved.index, time: saved.playbackTime)
+                }
+            }
         }
     }
 

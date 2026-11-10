@@ -44,6 +44,12 @@ actor ArtworkLoader {
     static let shared = ArtworkLoader()
     private let cache = NSCache<NSString, UIImage>()
 
+    init() {
+        // Covers decode to ~1.4 MB bitmaps each; without a cost limit the
+        // cache only evicts under system pressure, long after it should.
+        cache.totalCostLimit = 96 * 1024 * 1024
+    }
+
     func image(for artwork: Artwork?, width: CGFloat, height: CGFloat) async -> UIImage? {
         guard let artwork else { return nil }
         let pixelW = max(50, Int(width * 2))
@@ -56,7 +62,8 @@ actor ArtworkLoader {
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             guard let img = UIImage(data: data) else { return nil }
-            cache.setObject(img, forKey: key)
+            let cost = img.cgImage.map { $0.bytesPerRow * $0.height } ?? data.count
+            cache.setObject(img, forKey: key, cost: cost)
             return img
         } catch {
             return nil

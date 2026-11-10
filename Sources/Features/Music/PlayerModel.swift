@@ -25,6 +25,8 @@ final class PlayerModel {
     var duration: Double { currentSong?.duration ?? 0 }
 
     private var timer: Timer?
+    private var ticks = 0
+    private var upNextCache: (key: String, items: [UpNextItem]) = ("", [])
 
     init() {
         // Start from the real system volume so the wheel doesn't snap it.
@@ -81,6 +83,9 @@ final class PlayerModel {
         guard let qi, qi != queueIndex else { return }
         queueIndex = qi
         playbackTime = player.playbackTime
+        // Track changed (auto-advance or jump): refresh the persisted
+        // session right away so a backgrounded kill doesn't lose it.
+        saveSession()
     }
 
     // MARK: Queue feature ("hold to add to queue")
@@ -94,9 +99,16 @@ final class PlayerModel {
     }
 
     /// Everything in the play queue, current entry first highlighted.
+    ///
+    /// Maps every entry (and unwraps each `.item`); the Now Playing screen
+    /// reads this on every poll tick, so it's cached until the entry count
+    /// or current entry actually changes.
     var upNext: [UpNextItem] {
+        let entries = player.queue.entries
         let currentID = player.queue.currentEntry?.id
-        return player.queue.entries.map { entry in
+        let key = "\(entries.count)|\(currentID ?? "")"
+        if key == upNextCache.key { return upNextCache.items }
+        let items = entries.map { entry in
             let title: String
             let artist: String
             if case .song(let song) = entry.item {
@@ -108,6 +120,8 @@ final class PlayerModel {
             }
             return UpNextItem(id: entry.id, title: title, artist: artist, isCurrent: entry.id == currentID)
         }
+        upNextCache = (key, items)
+        return items
     }
 
     /// Where a held song lands in the Up Next queue.
@@ -122,6 +136,12 @@ final class PlayerModel {
     @discardableResult
     func addToQueue(_ song: Song, mode: QueueAddMode = .next) -> Bool {
         guard isPlaying else { return false }
+        // Mirror the addition into the bookkeeping queue so a saved
+        // session keeps it (the real insert happens MusicKit-side).
+        switch mode {
+        case .next: queue.insert(song, at: min(queueIndex + 1, queue.count))
+        case .end: queue.append(song)
+        }
         Task {
             try? await player.queue.insert(
                 song,
@@ -189,16 +209,58 @@ final class PlayerModel {
         setVolume(volume + delta)
     }
 
+    // MARK: Session persistence
+
+    /// Persists the queue bookkeeping (song IDs in play order, current
+    /// index, position) so a relaunch can restore what was playing.
+    /// Called on background/terminate, on track changes, and throttled
+    /// from the poll tick while playing.
+    func saveSession() {
+        guard !queue.isEmpty else { return }
+        PlaybackSessionStore.save(PersistedPlayback(
+            songIDs: queue.map { $0.id.rawValue },
+            index: queueIndex,
+            playbackTime: player.playbackTime
+        ))
+    }
+
+    /// Arms the persisted playback after relaunch: rebuilds the
+    /// bookkeeping queue at the saved index and assigns the real MusicKit
+    /// queue PAUSED at the saved position. Nothing auto-plays — like every
+    /// other app, the user resumes with play/pause. `songs` comes from
+    /// `MusicService.songs(withIDs:)` in the saved order.
+    func restore(_ songs: [Song], index: Int, time: Double) {
+        guard queue.isEmpty, !songs.isEmpty else { return }
+        queue = songs
+        queueIndex = min(max(0, index), songs.count - 1)
+        guard let start = currentSong else { return }
+        playbackTime = min(max(0, time), start.duration ?? 0)
+        player.queue = ApplicationMusicPlayer.Queue(for: songs, startingAt: start)
+        player.playbackTime = playbackTime
+    }
+
     // MARK: State polling
 
     private func startTimer() {
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.isPlaying = self.player.state.playbackStatus == .playing
-            self.playbackTime = self.player.playbackTime
+            self.ticks += 1
+            // @Observable fires on EVERY write (no equality check), so
+            // writing unchanged values re-rendered Now Playing 2×/s
+            // forever — even paused. Only publish real changes.
+            let playing = self.player.state.playbackStatus == .playing
+            if playing != self.isPlaying { self.isPlaying = playing }
+            let time = self.player.playbackTime
+            if self.playbackTime != time { self.playbackTime = time }
+            // Auto-advance sync and session saves only matter while
+            // playing; skip the queue scan when paused.
+            guard playing else { return }
             // Follow MusicKit's auto-advance (works while backgrounded too).
             self.syncFromPlayer()
+            // Keep the persisted session fresh while playing (the position
+            // drifts); every 4th tick ≈ every 2 s.
+            if self.ticks % 4 == 0 { self.saveSession() }
         }
     }
 }

@@ -485,6 +485,11 @@ struct ArtistDetailScreen: View {
     @EnvironmentObject private var settings: AppSettings
     let artistID: String
     @State private var selection = 0
+    /// Songs behind Play All / Shuffle All, loaded async — the cached
+    /// library songs fill LAST during loadLibrary, so deriving them
+    /// synchronously from the cache silently no-op'd (the tap did
+    /// nothing) when the page opened mid-load.
+    @State private var songs: [Song] = []
 
     private var artist: Artist? { model.music.artist(artistID) }
     private var albums: [Album] {
@@ -498,9 +503,6 @@ struct ArtistDetailScreen: View {
         ]
     }
     private var totalRows: Int { headerItems.count + albums.count }
-    private var artistSongs: [Song] {
-        albums.flatMap { model.music.cachedTracks(forAlbum: $0) }
-    }
 
     var body: some View {
         MenuList(
@@ -510,6 +512,10 @@ struct ArtistDetailScreen: View {
             model.music.album(item.id)?.artwork
         }
         .onWheel { handle($0) }
+        .task(id: artistID) {
+            guard let artist else { return }
+            songs = await model.music.songs(forArtist: artist)
+        }
     }
 
     private func handle(_ event: ControlEvent) {
@@ -518,12 +524,12 @@ struct ArtistDetailScreen: View {
             moveListSelection(&selection, count: totalRows, delta: d, settings: settings)
         case .select:
             if selection == 0 {
-                guard !artistSongs.isEmpty else { return }
-                model.player.play(artistSongs)
+                guard !songs.isEmpty else { return }
+                model.player.play(songs)
                 model.push(.nowPlaying)
             } else if selection == 1 {
-                guard !artistSongs.isEmpty else { return }
-                model.player.shufflePlay(artistSongs)
+                guard !songs.isEmpty else { return }
+                model.player.shufflePlay(songs)
                 model.push(.nowPlaying)
             } else {
                 let idx = selection - headerItems.count
@@ -545,6 +551,9 @@ struct GenreAlbumsScreen: View {
     @EnvironmentObject private var settings: AppSettings
     let genre: String
     @State private var selection = 0
+    /// Songs behind Play All / Shuffle All, loaded async (see
+    /// ArtistDetailScreen — sync cache derivation no-op'd mid-load).
+    @State private var songs: [Song] = []
 
     private var albums: [Album] { model.music.albums(inGenre: genre) }
     private var headerItems: [MenuItem] {
@@ -552,9 +561,6 @@ struct GenreAlbumsScreen: View {
             MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
             MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
         ]
-    }
-    private var genreSongs: [Song] {
-        albums.flatMap { model.music.cachedTracks(forAlbum: $0) }
     }
 
     var body: some View {
@@ -565,6 +571,9 @@ struct GenreAlbumsScreen: View {
             model.music.album(item.id)?.artwork
         }
         .onWheel { handle($0) }
+        .task(id: genre) {
+            songs = await model.music.tracks(forGenre: genre)
+        }
     }
 
     private func handle(_ event: ControlEvent) {
@@ -573,12 +582,12 @@ struct GenreAlbumsScreen: View {
             moveListSelection(&selection, count: headerItems.count + albums.count, delta: d, settings: settings)
         case .select:
             if selection == 0 {
-                guard !genreSongs.isEmpty else { return }
-                model.player.play(genreSongs)
+                guard !songs.isEmpty else { return }
+                model.player.play(songs)
                 model.push(.nowPlaying)
             } else if selection == 1 {
-                guard !genreSongs.isEmpty else { return }
-                model.player.shufflePlay(genreSongs)
+                guard !songs.isEmpty else { return }
+                model.player.shufflePlay(songs)
                 model.push(.nowPlaying)
             } else {
                 let idx = selection - headerItems.count
