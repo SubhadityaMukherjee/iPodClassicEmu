@@ -127,7 +127,13 @@ final class StopwatchModel {
         guard !isRunning else { return }
         isRunning = true
         startDate = Date()
-        LiveActivityManager.shared.stopwatchStarted()
+        // Fresh start opens the card at 0:00; start-after-stop is a resume —
+        // the card must continue from the accumulated base, not restart.
+        if base > 0 {
+            LiveActivityManager.shared.stopwatchResumed(base: base)
+        } else {
+            LiveActivityManager.shared.stopwatchStarted()
+        }
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { [weak self] _ in
             guard let self, let start = self.startDate else { return }
@@ -170,20 +176,12 @@ final class RingerManager {
         startRinger(.init(kind: .timer, title: "Timer"))
     }
 
-    func startAlarmRinger() {
-        startRinger(.init(kind: .alarm(id: UUID()), title: "Alarm"))
-    }
-
     private func startRinger(_ context: RingerContext) {
         DispatchQueue.main.async {
             guard AppModelRouter.shared.model?.ringer == nil else { return }
             AppModelRouter.shared.model?.startRinger(context)
-            self.playLoop()
+            self.startSound()
         }
-    }
-
-    private func playLoop() {
-        startSound()
     }
 
     /// Loud alarm loop through a .playback session (bypasses the mute switch).

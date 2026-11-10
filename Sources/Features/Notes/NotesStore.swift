@@ -58,11 +58,6 @@ final class NotesStore {
         try? text.data(using: .utf8)?.write(to: url, options: .atomic)
     }
 
-    /// File URL for sharing the note with other apps.
-    func fileURL(for name: String) -> URL {
-        notesURL.appendingPathComponent(name).appendingPathExtension("txt")
-    }
-
     func delete(_ name: String) {
         let url = notesURL.appendingPathComponent(name).appendingPathExtension("txt")
         try? FileManager.default.removeItem(at: url)
