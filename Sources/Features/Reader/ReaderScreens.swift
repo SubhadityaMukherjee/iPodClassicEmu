@@ -177,13 +177,36 @@ struct BookScreen: View {
     @State private var pdfSelectionToken: NSObjectProtocol?
     @State private var epubController = EpubController()
     @State private var pdfController = PDFBookController()
-    /// Pages per chapter (0 = not measured yet) for whole-book progress.
+    /// Pages per chapter. Estimates come from each chapter's text length
+    /// and the current typography; visited chapters get EXACT counts from
+    /// the live web view (readerPosition), which also calibrates the
+    /// estimates for the whole book.
     @State private var chapterPages: [Int] = []
+    @State private var chapterChars: [Int] = []
+    @State private var charsPerPage: Double = 0
     /// Live in-chapter position, updated on page turns so the progress
     /// bar tracks pages, not just chapters.
     @State private var liveFraction = 0.0
+    /// PDF reflow: generated text chapters + generation state.
+    @State private var reflowChapters: [EpubChapter] = []
+    @State private var reflowPreparing = false
 
     private var isPDF: Bool { book?.kind == .pdf }
+    /// Reflowed text mode: the EPUB pipeline renders extracted text.
+    private var isReflow: Bool { book?.kind == .pdf && book?.pdfMode == 2 }
+    /// The original PDFKit page view (any mode but reflow).
+    private var isPDFOriginal: Bool { isPDF && !isReflow }
+
+    /// Reflow keeps its own position fields so switching view modes never
+    /// moves the page view (and vice versa).
+    private func chapterIndex(of b: ReaderStore.Book) -> Int { isReflow ? b.reflowChapter : b.chapterIndex }
+    private func fraction(of b: ReaderStore.Book) -> Double { isReflow ? b.reflowFraction : b.scrollFraction }
+    private func setChapter(_ v: Int, on b: inout ReaderStore.Book) {
+        if isReflow { b.reflowChapter = v } else { b.chapterIndex = v }
+    }
+    private func setFraction(_ v: Double, on b: inout ReaderStore.Book) {
+        if isReflow { b.reflowFraction = v } else { b.scrollFraction = v }
+    }
 
     private static let dimOverlays: [Double] = [0, 0.18, 0.38]
 
@@ -232,40 +255,40 @@ struct BookScreen: View {
                     chapters = EpubParser.load(bookDir: Self.epubDir(for: book!))
                     highlights = HighlightStore.load(bookID: bookID, kind: .epub)
                     liveFraction = book?.scrollFraction ?? 0
-                    startPageMeasure(book!)
+                    chapterChars = chapters.map { textLength($0.url) }
+                    computeEstimates()
+                }
+                // QA hook: force reflowed text for a PDF (screenshots/tests).
+                if ProcessInfo.processInfo.environment["READER_PDF_REFLOW"] == "1",
+                   book?.kind == .pdf, book?.pdfMode != 2 {
+                    book?.pdfMode = 2
+                    model.reader.update(book!)
+                }
+                if isReflow, let b = book {
+                    highlights = HighlightStore.load(bookID: bookID, kind: .pdf)
+                    liveFraction = fraction(of: b)
+                    ensureReflow()
                 }
                 // QA hook: open a specific chapter (visual checks).
                 if let cs = ProcessInfo.processInfo.environment["READER_CHAPTER"],
-                   let c = Int(cs), chapters.indices.contains(c) {
+                   let c = Int(cs), chapters.indices.contains(c), !isReflow {
                     book?.chapterIndex = c
                 }
                 // QA hook: open at an in-chapter fraction (visual checks).
                 if let fs = ProcessInfo.processInfo.environment["READER_FRACTION"],
-                   let f = Double(fs), book?.kind == .epub {
-                    book?.scrollFraction = f
+                   let f = Double(fs), book?.kind == .epub || isReflow {
+                    if var b = book { setFraction(f, on: &b); book = b }
                 }
                 // QA hook: force a font family index (visual checks of the
                 // font setting; the styleKey machinery applies it on load).
                 if let vis = ProcessInfo.processInfo.environment["READER_FONT"],
-                   let v = Int(vis), book?.kind == .epub {
+                   let v = Int(vis), book?.kind == .epub || isReflow {
                     book?.fontFamily = v
                 }
                 // QA hook: perform N page turns after load (visual checks).
                 if let ts = ProcessInfo.processInfo.environment["READER_TICKS"],
                    let n = Int(ts), book?.kind == .epub {
-                    let controller = epubController
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        for i in 0..<n {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * Double(i)) {
-                                controller.scrollByPages(1)
-                            }
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * Double(n) + 0.3) {
-                            controller.scrollFraction { f in
-                                Logger(subsystem: "com.ipodclassic.app", category: "qa").notice("TICKS DONE fraction=\(f, privacy: .public)")
-                            }
-                        }
-                    }
+                    scheduleQATicks(n, controller: epubController)
                 }
                 // QA hook: open the book settings panel (screenshots).
                 if ProcessInfo.processInfo.environment["BOOK_SETTINGS"] == "1" {
@@ -281,7 +304,7 @@ struct BookScreen: View {
             if pdfSelectionToken == nil {
                 pdfSelectionToken = NotificationCenter.default.addObserver(
                     forName: .PDFViewSelectionChanged, object: nil, queue: .main) { _ in
-                        guard self.book?.kind == .pdf else { return }
+                        guard self.isPDFOriginal else { return }
                         let text = self.pdfController.view?.currentSelection?.string ?? ""
                         if text.isEmpty {
                             if !self.selectedText.isEmpty {
@@ -303,8 +326,10 @@ struct BookScreen: View {
             saveLocation()
         }
         .onChange(of: styleStamp) { _, _ in
-            // Font/margin changes reflow every chapter — re-measure pages.
-            if let b = book { startPageMeasure(b) }
+            // Font/margin changes change the page capacity — the old
+            // calibration no longer applies, so re-estimate from the prior.
+            charsPerPage = 0
+            computeEstimates()
         }
         .onChange(of: scenePhase) { _, phase in
             // Leaving the foreground (or quitting) — flush the position;
@@ -324,21 +349,28 @@ struct BookScreen: View {
 
     @ViewBuilder
     private func content(book: ReaderStore.Book) -> some View {
-        if book.kind == .pdf {
+        if isPDFOriginal {
             // A little air above and below the pages (the progress bar
             // sits in its own row beneath the reading area).
             PDFBookView(url: Self.pdfURL(for: book), controller: pdfController,
-                        initialPage: book.chapterIndex, continuous: book.pdfContinuous)
+                        initialPage: chapterIndex(of: book), continuous: book.pdfMode != 1)
                 .padding(.top, 10)
                 .padding(.bottom, 10)
+        } else if isReflow && reflowChapters.isEmpty {
+            VStack(spacing: 8) {
+                Text(reflowPreparing ? "Preparing text…" : "No extractable text")
+                    .font(Theme.font(13, .medium))
+                    .foregroundStyle(Theme.inkDim)
+                if reflowPreparing { ProgressView() }
+            }
         } else {
             EpubWebView(
-                chapter: chapters.indices.contains(book.chapterIndex) ? chapters[book.chapterIndex] : nil,
+                chapter: chapters.indices.contains(chapterIndex(of: book)) ? chapters[chapterIndex(of: book)] : nil,
                 bookDir: Self.epubDir(for: book),
                 book: book,
-                restoreFraction: book.scrollFraction,
+                restoreFraction: fraction(of: book),
                 controller: epubController,
-                highlightTexts: highlights.filter { $0.chapter == book.chapterIndex }.map(\.text),
+                highlightTexts: highlights.filter { $0.chapter == chapterIndex(of: book) }.map(\.text),
                 onSelection: { text in
                     withAnimation(.easeOut(duration: 0.15)) { selectedText = text }
                 }
@@ -346,62 +378,122 @@ struct BookScreen: View {
         }
     }
 
-    /// Thin whole-book progress line in its own row below the reading
-    /// area (chapter/page granularity — never covers the text).
+    /// Thin whole-book progress line with a tiny page readout (e.g.
+    /// "137/412"), in its own row below the reading area — the bar never
+    /// covers the text. The readout derives from the same numbers as the
+    /// bar fraction, so they always agree.
     private func bookProgressBar(_ book: ReaderStore.Book) -> some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.black.opacity(0.22))
-                Capsule().fill(SelectionGradient())
-                    .frame(width: max(5, geo.size.width * progressFraction(book)))
+        HStack(spacing: 6) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.black.opacity(0.22))
+                    Capsule().fill(SelectionGradient())
+                        .frame(width: max(5, geo.size.width * progressFraction(book)))
+                }
+            }
+            .frame(height: 4)
+            if let pages = pageCountLabel(book) {
+                Text(pages)
+                    .font(Theme.font(8, .medium))
+                    .foregroundStyle(Theme.inkDim)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
-        .frame(height: 4)
         .padding(.horizontal, 10)
     }
 
-    private func progressFraction(_ book: ReaderStore.Book) -> Double {
-        if book.kind == .pdf, let count = pdfController.document?.pageCount, count > 0 {
-            return (Double(min(book.chapterIndex, count - 1)) + 0.5) / Double(count)
-        }
-        guard !chapters.isEmpty else { return 0 }
-        let ch = min(book.chapterIndex, chapters.count - 1)
-        // Unmeasured chapters count as the average of measured ones
-        // (converges to exact as the background measurement finishes).
+    /// Page counts per chapter for progress; unmeasured chapters count as
+    /// the average of measured ones (converges to exact as the background
+    /// measurement finishes).
+    private func chapterPageEstimates() -> [Double] {
         let measured = chapterPages.filter { $0 > 0 }
         let fallback = measured.isEmpty ? 12.0 : Double(measured.reduce(0, +)) / Double(measured.count)
-        let pages = chapters.indices.map { i in
+        return chapters.indices.map { i in
             chapterPages.indices.contains(i) && chapterPages[i] > 0
                 ? Double(chapterPages[i]) : fallback
         }
+    }
+
+    private func progressFraction(_ book: ReaderStore.Book) -> Double {
+        if isPDFOriginal, let count = pdfController.document?.pageCount, count > 0 {
+            return (Double(min(chapterIndex(of: book), count - 1)) + 0.5) / Double(count)
+        }
+        let pages = chapterPageEstimates()
+        guard !pages.isEmpty else { return 0 }
+        let ch = min(chapterIndex(of: book), pages.count - 1)
         let before = pages.prefix(ch).reduce(0, +)
         let total = max(pages.reduce(0, +), 1)
         return min(1, (before + liveFraction * pages[ch]) / total)
+    }
+
+    /// Tiny "current/total" page readout for the progress row; nil while
+    /// nothing measurable is loaded (PDF not open, no chapters).
+    private func pageCountLabel(_ book: ReaderStore.Book) -> String? {
+        if isPDFOriginal {
+            guard let count = pdfController.document?.pageCount, count > 0 else { return nil }
+            let current = min(chapterIndex(of: book), count - 1) + 1
+            return "\(current)/\(count)"
+        }
+        guard !chapters.isEmpty else { return nil }
+        let pages = chapterPageEstimates()
+        let ch = min(chapterIndex(of: book), pages.count - 1)
+        let before = pages.prefix(ch).reduce(0, +)
+        let total = max(Int(pages.reduce(0, +).rounded()), 1)
+        let current = min(max(Int((before + liveFraction * pages[ch]).rounded()) + 1, 1), total)
+        return "\(current)/\(total)"
     }
 
     private var styleStamp: String {
         "\(book?.fontSize ?? 0)|\(book?.fontFamily ?? 0)|\(book?.lineSpacing ?? 0)|\(book?.margin ?? 0)"
     }
 
-    /// Measures page counts for every chapter (offscreen, background) so
-    /// whole-book progress is page-accurate. Re-runs when style changes.
-    private func startPageMeasure(_ b: ReaderStore.Book) {
-        guard b.kind == .epub else { return }
-        chapterPages = Array(repeating: 0, count: max(chapters.count, 1))
-        let dir = Self.epubDir(for: b)
-        let chs = chapters
-        let styleKey = "\(b.fontSize)|\(b.fontFamily)|\(b.lineSpacing)|\(b.margin)"
-        Task {
-            let counts = await EpubPageMeasurer.measureAll(
-                chapters: chs, bookDir: dir, book: b,
-                viewport: epubController.webView?.bounds.size ?? .zero)
-            guard !Task.isCancelled else { return }
-            let current = book
-            let currentKey = "\(current?.fontSize ?? 0)|\(current?.fontFamily ?? 0)|\(current?.lineSpacing ?? 0)|\(current?.margin ?? 0)"
-            if currentKey == styleKey, counts.count == chapterPages.count {
-                chapterPages = counts
-            }
+    /// Stripped text length of a chapter file — the basis of page
+    /// estimates (layout-proportional).
+    private func textLength(_ url: URL) -> Int {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return 0 }
+        let stripped = raw.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        return stripped.count
+    }
+
+    /// Pages a chapter of `chars` characters occupies at the current
+    /// typography. Calibrated per book once a real count is known;
+    /// otherwise a 0.44em average glyph advance prior.
+    private func pageCapacity() -> Double {
+        if charsPerPage > 0 { return charsPerPage }
+        let sides = [10.0, 16.0, 24.0]
+        let side: Double = sides[min(max(book?.margin ?? 1, 0), 2)]
+        let lineHeights = [1.4, 1.55, 1.75]
+        let lineHeight: Double = lineHeights[min(max(book?.lineSpacing ?? 1, 0), 2)]
+        let fontSize = Double(book?.fontSize ?? 17)
+        let viewW = epubController.webView?.bounds.width ?? 384
+        let viewH = epubController.webView?.bounds.height ?? 251
+        let vPad = Double((book?.fontSize ?? 17) / 2 + 8)
+        let pageW = max(120, viewW - 2 * side)
+        let pageH = max(120, viewH - 2 * vPad)
+        let charsPerLine = max(8, pageW / (fontSize * 0.44))
+        let linesPerPage = max(4, pageH / (fontSize * lineHeight))
+        return max(50, charsPerLine * linesPerPage)
+    }
+
+    private func computeEstimates() {
+        guard chapterChars.count == chapters.count else { return }
+        let cap = pageCapacity()
+        chapterPages = chapterChars.map { chars -> Int in
+            let pages = (Double(chars) / cap).rounded()
+            return max(1, Int(pages))
         }
+    }
+
+    /// Exact count for the chapter the web view reports, and recalibration
+    /// of every estimate from that data point.
+    private func exactPages(_ n: Int, forChapter ch: Int) {
+        guard chapterChars.indices.contains(ch), ch < chapterPages.count, n > 0 else { return }
+        let chars = chapterChars[ch]
+        if chars > 0 { charsPerPage = Double(chars) / Double(n) }
+        computeEstimates()
+        chapterPages[ch] = n
     }
 
     /// Touch action bar shown while text is selected in an EPUB.
@@ -425,7 +517,7 @@ struct BookScreen: View {
                 }
                 .buttonStyle(.plain)
                 Button {
-                    if isPDF {
+                    if isPDFOriginal {
                         pdfController.clearSelection()
                     } else {
                         epubController.clearSelection()
@@ -474,12 +566,22 @@ struct BookScreen: View {
     private var bookSettings: [BookSetting] {
         guard let book else { return [] }
         if book.kind == .pdf {
-            return [
-                BookSetting(id: "view", title: "View", values: ["Continuous", "One Page"],
-                            index: book.pdfContinuous ? 0 : 1),
-                BookSetting(id: "dim", title: "Screen", values: ["Bright", "Dim", "Darker"],
-                            index: min(max(book.dim, 0), 2)),
-            ]
+            var rows = [BookSetting(id: "view", title: "View", values: ["Continuous", "One Page", "Reflowed"],
+                                    index: min(max(book.pdfMode, 0), 2))]
+            if isReflow {
+                let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
+                rows += [
+                    BookSetting(id: "size", title: "Font Size", values: Self.fontSizes.map { "\($0) px" }, index: sizeIndex),
+                    BookSetting(id: "family", title: "Font", values: ReaderStore.Book.fontFamilyNames,
+                                index: min(max(book.fontFamily, 0), ReaderStore.Book.fontFamilyNames.count - 1)),
+                    BookSetting(id: "spacing", title: "Line Spacing", values: ["Compact", "Normal", "Wide"], index: min(max(book.lineSpacing, 0), 2)),
+                    BookSetting(id: "margin", title: "Margins", values: ["Narrow", "Normal", "Wide"], index: min(max(book.margin, 0), 2)),
+                    BookSetting(id: "scroll", title: "Scroll Step", values: ["Small", "Medium", "Large"], index: min(max(book.scrollStep, 0), 2)),
+                ]
+            }
+            rows.append(BookSetting(id: "dim", title: "Screen", values: ["Bright", "Dim", "Darker"],
+                                    index: min(max(book.dim, 0), 2)))
+            return rows
         }
         let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
         return [
@@ -501,7 +603,7 @@ struct BookScreen: View {
                          showsChevron: false)
             }
         }
-        if isPDF {
+        if isPDFOriginal {
             return outline.map { entry in
                 let indent = String(repeating: "    ", count: entry.level)
                 return MenuItem(id: "out.\(entry.id)", title: indent + entry.title, showsChevron: false)
@@ -520,7 +622,7 @@ struct BookScreen: View {
     }
 
     private var panelTitle: String {
-        panelIsSettings ? "Book Settings" : (isPDF ? "Contents" : "Chapters")
+        panelIsSettings ? "Book Settings" : (isPDFOriginal ? "Contents" : "Chapters")
     }
 
     private func closePanel() {
@@ -528,7 +630,7 @@ struct BookScreen: View {
     }
 
     private func openContents() {
-        if isPDF && outline.isEmpty {
+        if isPDFOriginal && outline.isEmpty {
             outline = PDFBookView.flattenOutline(pdfController.document?.outlineRoot, document: pdfController.document)
         }
         panelIsSettings = false
@@ -550,7 +652,7 @@ struct BookScreen: View {
             return
         }
         let id = rows[panelSelection].id
-        if isPDF {
+        if isPDFOriginal {
             let idx = Int(id.dropFirst("out.".count)) ?? 0
             if outline.indices.contains(idx), let page = outline[idx].pageIndex {
                 pdfController.goToPage(page)
@@ -560,8 +662,8 @@ struct BookScreen: View {
         } else {
             let idx = Int(id.dropFirst("ch.".count)) ?? 0
             if chapters.indices.contains(idx), var b = book {
-                b.chapterIndex = idx
-                b.scrollFraction = 0
+                setChapter(idx, on: &b)
+                setFraction(0, on: &b)
                 book = b
                 // Persist directly; sampling the old chapter's fraction
                 // here would mis-restore the new one.
@@ -577,8 +679,9 @@ struct BookScreen: View {
         func wrapped(_ current: Int, _ count: Int) -> Int { (current + 1) % count }
         switch id {
         case "view":
-            b.pdfContinuous.toggle()
-            pdfController.setDisplayMode(continuous: b.pdfContinuous)
+            // Continuous → One Page → Reflowed → Continuous…
+            let next = isReflow ? 0 : (b.pdfMode + 1) % 3
+            switchViewMode(next, on: &b)
         case "size":
             let idx = max(0, Self.fontSizes.firstIndex(of: b.fontSize) ?? 1)
             b.fontSize = Self.fontSizes[wrapped(idx, Self.fontSizes.count)]
@@ -604,6 +707,92 @@ struct BookScreen: View {
         model.reader.update(b)
     }
 
+    /// Switches the PDF view mode. Position: leaving reflow persists its
+    /// own fields untouched (the direct update deliberately skips position
+    /// sampling — see stepChapter); the page view keeps its page index.
+    private func switchViewMode(_ mode: Int, on b: inout ReaderStore.Book) {
+        guard b.pdfMode != mode else { return }
+        b.pdfMode = mode
+        if mode == 2 {
+            ensureReflow()
+        } else if !reflowChapters.isEmpty || reflowPreparing {
+            showToast(mode == 0 ? "Continuous" : "One Page")
+        }
+    }
+
+    /// Generates the reflowed text chapters once (cached on disk).
+    private func ensureReflow() {
+        guard let b = book, isReflow, !reflowPreparing, reflowChapters.isEmpty else { return }
+        reflowPreparing = true
+        let pdfURL = Self.pdfURL(for: b)
+        let outDir = Self.epubDir(for: b).appendingPathComponent("reflow", isDirectory: true)
+        Task {
+            let doc = PDFDocument(url: pdfURL)
+            let entries: [OutlineEntry] = await MainActor.run {
+                PDFBookView.flattenOutline(doc?.outlineRoot, document: doc)
+            }
+            let spans = PDFReflow.spans(outline: entries, pageCount: doc?.pageCount ?? 0)
+            let generated = await PDFReflow.generateChapters(pdfURL: pdfURL, outDir: outDir, spans: spans)
+            await MainActor.run {
+                // Image-only PDF (no extractable text): back to page view.
+                let firstSize = generated.first.flatMap { ch -> Int? in
+                    (try? FileManager.default.attributesOfItem(atPath: ch.url.path))?[.size] as? Int
+                } ?? 0
+                guard !generated.isEmpty, firstSize > 200 else {
+                    reflowPreparing = false
+                    if var bb = book {
+                        bb.pdfMode = 0
+                        book = bb
+                        model.reader.update(bb)
+                    }
+                    showToast("No extractable text")
+                    return
+                }
+                reflowChapters = generated
+                chapters = generated
+                chapterPages = Array(repeating: 0, count: generated.count)
+                reflowPreparing = false
+                // QA hooks (reflow chapters only exist after generation).
+                if let cs = ProcessInfo.processInfo.environment["READER_CHAPTER"],
+                   let c = Int(cs), generated.indices.contains(c), var bb = book {
+                    setChapter(c, on: &bb)
+                    book = bb
+                }
+                if let fs = ProcessInfo.processInfo.environment["READER_FRACTION"],
+                   let f = Double(fs), var bb = book {
+                    setFraction(f, on: &bb)
+                    liveFraction = f
+                    book = bb
+                }
+                if let ts = ProcessInfo.processInfo.environment["READER_TICKS"],
+                   let n = Int(ts) {
+                    scheduleQATicks(n, controller: epubController)
+                }
+                if let bb = book {
+                    chapterChars = generated.map { textLength($0.url) }
+                    liveFraction = fraction(of: bb)
+                    computeEstimates()
+                }
+            }
+        }
+    }
+
+    /// QA: N page turns after the web view settles, then log the fraction.
+    private func scheduleQATicks(_ n: Int, controller: EpubController) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            for i in 0..<n {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * Double(i)) {
+                    controller.scrollByPages(1)
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * Double(n) + 0.3) {
+                controller.scrollFraction { f in
+                    Logger(subsystem: "com.ipodclassic.app", category: "qa").notice("TICKS DONE fraction=\(f, privacy: .public)")
+                }
+            }
+        }
+    }
+
     // MARK: Actions
 
     /// Wraps the current selection in a persistent mark (EPUB: DOM marks;
@@ -611,12 +800,13 @@ struct BookScreen: View {
     /// mirrors it into the book's Highlights note.
     private func saveHighlight() {
         guard var b = book else { return }
-        if b.kind == .epub {
+        if !isPDFOriginal {
+            // EPUB and reflowed text both highlight through the DOM.
             epubController.wrapSelection { text in
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 withAnimation(.easeIn(duration: 0.15)) { selectedText = "" }
                 guard !trimmed.isEmpty else { return }
-                let highlight = BookHighlight(id: UUID().uuidString, chapter: b.chapterIndex, text: trimmed)
+                let highlight = BookHighlight(id: UUID().uuidString, chapter: chapterIndex(of: b), text: trimmed)
                 highlights.append(highlight)
                 HighlightStore.save(highlights, bookID: b.id, kind: b.kind)
                 appendHighlightToNotes(highlight, book: b)
@@ -660,19 +850,19 @@ struct BookScreen: View {
 
     private func stepChapter(_ delta: Int) {
         guard var b = book else { return }
-        if b.kind == .pdf {
+        if isPDFOriginal {
             if delta > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
             b.chapterIndex = pdfController.currentPageIndex
             book = b
             saveLocation()
         } else {
-            let next = b.chapterIndex + delta
+            let next = chapterIndex(of: b) + delta
             guard chapters.indices.contains(next) else {
                 showToast(delta > 0 ? "End of Book" : "Start of Book")
                 return
             }
-            b.chapterIndex = next
-            b.scrollFraction = 0
+            setChapter(next, on: &b)
+            setFraction(0, on: &b)
             liveFraction = 0
             book = b
             // Persist directly — saveLocation() would sample the OLD
@@ -685,15 +875,18 @@ struct BookScreen: View {
     /// Asks the web view for the current scroll position, then persists.
     private func saveLocation() {
         guard var b = book else { return }
-        if b.kind == .pdf {
+        if isPDFOriginal {
             b.chapterIndex = pdfController.currentPageIndex
             model.reader.update(b)
             book = b
         } else {
-            epubController.scrollFraction { fraction in
-                b.scrollFraction = fraction
+            epubController.readerPosition { fraction, n in
+                self.setFraction(fraction, on: &b)
                 self.model.reader.update(b)
                 DispatchQueue.main.async { self.book = b }
+                if let n, let bb = self.book, !self.isPDFOriginal {
+                    self.exactPages(n, forChapter: self.chapterIndex(of: bb))
+                }
             }
         }
     }
@@ -713,12 +906,12 @@ struct BookScreen: View {
             WheelFeedback.tick(dir: d)
             if panelOpen {
                 moveListSelection(&panelSelection, count: panelRows.count, delta: d, settings: settings)
-            } else if isPDF {
+            } else if isPDFOriginal {
                 if d > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
                 // currentPage settles asynchronously; keep the progress
                 // bar honest.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    if self.book?.kind == .pdf {
+                    if self.isPDFOriginal {
                         self.book?.chapterIndex = self.pdfController.currentPageIndex
                     }
                 }
@@ -729,7 +922,14 @@ struct BookScreen: View {
                 let pages = [1, 2, 3][min(max(book?.scrollStep ?? 0, 0), 2)]
                 epubController.scrollByPages(d > 0 ? pages : -pages)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    epubController.scrollFraction { self.liveFraction = $0 }
+                    // Exact page count for the open chapter converges the
+                    // whole book's estimates as a side effect.
+                    epubController.readerPosition { f, n in
+                        self.liveFraction = f
+                        if let b = self.book, let n, !self.isPDFOriginal {
+                            self.exactPages(n, forChapter: self.chapterIndex(of: b))
+                        }
+                    }
                 }
             }
         case .select:
@@ -763,45 +963,7 @@ struct BookScreen: View {
 
 // MARK: - EPUB rendering
 
-/// Counts pages of every chapter by loading each one in a hidden web
-/// view with the same reader CSS — whole-book progress without having
-/// visited every chapter first.
-enum EpubPageMeasurer {
-    static func measureAll(chapters: [EpubChapter], bookDir: URL,
-                           book: ReaderStore.Book, viewport: CGSize) async -> [Int] {
-        guard viewport.width > 50, viewport.height > 50 else { return [] }
-        let host: WKWebView? = await MainActor.run {
-            guard let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-                let root = scene.keyWindow?.rootViewController?.view else { return nil }
-            let wv = WKWebView(frame: CGRect(origin: .zero, size: viewport))
-            wv.isHidden = true
-            wv.isUserInteractionEnabled = false
-            root.addSubview(wv)
-            return wv
-        }
-        guard let wv = host else { return [] }
-        defer { Task { @MainActor in wv.removeFromSuperview() } }
-        var counts: [Int] = []
-        for ch in chapters {
-            if Task.isCancelled { break }
-            await MainActor.run { wv.loadFileURL(ch.url, allowingReadAccessTo: bookDir) }
-            for _ in 0..<30 {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                let ready = (try? await wv.evaluateJavaScript("document.readyState")) as? String
-                if ready == "complete" { break }
-            }
-            await MainActor.run {
-                wv.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
-            }
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            let n = ((try? await wv.evaluateJavaScript(
-                "Math.max(1, Math.ceil((document.documentElement.scrollWidth - window.innerWidth) / window.innerWidth) + 1)")) as? NSNumber)?.intValue ?? 1
-            counts.append(max(1, n))
-        }
-        return counts
-    }
-}
+// MARK: - EPUB rendering
 
 /// Command handle for the parent screen to drive the web view.
 final class EpubController {
@@ -847,25 +1009,35 @@ final class EpubController {
         webView?.evaluateJavaScript(HighlightJS.clearSelection, completionHandler: nil)
     }
 
-    /// Current position as a fraction of pages through the chapter. Read
-    /// from the DOM: page turns go through window.scrollBy and WebKit does
-    /// not mirror horizontal DOM scroll into the native scrollView offset
-    /// (which stays 0 — reading it would always save page 0).
-    func scrollFraction(completion: @escaping (Double) -> Void) {
+    /// Current position as a fraction of pages through the chapter, plus
+    /// the chapter's real laid-out page count (maxIdx). Read from the DOM:
+    /// page turns go through window.scrollBy and WebKit does not mirror
+    /// horizontal DOM scroll into the native scrollView offset (which
+    /// stays 0 — reading it would always save page 0).
+    func readerPosition(completion: @escaping (Double, Int?) -> Void) {
         let js = """
         (function(){
           var period = window.innerWidth;
           var max = document.documentElement.scrollWidth - window.innerWidth;
-          if (max <= 0) return 1;
+          if (max <= 0) return {f: 1, n: 1};
           var maxIdx = Math.max(1, Math.round(max / period));
           var idx = Math.min(maxIdx, Math.max(0, Math.round(window.scrollX / period)));
-          return idx / maxIdx;
+          return {f: idx / maxIdx, n: maxIdx};
         })()
         """
         webView?.evaluateJavaScript(js) { value, _ in
-            let f = (value as? NSNumber)?.doubleValue ?? 0
-            DispatchQueue.main.async { completion(min(max(f, 0), 1)) }
+            guard let dict = value as? [String: Any] else {
+                DispatchQueue.main.async { completion(0, nil) }
+                return
+            }
+            let f = (dict["f"] as? NSNumber)?.doubleValue ?? 0
+            let n = (dict["n"] as? NSNumber)?.intValue
+            DispatchQueue.main.async { completion(min(max(f, 0), 1), n) }
         }
+    }
+
+    func scrollFraction(completion: @escaping (Double) -> Void) {
+        readerPosition { f, _ in completion(f) }
     }
 
     /// Jumps to the page nearest to `fraction` through the chapter (DOM
@@ -888,6 +1060,9 @@ final class EpubController {
     /// one viewport tall, so the browser fills columns with COMPLETE
     /// lines only; side margins come from body padding + an equal column
     /// gap, giving every page identical breathing room.
+    /// Reader stylesheet: viewport-sized columns (true pages). Body is
+    /// one viewport tall, so the browser fills columns with COMPLETE
+    /// lines only; side margins come from body padding + an equal column
     static func cssJS(for book: ReaderStore.Book) -> String {
         let family = ReaderStore.Book.fontFamilyStacks[
             min(max(book.fontFamily, 0), ReaderStore.Book.fontFamilyStacks.count - 1)
@@ -1048,14 +1223,6 @@ final class PDFBookController {
     func goToPage(_ index: Int) {
         guard let doc = view?.document, (0..<doc.pageCount).contains(index), let page = doc.page(at: index) else { return }
         view?.go(to: page)
-    }
-
-    /// Continuous scroll vs one-page-at-a-time, keeping the current page.
-    func setDisplayMode(continuous: Bool) {
-        guard let view else { return }
-        let page = view.currentPage
-        view.displayMode = continuous ? .singlePageContinuous : .singlePage
-        if let page { view.go(to: page) }
     }
 
     var currentPageIndex: Int {

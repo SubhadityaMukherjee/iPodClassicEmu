@@ -21,13 +21,25 @@ final class ReaderStore {
         var lineSpacing: Int       // epub: 0 compact, 1 normal, 2 wide
         var margin: Int            // epub: 0 narrow, 1 normal, 2 wide
         var scrollStep: Int        // epub: 0 small, 1 medium, 2 full page
-        var pdfContinuous: Bool    // pdf: continuous scroll vs one page
+        var pdfMode: Int           // pdf: 0 continuous, 1 one page, 2 reflowed text
+        var reflowChapter: Int     // pdf reflow: chapter index (kept separate so
+                                   // switching view modes never moves the page view)
+        var reflowFraction: Double // pdf reflow: position within the chapter
         var dim: Int               // 0 bright, 1 dim, 2 darker (screen overlay)
+
+        /// Explicit because decoding must still read the retired
+        /// `pdfContinuous` Bool that pre-reflow books persisted.
+        enum CodingKeys: String, CodingKey {
+            case id, kind, title, chapterIndex, scrollFraction, fontSize
+            case fontFamily, lineSpacing, margin, scrollStep, pdfMode
+            case reflowChapter, reflowFraction, dim
+            case pdfContinuousLegacy = "pdfContinuous"
+        }
 
         init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
              scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
              lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 0,
-             pdfContinuous: Bool = true, dim: Int = 0) {
+             pdfMode: Int = 0, reflowChapter: Int = 0, reflowFraction: Double = 0, dim: Int = 0) {
             self.id = id
             self.kind = kind
             self.title = title
@@ -38,13 +50,14 @@ final class ReaderStore {
             self.lineSpacing = lineSpacing
             self.margin = margin
             self.scrollStep = scrollStep
-            self.pdfContinuous = pdfContinuous
+            self.pdfMode = pdfMode
+            self.reflowChapter = reflowChapter
+            self.reflowFraction = reflowFraction
             self.dim = dim
         }
 
         /// Tolerates books persisted by older versions (missing keys).
-        init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
+        init(from decoder: Decoder) throws {            let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(String.self, forKey: .id)
             kind = try c.decode(Kind.self, forKey: .kind)
             title = try c.decode(String.self, forKey: .title)
@@ -55,8 +68,35 @@ final class ReaderStore {
             lineSpacing = try c.decodeIfPresent(Int.self, forKey: .lineSpacing) ?? 1
             margin = try c.decodeIfPresent(Int.self, forKey: .margin) ?? 1
             scrollStep = try c.decodeIfPresent(Int.self, forKey: .scrollStep) ?? 0
-            pdfContinuous = try c.decodeIfPresent(Bool.self, forKey: .pdfContinuous) ?? true
+            // Legacy books persisted a Bool (continuous vs one page).
+            if let m = try c.decodeIfPresent(Int.self, forKey: .pdfMode) {
+                pdfMode = min(max(m, 0), 2)
+            } else {
+                pdfMode = (try c.decodeIfPresent(Bool.self, forKey: .pdfContinuousLegacy) ?? true) ? 0 : 1
+            }
+            reflowChapter = try c.decodeIfPresent(Int.self, forKey: .reflowChapter) ?? 0
+            reflowFraction = try c.decodeIfPresent(Double.self, forKey: .reflowFraction) ?? 0
             dim = try c.decodeIfPresent(Int.self, forKey: .dim) ?? 0
+        }
+
+        /// Hand-written because CodingKeys carries the decode-only legacy
+        /// `pdfContinuousLegacy` case, which blocks encoder synthesis.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id, forKey: .id)
+            try c.encode(kind, forKey: .kind)
+            try c.encode(title, forKey: .title)
+            try c.encode(chapterIndex, forKey: .chapterIndex)
+            try c.encode(scrollFraction, forKey: .scrollFraction)
+            try c.encode(fontSize, forKey: .fontSize)
+            try c.encode(fontFamily, forKey: .fontFamily)
+            try c.encode(lineSpacing, forKey: .lineSpacing)
+            try c.encode(margin, forKey: .margin)
+            try c.encode(scrollStep, forKey: .scrollStep)
+            try c.encode(pdfMode, forKey: .pdfMode)
+            try c.encode(reflowChapter, forKey: .reflowChapter)
+            try c.encode(reflowFraction, forKey: .reflowFraction)
+            try c.encode(dim, forKey: .dim)
         }
 
         /// EPUB font choices (persisted as `fontFamily` index): display

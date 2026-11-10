@@ -15,6 +15,7 @@
 		10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE4F74ACAB7D2FE7FB6BD26 /* TimerStopwatchModels.swift */; };
 		183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06464256EE519A5BD50EA73F /* iPodClassicApp.swift */; };
 		19DEF858E4721571709A6227 /* Tick.caf in Resources */ = {isa = PBXBuildFile; fileRef = B7CEBDD3E18661EEC5335B6E /* Tick.caf */; };
+		2448D01DF2C37F417EE051CB /* PDFReflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A06C23A4AB3B056577E9965 /* PDFReflowTests.swift */; };
 		248C4E3AF18DF139E23AF446 /* TickSoft.caf in Resources */ = {isa = PBXBuildFile; fileRef = B9E142990608C64F576307AC /* TickSoft.caf */; };
 		24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC3AA5879EA27E592945C2 /* AppSettings.swift */; };
 		271C6EA4232D8A7602B1A2FE /* EpubContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F775252FC095655EE129D8 /* EpubContainer.swift */; };
@@ -56,6 +57,7 @@
 		AEBF95D90A2A55989C2F7BF4 /* iPodClassicWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47CFD786881A4C8FC43D00DB /* iPodClassicWidgets.swift */; };
 		AF0B029055EBE310E79A0C5C /* E2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FFA9E69DB00DC268067DD8B /* E2ETests.swift */; };
 		B96435FA601253641FD082E8 /* MenuSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */; };
+		B97B52676E74A4029CEA2466 /* PDFReflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */; };
 		BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */; };
 		BDCFE1DC543919A4192B71E2 /* RouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */; };
 		C33C03ED0D677C9F137A329C /* ReaderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */; };
@@ -148,6 +150,7 @@
 		59116EF21FFA3688484F038F /* RecorderScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderScreens.swift; sourceTree = "<group>"; };
 		5F9F9D030FECE8C1639FE2E6 /* MenuComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuComponents.swift; sourceTree = "<group>"; };
 		674DFC06B8F7A1B1F904D34D /* RubberBand.caf */ = {isa = PBXFileReference; path = RubberBand.caf; sourceTree = "<group>"; };
+		6A06C23A4AB3B056577E9965 /* PDFReflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReflowTests.swift; sourceTree = "<group>"; };
 		6B37641D1E5AA57A45A02D07 /* TimeFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormat.swift; sourceTree = "<group>"; };
 		6B937A3043FF83416A501A21 /* SettingsScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreens.swift; sourceTree = "<group>"; };
 		6C746E09FCFDA897EB495D22 /* NotesStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStoreTests.swift; sourceTree = "<group>"; };
@@ -192,6 +195,7 @@
 		E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaVolumeController.swift; sourceTree = "<group>"; };
 		F0A7AB9F78390A8680299570 /* ClickWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickWheelView.swift; sourceTree = "<group>"; };
 		F18AE4C666A52A2EF759755A /* AlarmReconcileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmReconcileTests.swift; sourceTree = "<group>"; };
+		F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReflow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -362,6 +366,7 @@
 				7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */,
 				DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */,
 				6C746E09FCFDA897EB495D22 /* NotesStoreTests.swift */,
+				6A06C23A4AB3B056577E9965 /* PDFReflowTests.swift */,
 				8EAC0590B8229DE23E30083F /* PlaybackSessionTests.swift */,
 				06E5B68A6556EACB64528E07 /* ReaderFontTests.swift */,
 				BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */,
@@ -422,6 +427,7 @@
 			isa = PBXGroup;
 			children = (
 				C7F775252FC095655EE129D8 /* EpubContainer.swift */,
+				F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */,
 				B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */,
 				7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */,
 				C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */,
@@ -655,6 +661,7 @@
 				A467174044A38878D19727C9 /* NotesScreens.swift in Sources */,
 				3F918DA5FAD2C48FFAD5F7C5 /* NotesStore.swift in Sources */,
 				5EC6D52A802E1514CAE174A1 /* NowPlayingScreen.swift in Sources */,
+				B97B52676E74A4029CEA2466 /* PDFReflow.swift in Sources */,
 				FBFCC04B6C4BCA7FE19B3ECD /* PhotoLibraryModel.swift in Sources */,
 				56BE29D96A4FF46D3EBF2E5B /* PhotosScreens.swift in Sources */,
 				5C70116EEB5EB22C1D2B683F /* PlaybackSession.swift in Sources */,
@@ -700,6 +707,7 @@
 				B96435FA601253641FD082E8 /* MenuSelectionTests.swift in Sources */,
 				8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */,
 				A69F98C929E1AC2E0B869145 /* NotesStoreTests.swift in Sources */,
+				2448D01DF2C37F417EE051CB /* PDFReflowTests.swift in Sources */,
 				A5BBDA7AE0BB5444176F459E /* PlaybackSessionTests.swift in Sources */,
 				3745E1CB511E64BEE553FC6B /* ReaderFontTests.swift in Sources */,
 				BDCFE1DC543919A4192B71E2 /* RouteTests.swift in Sources */,

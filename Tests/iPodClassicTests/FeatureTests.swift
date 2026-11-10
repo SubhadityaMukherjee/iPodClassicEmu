@@ -390,7 +390,7 @@ final class EpubParserTests: XCTestCase {
         XCTAssertEqual(books[0].fontSize, 19)
         XCTAssertEqual(books[0].dim, 0)
         XCTAssertEqual(books[0].lineSpacing, 1)
-        XCTAssertTrue(books[0].pdfContinuous)
+        XCTAssertEqual(books[0].pdfMode, 0, "no legacy bool = continuous")
     }
 
     func testHighlightStoreRoundTrip() throws {
