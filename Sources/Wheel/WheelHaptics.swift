@@ -8,6 +8,10 @@ final class WheelHaptics {
     static let shared = WheelHaptics()
 
     private var engine: CHHapticEngine?
+    /// Reusable players per intensity level. Building a CHHapticPattern +
+    /// player on every detent (the old code) allocates at tick rate — up to
+    /// ~50/s on a fast spin — and shows up as haptic latency on device.
+    private var players: [Double: CHHapticPatternPlayer] = [:]
     private let buttonGenerator = UIImpactFeedbackGenerator(style: .medium)
     private let strongButtonGenerator = UIImpactFeedbackGenerator(style: .heavy)
     private let notifyGenerator = UINotificationFeedbackGenerator()
@@ -20,6 +24,7 @@ final class WheelHaptics {
         do {
             engine = try CHHapticEngine()
             engine?.resetHandler = { [weak self] in
+                self?.players = [:]  // old players belong to the dead engine
                 try? self?.engine?.start()
             }
             try engine?.start()
@@ -33,20 +38,32 @@ final class WheelHaptics {
         try? engine?.start()
     }
 
-    /// One scroll detent. intensity 0…1 mapped from the Scrolling Haptics setting.
+    /// One scroll detent. intensity 0…1 mapped from the Scrolling Haptics
+    /// setting. Intensity takes only a few distinct values (the settings
+    /// ladder), so players are built once per level and reused.
     func tick(intensity: Double) {
         guard intensity > 0 else { return }
-        let haptic = CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(max(0, min(1, intensity))))
-        let sharp = CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(0.35 + intensity * 0.3))
         guard let engine else {
             UISelectionFeedbackGenerator().selectionChanged()
             return
         }
-        do {
+        let player: CHHapticPatternPlayer
+        if let cached = players[intensity] {
+            player = cached
+        } else {
+            let haptic = CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(max(0, min(1, intensity))))
+            let sharp = CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(0.35 + intensity * 0.3))
             let event = CHHapticEvent(eventType: .hapticTransient, parameters: [haptic, sharp], relativeTime: 0)
-            let pattern = try CHHapticPattern(events: [event], parameters: [])
-            let player = try engine.makePlayer(with: pattern)
-            try engine.start()
+            do {
+                let pattern = try CHHapticPattern(events: [event], parameters: [])
+                player = try engine.makePlayer(with: pattern)
+                players[intensity] = player
+            } catch {
+                UISelectionFeedbackGenerator().selectionChanged()
+                return
+            }
+        }
+        do {
             try player.start(atTime: CHHapticTimeImmediate)
         } catch {
             UISelectionFeedbackGenerator().selectionChanged()

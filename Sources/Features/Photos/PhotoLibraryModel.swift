@@ -14,7 +14,14 @@ final class PhotoLibraryModel {
     private(set) var authorized = PHPhotoLibrary.authorizationStatus(for: .readWrite) == .authorized || PHPhotoLibrary.authorizationStatus(for: .readWrite) == .limited
     private(set) var loaded = false
     private let imageManager = PHCachingImageManager()
-    private var thumbnails: [String: UIImage] = [:]
+    /// Evicts under pressure; a plain dictionary held every grid thumbnail
+    /// for the whole session (a large library cost tens of MB that never
+    /// came back). Cost = decoded bitmap bytes.
+    private let thumbnails = NSCache<NSString, UIImage>()
+
+    init() {
+        thumbnails.totalCostLimit = 64 * 1024 * 1024
+    }
 
     var count: Int { assets?.count ?? 0 }
 
@@ -24,7 +31,8 @@ final class PhotoLibraryModel {
     }
 
     func thumbnail(for asset: PHAsset, size: CGSize) -> UIImage? {
-        if let cached = thumbnails[asset.localIdentifier] { return cached }
+        let key = asset.localIdentifier as NSString
+        if let cached = thumbnails.object(forKey: key) { return cached }
         let options = PHImageRequestOptions()
         options.deliveryMode = .opportunistic
         options.isNetworkAccessAllowed = true
@@ -33,7 +41,8 @@ final class PhotoLibraryModel {
             for: asset, targetSize: size, contentMode: .aspectFill, options: options
         ) { [weak self] image, _ in
             guard let image else { return }
-            self?.thumbnails[asset.localIdentifier] = image
+            let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+            self?.thumbnails.setObject(image, forKey: key, cost: cost)
         }
         return nil
     }
@@ -73,7 +82,7 @@ final class PhotoLibraryModel {
     /// photos appear without restarting the app.
     func reload() {
         guard authorized else { return }
-        thumbnails.removeAll()
+        thumbnails.removeAllObjects()
         loadPhotos()
     }
 
