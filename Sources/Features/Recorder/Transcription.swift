@@ -104,21 +104,39 @@ final class TranscriptionManager {
 
     private var asrManager: AsrManager?
 
-    /// Loads (downloading first if needed) the Parakeet v3 CoreML models.
-    /// FluidAudio caches the download; subsequent calls are instant.
+    /// Loads (downloading first if needed) the Parakeet Ultra CoreML
+    /// models. FluidAudio caches the download; subsequent calls are
+    /// instant (the first device load compiles for ANE, ~10 min once).
+    /// The download mirrors to a Live Activity with a progress bar.
     @MainActor
     func ensureModels() async throws -> AsrManager {
         if let asrManager { return asrManager }
+        TranscriptionManager.sweepLegacyCaches()
         downloadState = .downloading(file: "asr-models", progress: nil)
+        LiveActivityManager.shared.downloadStarted()
         do {
-            let models = try await AsrModels.downloadAndLoad(version: .ultra)
+            let models = try await AsrModels.downloadAndLoad(version: .ultra, progressHandler: { p in
+                let fraction = p.fractionCompleted
+                let phase: String
+                if case .compiling(let modelName) = p.phase {
+                    phase = "Compiling \(modelName)…"
+                } else {
+                    phase = "Downloading…"
+                }
+                Task { @MainActor in
+                    self.downloadState = .downloading(file: phase, progress: fraction)
+                    LiveActivityManager.shared.downloadProgress(fraction)
+                }
+            })
             let mgr = AsrManager(config: .default)
             try await mgr.loadModels(models)
             asrManager = mgr
             downloadState = .ready
+            LiveActivityManager.shared.downloadFinished(success: true)
             return mgr
         } catch {
             downloadState = .failed(error.localizedDescription)
+            LiveActivityManager.shared.downloadFinished(success: false)
             throw error
         }
     }

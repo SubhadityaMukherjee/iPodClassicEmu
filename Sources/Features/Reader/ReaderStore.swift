@@ -1,4 +1,5 @@
 import Foundation
+import PDFKit
 
 /// Registry of imported books (Documents/Books) with each book's reading
 /// position and font size, persisted in UserDefaults. EPUBs are extracted
@@ -207,10 +208,20 @@ final class ReaderStore {
         let id = uniqueID(for: base)
         let dest = Self.booksRoot.appendingPathComponent(id)
 
+        var pdfMode = 0
         if kind == .pdf {
             let fileDest = dest.appendingPathExtension("pdf")
             try? FileManager.default.removeItem(at: fileDest)
             try FileManager.default.copyItem(at: url, to: fileDest)
+            // Text PDFs open in Reflowed mode (that's why they're here);
+            // scanned/image-only PDFs stay in Continuous page view.
+            if let doc = PDFDocument(url: fileDest) {
+                var textLen = 0
+                for i in 0..<min(6, doc.pageCount) {
+                    textLen += doc.page(at: i)?.string?.count ?? 0
+                }
+                if textLen > 200 { pdfMode = 2 }
+            }
         } else {
             try? FileManager.default.removeItem(at: dest)
             try EpubUnzip.extract(zipURL: url, to: dest)
@@ -223,7 +234,8 @@ final class ReaderStore {
         }
 
         let book = Book(id: id, kind: kind, title: base,
-                        chapterIndex: 0, scrollFraction: 0, fontSize: 17)
+                        chapterIndex: 0, scrollFraction: 0, fontSize: 17,
+                        pdfMode: pdfMode)
         books.insert(book, at: 0)
         persist()
         return book

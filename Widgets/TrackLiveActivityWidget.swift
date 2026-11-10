@@ -12,6 +12,7 @@ private extension TrackActivityAttributes.Kind {
         case .stopwatch: return "stopwatch"
         case .recorder: return "mic.fill"
         case .transcription: return "waveform"
+        case .modelDownload: return "arrow.down.circle"
         }
     }
 }
@@ -68,7 +69,7 @@ private func timeText(_ context: ActivityViewContext<TrackActivityAttributes>) -
     let s = context.state
     if showDone(context) {
         Text("Done")
-    } else if context.attributes.kind == .transcription {
+    } else if context.attributes.kind == .transcription || context.attributes.kind == .modelDownload {
         Text(s.progress.map { "\(Int(($0 * 100).rounded()))%" } ?? "…")
     } else if let paused = s.pausedValue {
         Text(paused.liveClock)
@@ -97,6 +98,8 @@ private func islandExtra(_ context: ActivityViewContext<TrackActivityAttributes>
         Text("Lap \(s.laps)")
     } else if context.attributes.kind == .transcription {
         Text("till done")
+    } else if context.attributes.kind == .modelDownload {
+        Text("one time")
     } else {
         Text("REC")
     }
@@ -135,7 +138,8 @@ private struct LockScreenTrackView: View {
                 statusLine
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
-                if context.attributes.kind == .transcription, let progress = context.state.progress, !showDone(context) {
+                if (context.attributes.kind == .transcription || context.attributes.kind == .modelDownload),
+                   let progress = context.state.progress, !showDone(context) {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Color.white.opacity(0.18))
@@ -172,6 +176,8 @@ private struct LockScreenTrackView: View {
             Text("Laps \(s.laps)")
         } else if context.attributes.kind == .transcription {
             Text(s.label ?? "Transcribing…")
+        } else if context.attributes.kind == .modelDownload {
+            Text(s.label ?? "Downloading…")
         } else {
             Text("Recording")
         }

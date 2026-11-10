@@ -134,6 +134,30 @@ final class LiveActivityManager {
             dismissalPolicy: state == "done" ? .default : .immediate)
     }
 
+    // MARK: Model download
+
+    func downloadStarted() {
+        start(.modelDownload, total: 0, staleDate: nil, state: .init(
+            endDate: .distantFuture, segmentStart: Date(),
+            pausedValue: nil, laps: 0, done: false, progress: 0, label: "Downloading…"))
+    }
+
+    func downloadProgress(_ fraction: Double) {
+        guard activities[.modelDownload] != nil else { return }
+        update(.modelDownload, state: .init(
+            endDate: .distantFuture, segmentStart: Date(),
+            pausedValue: nil, laps: 0, done: false, progress: min(0.999, fraction),
+            label: "Downloading…"))
+    }
+
+    func downloadFinished(success: Bool) {
+        guard activities[.modelDownload] != nil else { return }
+        finish(.modelDownload, finalState: .init(
+            endDate: Date(), segmentStart: Date(), pausedValue: nil, laps: 0, done: true,
+            progress: success ? 1 : nil, label: success ? "Model ready" : "Download failed"),
+            dismissalPolicy: success ? .default : .immediate)
+    }
+
     // MARK: Internals
 
     /// Running count-up state: displays base + (now - real segment start) by

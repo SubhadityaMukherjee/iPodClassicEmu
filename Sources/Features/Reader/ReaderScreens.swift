@@ -263,8 +263,10 @@ struct BookScreen: View {
                    book?.kind == .pdf, book?.pdfMode != 2 {
                     book?.pdfMode = 2
                     model.reader.update(book!)
+                    Logger(subsystem: "com.ipodclassic.app", category: "reader-debug").notice("REFLOW HOOK fired, pdfMode=2")
                 }
                 if isReflow, let b = book {
+                    Logger(subsystem: "com.ipodclassic.app", category: "reader-debug").notice("REFLOW appear: isReflow=true, ensuring chapters")
                     highlights = HighlightStore.load(bookID: bookID, kind: .pdf)
                     liveFraction = fraction(of: b)
                     ensureReflow()
@@ -487,11 +489,13 @@ struct BookScreen: View {
     }
 
     /// Exact count for the chapter the web view reports, and recalibration
-    /// of every estimate from that data point.
+    /// of every estimate from that data point. Degenerate chapters (a
+    /// mostly-empty span) are excluded — one would skew the shared
+    /// char-per-page ratio for the whole book.
     private func exactPages(_ n: Int, forChapter ch: Int) {
         guard chapterChars.indices.contains(ch), ch < chapterPages.count, n > 0 else { return }
         let chars = chapterChars[ch]
-        if chars > 0 { charsPerPage = Double(chars) / Double(n) }
+        if chars > 300 { charsPerPage = Double(chars) / Double(n) }
         computeEstimates()
         chapterPages[ch] = n
     }
@@ -734,27 +738,40 @@ struct BookScreen: View {
             let spans = PDFReflow.spans(outline: entries, pageCount: doc?.pageCount ?? 0)
             let generated = await PDFReflow.generateChapters(pdfURL: pdfURL, outDir: outDir, spans: spans)
             await MainActor.run {
-                // Image-only PDF (no extractable text): back to page view.
-                let firstSize = generated.first.flatMap { ch -> Int? in
-                    (try? FileManager.default.attributesOfItem(atPath: ch.url.path))?[.size] as? Int
-                } ?? 0
-                guard !generated.isEmpty, firstSize > 200 else {
+                // Image-only PDF (no extractable text anywhere): back to
+                // page view. Judge by TOTAL text — the first outline span
+                // is often just the image cover/title pages (e.g. Lost
+                // City of the Monkey God), which must not veto reflow.
+                let totalBytes = generated.reduce(0) { sum, ch -> Int in
+                    sum + ((try? FileManager.default.attributesOfItem(atPath: ch.url.path))?[.size] as? Int ?? 0)
+                }
+                // Drop degenerate chapters (image cover/title spans with
+                // no extractable text): they'd render as blank pages and
+                // their exact-count recalibration would poison the global
+                // char-per-page estimate.
+                let usable = generated.filter { ch -> Bool in
+                    let size = (try? FileManager.default.attributesOfItem(atPath: ch.url.path))?[.size] as? Int ?? 0
+                    return size > 200
+                }
+                guard !usable.isEmpty, totalBytes > 200 else {
                     reflowPreparing = false
                     if var bb = book {
                         bb.pdfMode = 0
                         book = bb
                         model.reader.update(bb)
                     }
+                    Logger(subsystem: "com.ipodclassic.app", category: "reader-debug").notice("REFLOW REVERT: generated=\(generated.count) totalBytes=\(totalBytes)")
                     showToast("No extractable text")
                     return
                 }
-                reflowChapters = generated
-                chapters = generated
-                chapterPages = Array(repeating: 0, count: generated.count)
+                Logger(subsystem: "com.ipodclassic.app", category: "reader-debug").notice("REFLOW OK: chapters=\(usable.count)/\(generated.count) totalBytes=\(totalBytes)")
+                reflowChapters = usable
+                chapters = usable
+                chapterPages = Array(repeating: 0, count: usable.count)
                 reflowPreparing = false
                 // QA hooks (reflow chapters only exist after generation).
                 if let cs = ProcessInfo.processInfo.environment["READER_CHAPTER"],
-                   let c = Int(cs), generated.indices.contains(c), var bb = book {
+                   let c = Int(cs), usable.indices.contains(c), var bb = book {
                     setChapter(c, on: &bb)
                     book = bb
                 }

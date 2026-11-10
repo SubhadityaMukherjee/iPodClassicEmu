@@ -10,7 +10,7 @@ import ActivityKit
 /// no push token or frequent updates needed.
 struct TrackActivityAttributes: ActivityAttributes {
     enum Kind: String, Codable, Hashable {
-        case timer, stopwatch, recorder, transcription
+        case timer, stopwatch, recorder, transcription, modelDownload
 
         var title: String {
             switch self {
@@ -18,6 +18,7 @@ struct TrackActivityAttributes: ActivityAttributes {
             case .stopwatch: return "Stopwatch"
             case .recorder: return "Voice Memo"
             case .transcription: return "Transcribing"
+            case .modelDownload: return "Speech Model"
             }
         }
     }
