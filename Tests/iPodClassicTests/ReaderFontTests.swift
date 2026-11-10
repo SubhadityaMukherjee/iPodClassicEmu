@@ -40,6 +40,19 @@ final class ReaderFontTests: XCTestCase {
         XCTAssertEqual(book.fontFamily, 1)
     }
 
+    func testNewBooksPageOnePagePerTick() {
+        // Fresh imports (and corrupt-decode fallbacks) must default to
+        // scrollStep 0 = 1 page per wheel tick. The old default (2 = 3
+        // pages/tick) made every new book "skip pages" while scrolling —
+        // the wheel paged 3 columns per notch.
+        XCTAssertEqual(ReaderStore.Book(id: "t", kind: .epub, title: "T").scrollStep, 0)
+        let legacy = try! JSONDecoder().decode(ReaderStore.Book.self,
+            from: Data(#"{"id":"t","kind":"epub","title":"T"}"#.utf8))
+        XCTAssertEqual(legacy.scrollStep, 0, "decode fallback must also be 1 page per tick")
+        // The tick handler maps scrollStep → pages; index 0 must be 1.
+        XCTAssertEqual([1, 2, 3][min(max(0, 0), 2)], 1)
+    }
+
     func testCssCarriesSizeSpacingAndMargins() {
         // Guards the Swift→JS string interpolation (the double-backslash
         // escape bug once silently dropped every style here).

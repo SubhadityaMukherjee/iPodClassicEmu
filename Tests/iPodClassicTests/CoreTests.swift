@@ -50,6 +50,21 @@ final class WheelGeometryTests: XCTestCase {
         XCTAssertEqual(WheelCoordinator.quadrantZone(327), nil)
         XCTAssertEqual(WheelCoordinator.quadrantZone(329), .next)
     }
+
+    func testAdaptiveScrollRowsPerDetent() {
+        // A deliberate slow roll — and any single quick detent flick —
+        // must stay 1 row so wheel navigation stays 1:1.
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 0), 1)
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 120), 1)
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 290), 1)
+        // Speed tiers up with the spin and never below 1.
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 310), 2)
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 690), 2)
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 750), 3)
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 1250), 4)
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: 2500), 6)
+        XCTAssertEqual(WheelCoordinator.rowsPerDetent(speed: -400), 2, "direction-agnostic: speed is |°/s|-like")
+    }
 }
 
 final class AlarmMathTests: XCTestCase {

@@ -14,6 +14,10 @@ struct CameraScreen: View {
     @State private var savedOverlay = false
     @State private var lastMenuTap = Date.distantPast
     @State private var recordToast = ""
+    /// Last lens flip. `.prevHold`/`.nextHold` REPEAT every ~0.18s while
+    /// held (the track-scrub repeat) — flipping on each repeat toggles the
+    /// lens back and forth, so only one flip lands per hold.
+    @State private var lastFlipAt = Date.distantPast
 
     private var aspect: (label: String, value: CGFloat) {
         AppSettings.aspectRatios[min(settings.cameraAspectIndex, AppSettings.aspectRatios.count - 1)]
@@ -204,7 +208,10 @@ struct CameraScreen: View {
                 settings.cameraAspectIndex = (settings.cameraAspectIndex + 1) % AppSettings.aspectRatios.count
             }
         case .prevHold, .nextHold:
-            if !optionsOpen {
+            // First fire flips; the ~0.18s repeats (which arrive for as
+            // long as the button is held) are swallowed — one flip per hold.
+            if !optionsOpen, Date().timeIntervalSince(lastFlipAt) > 0.6 {
+                lastFlipAt = Date()
                 model.camera.setFront(!model.camera.isFront)
                 settings.cameraFront = !settings.cameraFront
             }

@@ -32,6 +32,7 @@ final class AppSettings: ObservableObject {
         static let fontScale = "display.fontScale"    // 0 small 1 standard 2 large
         static let songSort = "music.sort.songs"      // 0 title 1 artist 2 duration 3 recent
         static let albumSort = "music.sort.albums"    // 0 title 1 artist 2 recent
+        static let noteFont = "notes.fontSize"        // points; note editor text
     }
 
     // MARK: Display
@@ -116,6 +117,13 @@ final class AppSettings: ObservableObject {
     static let fontScales: [CGFloat] = [0.85, 1.0, 1.18]
     var fontMultiplier: CGFloat {
         Self.fontScales[min(max(0, fontScale), Self.fontScales.count - 1)]
+    }
+
+    // MARK: Notes
+
+    /// Note editor text size in points (11…24).
+    var noteFontSize: Int {
+        get { int(K.noteFont, 14) } set { objectWillChange.send(); store(min(24, max(11, newValue)), K.noteFont) }
     }
 
     // MARK: Music sorting
