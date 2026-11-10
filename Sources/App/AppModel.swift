@@ -64,6 +64,7 @@ enum Route: Hashable {
     case recorder
     case recordings
     case recordingDetail(String)
+    case transcript(String)
 
     // Notes
     case notes
@@ -134,6 +135,32 @@ final class AppModel {
             _ = try? reader.addBook(from: docs.appendingPathComponent(name))
         }
 
+        // QA hook: QA_TRANSCRIBE downloads the Parakeet model if needed and
+        // transcribes a recording from Documents/Recordings end-to-end.
+        if let name = ProcessInfo.processInfo.environment["QA_TRANSCRIBE"] {
+            Task { @MainActor in
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let statusURL = docs.appendingPathComponent("qa_status.txt")
+                func setStatus(_ s: String) {
+                    try? s.write(to: statusURL, atomically: true, encoding: .utf8)
+                }
+                let mgr = TranscriptionManager.shared
+                do {
+                    setStatus("loading-models")
+                    try await mgr.ensureModels()
+                    setStatus("models-ready")
+                    let url = docs.appendingPathComponent("Recordings/\(name)")
+                    setStatus("transcribing")
+                    let text = await mgr.transcribeAndWait(file: url.lastPathComponent, sourceURL: url)
+                    setStatus("done: \(text.count) chars")
+                    Logger(subsystem: "com.ipodclassic.app", category: "transcribe").notice("QA \(text.prefix(400), privacy: .public)")
+                } catch {
+                    setStatus("FAILED: \(error)")
+                    Logger(subsystem: "com.ipodclassic.app", category: "transcribe").notice("QA setup failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+
         // QA hook: START_ROUTE opens a specific screen first (UI tests).
         if let name = ProcessInfo.processInfo.environment["START_ROUTE"],
            let route = Self.route(named: name) {
@@ -198,6 +225,7 @@ final class AppModel {
         case "camera": return .camera
         case "recorder": return .recorder
         case "recordings": return .recordings
+        case "transcript": return .transcript(QASeed.transcriptFileName)
         case "notes": return .notes
         case "noteEditor": return .noteEditor(QASeed.qaNoteName)
         case "clocks": return .clocks

@@ -27,5 +27,17 @@ struct iPodClassicShortcuts: AppShortcutsProvider {
             shortTitle: "Open Camera",
             systemImageName: "camera.fill"
         )
+        AppShortcut(
+            intent: TranscribeRecordingIntent(),
+            phrases: ["Transcribe voice memo in \(.applicationName)"],
+            shortTitle: "Transcribe Voice Memo",
+            systemImageName: "waveform"
+        )
+        AppShortcut(
+            intent: GetTranscriptionIntent(),
+            phrases: ["Get transcript in \(.applicationName)"],
+            shortTitle: "Get Voice Memo Transcript",
+            systemImageName: "doc.text"
+        )
     }
 }

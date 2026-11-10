@@ -10,13 +10,14 @@ import ActivityKit
 /// no push token or frequent updates needed.
 struct TrackActivityAttributes: ActivityAttributes {
     enum Kind: String, Codable, Hashable {
-        case timer, stopwatch, recorder
+        case timer, stopwatch, recorder, transcription
 
         var title: String {
             switch self {
             case .timer: return "Timer"
             case .stopwatch: return "Stopwatch"
             case .recorder: return "Voice Memo"
+            case .transcription: return "Transcribing"
             }
         }
     }
@@ -24,6 +25,7 @@ struct TrackActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         /// Timer: the moment the countdown hits zero. Count-up kinds: the
         /// far end of the display interval so the text ticks up forever.
+        /// Transcription: the projected finish, re-estimated per update.
         var endDate: Date
         /// Start of the current run segment, shifted back by the time
         /// accumulated before it, so a count-up displays elapsed continuously.
@@ -32,6 +34,10 @@ struct TrackActivityAttributes: ActivityAttributes {
         var pausedValue: TimeInterval?
         var laps: Int
         var done: Bool
+        /// Transcription progress 0…1 (nil for the clock kinds).
+        var progress: Double?
+        /// Transcription: the memo name (running) or status text (final).
+        var label: String?
     }
 
     var kind: Kind

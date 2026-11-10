@@ -424,11 +424,12 @@ func clampedScrollOffset(current: CGFloat, delta: CGFloat, contentHeight: CGFloa
     return min(max(current + delta, lowest), highest)
 }
 
-/// Invisible anchor into the TextEditor's backing hierarchy: the editor
-/// re-walks from it to find the CURRENT backing UITextView whenever the
+/// Invisible anchor into the TextEditor's backing hierarchy: a screen can
+/// re-walk from it to find the CURRENT backing UITextView whenever the
 /// cached one detaches (SwiftUI can recreate the text view on keyboard
-/// transitions or backgrounding, which silently killed wheel scrolling).
-private struct TextViewProbe: UIViewRepresentable {
+/// transitions or backgrounding, which silently kills wheel scrolling).
+/// Shared by the notes editor and the transcript screen.
+struct TextViewProbe: UIViewRepresentable {
     let onAnchor: (UIView) -> Void
 
     func makeUIView(context: Context) -> UIView {

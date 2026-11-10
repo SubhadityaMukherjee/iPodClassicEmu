@@ -195,6 +195,7 @@ final class RecorderModel {
     func delete(_ file: RecordingFile) {
         if playingID == file.id { stopPlayback() }
         try? FileManager.default.removeItem(at: file.url)
+        TranscriptStore.remove(for: file.id)
         loadRecordings()
     }
 

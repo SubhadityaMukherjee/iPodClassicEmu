@@ -11,6 +11,7 @@
 		035595170CCC029FAD33B040 /* CoverFlowScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A54E7E9C330E86065492453 /* CoverFlowScreen.swift */; };
 		0ADDDACB18BA7302F69083ED /* WheelInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6461E37C6B4E93CC838424E /* WheelInput.swift */; };
 		0B5BE9ABA8833A94B6A38943 /* QASeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002EA79AA1F8371F29742EE8 /* QASeed.swift */; };
+		0DC95624122FD47CA5C41E5F /* Transcription.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE71F60BC7953CF4C99B25 /* Transcription.swift */; };
 		10B1C4FF68575FCC69D2F711 /* AlarmTone.caf in Resources */ = {isa = PBXBuildFile; fileRef = B9E813213263E69F0E5B46BF /* AlarmTone.caf */; };
 		10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE4F74ACAB7D2FE7FB6BD26 /* TimerStopwatchModels.swift */; };
 		183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06464256EE519A5BD50EA73F /* iPodClassicApp.swift */; };
@@ -25,6 +26,7 @@
 		3F918DA5FAD2C48FFAD5F7C5 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DA368CF25B19FEF8CE837C /* NotesStore.swift */; };
 		48A1D433ED95B265BA9FFF8E /* MusicService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC998CD72BCE921ABFBE36B /* MusicService.swift */; };
 		49DCC1994A75C4D092BFC6F3 /* SettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B937A3043FF83416A501A21 /* SettingsScreens.swift */; };
+		4BD1E8D4B100E2FDCBF6BCD1 /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7523D39BD43BC86DA36A65DF /* TranscriptStoreTests.swift */; };
 		4C705C26710B6749CAF056D5 /* ClockStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53777219020A6ED4B6227EC2 /* ClockStateTests.swift */; };
 		54710389A162814D393AAE41 /* MenuComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F9F9D030FECE8C1639FE2E6 /* MenuComponents.swift */; };
 		547D1A488A4F0E68D3C0267F /* AlarmReconcileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18AE4C666A52A2EF759755A /* AlarmReconcileTests.swift */; };
@@ -35,12 +37,14 @@
 		5EC6D52A802E1514CAE174A1 /* NowPlayingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */; };
 		62CB048E8A6943482DD8D1F8 /* TickSounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16CC36E7096FECFA8123BA8 /* TickSounds.swift */; };
 		6CBA67E33C845F4D22F2422D /* MusicScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D783A264CBB399887431ACB /* MusicScreens.swift */; };
+		73FA6EAAFE03B6950EF38587 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 9FA83B1241C42CB2EE7E1529 /* FluidAudio */; };
 		7B50BFDA85F41723706F0125 /* iPodClassicWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7F8ADF4FC8E0E7C16628F2EA /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9362F34A0BC5DC660638C04 /* CameraModel.swift */; };
 		82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2252DE6110093E2FF64B7404 /* CRTOverlay.swift */; };
 		84BE9FB1EF58F9433F774C38 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FF7E771867E7BE0B289EE5 /* AppModel.swift */; };
 		8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */; };
 		89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59116EF21FFA3688484F038F /* RecorderScreens.swift */; };
+		8B9A0259A4FB90FE3B22B7B2 /* ShortcutsIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */; };
 		8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */; };
 		926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */; };
 		9C4C9202AFABDDB4C51444A2 /* ReaderHighlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */; };
@@ -142,6 +146,7 @@
 		45DA368CF25B19FEF8CE837C /* NotesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
 		47CFD786881A4C8FC43D00DB /* iPodClassicWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodClassicWidgets.swift; sourceTree = "<group>"; };
 		483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreTests.swift; sourceTree = "<group>"; };
+		49FE71F60BC7953CF4C99B25 /* Transcription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcription.swift; sourceTree = "<group>"; };
 		4AFBE5E801AF3FDB135D7DD3 /* TrackLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackLiveActivityWidget.swift; sourceTree = "<group>"; };
 		4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraScreen.swift; sourceTree = "<group>"; };
 		4DF62CF32F140AD7C1A61F7C /* iPodClassicUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = iPodClassicUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -155,6 +160,7 @@
 		6B937A3043FF83416A501A21 /* SettingsScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreens.swift; sourceTree = "<group>"; };
 		6C746E09FCFDA897EB495D22 /* NotesStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStoreTests.swift; sourceTree = "<group>"; };
 		70FD912BBA672A8037F0ED9F /* PlayerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerModel.swift; sourceTree = "<group>"; };
+		7523D39BD43BC86DA36A65DF /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
 		7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreens.swift; sourceTree = "<group>"; };
 		7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuSelectionTests.swift; sourceTree = "<group>"; };
 		826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelTapTests.swift; sourceTree = "<group>"; };
@@ -163,6 +169,7 @@
 		8EAC0590B8229DE23E30083F /* PlaybackSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSessionTests.swift; sourceTree = "<group>"; };
 		90462DBBAE1970378F420CEE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A16CC36E7096FECFA8123BA8 /* TickSounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickSounds.swift; sourceTree = "<group>"; };
+		A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsIntegration.swift; sourceTree = "<group>"; };
 		A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenView.swift; sourceTree = "<group>"; };
 		B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHighlights.swift; sourceTree = "<group>"; };
 		B7CEBDD3E18661EEC5335B6E /* Tick.caf */ = {isa = PBXFileReference; path = Tick.caf; sourceTree = "<group>"; };
@@ -198,6 +205,17 @@
 		F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReflow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		E2B366EFEA944221A3866D7A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				73FA6EAAFE03B6950EF38587 /* FluidAudio in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
 		034C687AE9E5BF3FA7729C80 /* Photos */ = {
 			isa = PBXGroup;
@@ -230,6 +248,7 @@
 			children = (
 				0C9168F602DF28123A3C7389 /* RecorderModel.swift */,
 				59116EF21FFA3688484F038F /* RecorderScreens.swift */,
+				49FE71F60BC7953CF4C99B25 /* Transcription.swift */,
 			);
 			path = Recorder;
 			sourceTree = "<group>";
@@ -242,6 +261,7 @@
 				E06640F863889753F8AADBCC /* CameraShortcut.swift */,
 				06464256EE519A5BD50EA73F /* iPodClassicApp.swift */,
 				CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */,
+				A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -371,6 +391,7 @@
 				06E5B68A6556EACB64528E07 /* ReaderFontTests.swift */,
 				BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */,
 				E8B1633CF255A1D13A05CF03 /* SongHoldStateTests.swift */,
+				7523D39BD43BC86DA36A65DF /* TranscriptStoreTests.swift */,
 			);
 			path = iPodClassicTests;
 			sourceTree = "<group>";
@@ -515,6 +536,7 @@
 			buildPhases = (
 				67984661CA647BB3F990E140 /* Sources */,
 				122B8894AECEF6AD3E7895A3 /* Resources */,
+				E2B366EFEA944221A3866D7A /* Frameworks */,
 				55CD7969043736BB6C04B520 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -524,6 +546,7 @@
 			);
 			name = iPodClassic;
 			packageProductDependencies = (
+				9FA83B1241C42CB2EE7E1529 /* FluidAudio */,
 			);
 			productName = iPodClassic;
 			productReference = 3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */;
@@ -601,6 +624,9 @@
 			);
 			mainGroup = 9DAAEF682E99F7256888CADF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D8A095556DCBD5F361F6000F /* Products */;
 			projectDirPath = "";
@@ -675,11 +701,13 @@
 				8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */,
 				2A24788AE5C41023F1FB9BA4 /* ScreenView.swift in Sources */,
 				49DCC1994A75C4D092BFC6F3 /* SettingsScreens.swift in Sources */,
+				8B9A0259A4FB90FE3B22B7B2 /* ShortcutsIntegration.swift in Sources */,
 				F9E16E555874477D62C613D3 /* Theme.swift in Sources */,
 				62CB048E8A6943482DD8D1F8 /* TickSounds.swift in Sources */,
 				AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */,
 				10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */,
 				E954CC287B67D09481ED552D /* TrackActivityAttributes.swift in Sources */,
+				0DC95624122FD47CA5C41E5F /* Transcription.swift in Sources */,
 				A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */,
 				0ADDDACB18BA7302F69083ED /* WheelInput.swift in Sources */,
 				183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */,
@@ -712,6 +740,7 @@
 				3745E1CB511E64BEE553FC6B /* ReaderFontTests.swift in Sources */,
 				BDCFE1DC543919A4192B71E2 /* RouteTests.swift in Sources */,
 				FEE979444A845DCA3D51C8FE /* SongHoldStateTests.swift in Sources */,
+				4BD1E8D4B100E2FDCBF6BCD1 /* TranscriptStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1058,6 +1087,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.18.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9FA83B1241C42CB2EE7E1529 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 71574A89CE8CF4AB0F83A735 /* Project object */;
 }

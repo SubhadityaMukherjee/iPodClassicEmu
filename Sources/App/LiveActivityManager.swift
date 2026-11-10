@@ -91,6 +91,49 @@ final class LiveActivityManager {
 
     func recorderEnded() { finish(.recorder) }
 
+    // MARK: Transcription
+
+    /// Segments decoded so far + start time, to project the finish date
+    /// from the observed rate (the readout ticks down to it live).
+    private var transcriptionStart: Date?
+    private var transcriptionLastFraction: Double = 0
+
+    func transcriptionStarted(file: String) {
+        transcriptionStart = Date()
+        transcriptionLastFraction = 0
+        start(.transcription, total: 0, staleDate: nil, state: .init(
+            endDate: .distantFuture, segmentStart: Date(),
+            pausedValue: nil, laps: 0, done: false, progress: 0, label: file))
+    }
+
+    func transcriptionProgress(file: String, fraction: Double) {
+        guard activities[.transcription] != nil else { return }
+        var remaining: TimeInterval = 0
+        if let started = transcriptionStart, fraction > transcriptionLastFraction + 0.001 {
+            let elapsed = Date().timeIntervalSince(started)
+            remaining = elapsed * (1 - fraction) / max(fraction, 0.01)
+        }
+        transcriptionLastFraction = fraction
+        update(.transcription, state: .init(
+            endDate: Date().addingTimeInterval(remaining), segmentStart: Date(),
+            pausedValue: nil, laps: 0, done: false, progress: fraction, label: file),
+            staleDate: Date().addingTimeInterval(remaining + 10))
+    }
+
+    func transcriptionFinished(file: String, state: String) {
+        transcriptionStart = nil
+        let label: String
+        switch state {
+        case "failed": label = "Transcription failed"
+        case "partial": label = "Transcription paused"
+        default: label = "Transcribed"
+        }
+        finish(.transcription, finalState: .init(
+            endDate: Date(), segmentStart: Date(), pausedValue: nil, laps: 0, done: true,
+            progress: state == "failed" ? nil : 1, label: label),
+            dismissalPolicy: state == "done" ? .default : .immediate)
+    }
+
     // MARK: Internals
 
     /// Running count-up state: displays base + (now - real segment start) by

@@ -11,6 +11,7 @@ private extension TrackActivityAttributes.Kind {
         case .timer: return "timer"
         case .stopwatch: return "stopwatch"
         case .recorder: return "mic.fill"
+        case .transcription: return "waveform"
         }
     }
 }
@@ -67,6 +68,8 @@ private func timeText(_ context: ActivityViewContext<TrackActivityAttributes>) -
     let s = context.state
     if showDone(context) {
         Text("Done")
+    } else if context.attributes.kind == .transcription {
+        Text(s.progress.map { "\(Int(($0 * 100).rounded()))%" } ?? "…")
     } else if let paused = s.pausedValue {
         Text(paused.liveClock)
     } else if context.attributes.kind == .timer {
@@ -92,6 +95,8 @@ private func islandExtra(_ context: ActivityViewContext<TrackActivityAttributes>
         }
     } else if context.attributes.kind == .stopwatch {
         Text("Lap \(s.laps)")
+    } else if context.attributes.kind == .transcription {
+        Text("till done")
     } else {
         Text("REC")
     }
@@ -130,6 +135,16 @@ private struct LockScreenTrackView: View {
                 statusLine
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
+                if context.attributes.kind == .transcription, let progress = context.state.progress, !showDone(context) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.18))
+                            Capsule().fill(lcdGreen)
+                                .frame(width: max(4, geo.size.width * progress))
+                        }
+                    }
+                    .frame(height: 4)
+                }
             }
             Spacer(minLength: 0)
             Image(systemName: bigIcon)
@@ -155,6 +170,8 @@ private struct LockScreenTrackView: View {
             }
         } else if context.attributes.kind == .stopwatch {
             Text("Laps \(s.laps)")
+        } else if context.attributes.kind == .transcription {
+            Text(s.label ?? "Transcribing…")
         } else {
             Text("Recording")
         }

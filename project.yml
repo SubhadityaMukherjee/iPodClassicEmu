@@ -5,6 +5,11 @@ options:
     iOS: "18.0"
   createIntermediateGroups: true
 
+packages:
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    from: 0.18.3
+
 settings:
   base:
     MARKETING_VERSION: "0.1.0"
@@ -57,6 +62,9 @@ targets:
         SUPPORTS_MACCATALYST: "NO"
     dependencies:
       - target: iPodClassicWidgets
+      - package: FluidAudio
+        product: FluidAudio
+        traits: []
 
   iPodClassicWidgets:
     type: app-extension

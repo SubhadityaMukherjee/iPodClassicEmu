@@ -112,12 +112,29 @@ struct RecordingsListScreen: View {
     @State private var selection = 0
     @State private var deleteCandidate: RecordingFile?
     @State private var deleteSelection = 0
+    /// Recording queued to transcribe once the model finishes downloading.
+    @State private var pendingTranscribe: RecordingFile?
+    @State private var downloadOpen = false
+
+    private var transcription: TranscriptionManager { TranscriptionManager.shared }
+
+    /// Transcript state marker shown next to the duration.
+    private func detail(for file: RecordingFile) -> String {
+        let duration = TimeFormat.duration(file.duration)
+        if transcription.transcribing.contains(file.id) { return "\(duration) · transcribing…" }
+        guard let entry = TranscriptStore.entry(for: file.id) else { return duration }
+        switch entry.state {
+        case "done": return "\(duration) ✓"
+        case "failed": return "\(duration) · failed"
+        default: return "\(duration) · partial"
+        }
+    }
 
     var body: some View {
         ZStack {
             MenuList(
                 items: model.recorder.recordings.map { file in
-                    MenuItem(id: file.id, title: file.name, detail: TimeFormat.duration(file.duration))
+                    MenuItem(id: file.id, title: file.name, detail: detail(for: file))
                 },
                 selection: selection, emptyText: "No Recordings"
             )
@@ -129,9 +146,25 @@ struct RecordingsListScreen: View {
                 ModalHost { holdPanel }
                     .zIndex(3)
             }
+            if downloadOpen {
+                ModalHost { downloadPanel }
+                    .zIndex(4)
+            }
         }
         .onWheel { handle($0) }
-        .onAppear { model.recorder.loadRecordings() }
+        .onAppear {
+            model.recorder.loadRecordings()
+            // A transcription finished while another screen was on top.
+            if !transcription.transcribing.isEmpty { model.recorder.loadRecordings() }
+        }
+        .onChange(of: transcription.downloadState) { old, new in
+            // Download finished — continue with the queued recording.
+            if case .ready = new, old != .ready, let file = pendingTranscribe {
+                downloadOpen = false
+                pendingTranscribe = nil
+                transcription.transcribe(file: file.id, sourceURL: file.url)
+            }
+        }
         .sheet(isPresented: Binding(get: { shareItem != nil }, set: { if !$0 { shareItem = nil } })) {
             if let url = shareItem {
                 ActivityView(items: [url])
@@ -152,16 +185,38 @@ struct RecordingsListScreen: View {
     }
 
     private func handle(_ event: ControlEvent) {
+        if downloadOpen {
+            switch event {
+            case .select, .playPause:
+                switch transcription.downloadState {
+                case .ready:
+                    downloadOpen = false
+                    if let file = pendingTranscribe {
+                        transcription.transcribe(file: file.id, sourceURL: file.url)
+                        pendingTranscribe = nil
+                    }
+                case .failed, .notStarted:
+                    Task { try? await transcription.ensureModels() }
+                default:
+                    break
+                }
+            case .menu, .menuHold:
+                downloadOpen = false
+                pendingTranscribe = nil
+            default:
+                break
+            }
+            return
+        }
         if holdItem != nil {
+            let rows = holdRows
             switch event {
             case .tick(let d):
-                holdSelection = min(2, max(0, holdSelection + (d > 0 ? 1 : -1)))
+                holdSelection = min(rows.count - 1, max(0, holdSelection + (d > 0 ? 1 : -1)))
                 WheelFeedback.tick(dir: d)
             case .select:
-                switch holdSelection {
-                case 0: shareItem = holdItem?.url; holdItem = nil
-                case 1: deleteCandidate = holdItem; deleteSelection = 1; holdItem = nil
-                default: holdItem = nil
+                if rows.indices.contains(holdSelection) {
+                    holdAction(rows[holdSelection])
                 }
             case .menu, .menuHold:
                 holdItem = nil
@@ -214,26 +269,125 @@ struct RecordingsListScreen: View {
     @State private var holdSelection = 0
     @State private var shareItem: URL?
 
+    /// Hold-menu rows depend on the recording's transcript state:
+    /// transcription / view / retry / share text, then share audio /
+    /// delete / cancel.
+    private var holdRows: [String] {
+        guard let file = holdItem else { return [] }
+        var rows: [String] = []
+        let entry = TranscriptStore.entry(for: file.id)
+        if transcription.transcribing.contains(file.id) {
+            rows.append("Cancel Transcribing")
+        } else if transcription.downloadState != .ready {
+            rows.append("Transcribe")
+        } else if entry == nil || entry?.state == "failed" {
+            rows.append(entry?.state == "failed" ? "Retry Transcription" : "Transcribe")
+        }
+        if let entry, entry.text.isEmpty == false {
+            rows.append("View Transcript")
+            rows.append("Share Text")
+        }
+        rows.append("Share")
+        rows.append("Delete")
+        rows.append("Cancel")
+        return rows
+    }
+
+    private func holdAction(_ row: String) {
+        guard let file = holdItem else { return }
+        switch row {
+        case "Transcribe", "Retry Transcription":
+            holdItem = nil
+            beginTranscription(file)
+        case "Cancel Transcribing":
+            transcription.cancel(file: file.id)
+            holdItem = nil
+        case "View Transcript":
+            holdItem = nil
+            model.push(.transcript(file.id))
+        case "Share Text":
+            shareTranscript(file)
+            holdItem = nil
+        case "Share":
+            shareItem = file.url
+            holdItem = nil
+        case "Delete":
+            deleteCandidate = file
+            deleteSelection = 1
+            holdItem = nil
+        default:
+            holdItem = nil
+        }
+    }
+
+    /// Starts transcription, running the one-time model download first if
+    /// needed (the panel tracks progress and auto-continues when ready).
+    private func beginTranscription(_ file: RecordingFile) {
+        if transcription.downloadState == .ready, transcription.transcribing.isEmpty {
+            transcription.transcribe(file: file.id, sourceURL: file.url)
+        } else {
+            pendingTranscribe = file
+            downloadOpen = true
+            Task { try? await transcription.ensureModels() }
+        }
+    }
+
+    private func shareTranscript(_ file: RecordingFile) {
+        guard let entry = TranscriptStore.entry(for: file.id), !entry.text.isEmpty else { return }
+        let name = file.name.replacingOccurrences(of: ".m4a", with: "")
+        let clean = "Transcript — \(name)\n\n\(entry.text)"
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(name).txt")
+        try? clean.write(to: url, atomically: true, encoding: .utf8)
+        shareItem = url
+    }
+
     private var holdPanel: some View {
         ModalPanel(title: "Recording Options", onClose: { holdItem = nil }) {
             VStack(spacing: 0) {
-                MenuRow(item: MenuItem(id: "h.share", title: "Share", showsChevron: false), selected: holdSelection == 0)
+                ForEach(Array(holdRows.enumerated()), id: \.element) { idx, row in
+                    MenuRow(item: MenuItem(id: "h.\(row)", title: row, showsChevron: false),
+                            selected: holdSelection == idx)
+                        .frame(height: 30.5)
+                        .onTapGesture {
+                            holdSelection = idx
+                            holdAction(row)
+                        }
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// One-time Parakeet v3 model download (~600 MB), shown while it runs.
+    private var downloadPanel: some View {
+        ModalPanel(title: "Speech Model", onClose: {
+            downloadOpen = false
+            pendingTranscribe = nil
+        }) {
+            VStack(spacing: 0) {
+                switch transcription.downloadState {
+                case .ready:
+                    MenuRow(item: MenuItem(id: "dl.go", title: "Model Ready", showsChevron: false), selected: true)
+                        .frame(height: 30.5)
+                case .downloading:
+                    MenuRow(item: MenuItem(id: "dl.p", title: "Downloading…",
+                                           detail: "~600 MB, one time", showsChevron: false), selected: true)
+                        .frame(height: 30.5)
+                case .failed(let message):
+                    MenuRow(item: MenuItem(id: "dl.retry", title: "Retry Download",
+                                           detail: message, showsChevron: false), selected: true)
+                        .frame(height: 30.5)
+                case .notStarted:
+                    MenuRow(item: MenuItem(id: "dl.start", title: "Download (~600 MB)",
+                                           detail: "one time", showsChevron: false), selected: true)
+                        .frame(height: 30.5)
+                }
+                MenuRow(item: MenuItem(id: "dl.cancel", title: "Cancel", showsChevron: false), selected: false)
                     .frame(height: 30.5)
                     .onTapGesture {
-                        shareItem = holdItem?.url
-                        holdItem = nil
-                    }
-                MenuRow(item: MenuItem(id: "h.delete", title: "Delete", showsChevron: false), selected: holdSelection == 1)
-                    .frame(height: 30.5)
-                    .onTapGesture {
-                        deleteCandidate = holdItem
-                        deleteSelection = 1
-                        holdItem = nil
-                    }
-                MenuRow(item: MenuItem(id: "h.cancel", title: "Cancel", showsChevron: false), selected: holdSelection == 2)
-                    .frame(height: 30.5)
-                    .onTapGesture {
-                        holdItem = nil
+                        downloadOpen = false
+                        pendingTranscribe = nil
                     }
             }
             .padding(.top, 2)
@@ -254,8 +408,20 @@ struct RecordingDetailScreen: View {
         model.recorder.recordings.first { $0.id == fileName }
     }
 
+    private var transcription: TranscriptionManager { TranscriptionManager.shared }
+
     private var rows: [String] {
-        ["Play / Pause", "Rewind 15s", "Share", "Delete"]
+        var rows = ["Play / Pause", "Rewind 15s"]
+        if transcription.transcribing.contains(fileName) {
+            rows.append("Transcribing…")
+        } else if let entry = TranscriptStore.entry(for: fileName), entry.text.isEmpty == false {
+            rows.append("View Transcript")
+        } else {
+            rows.append("Transcribe")
+        }
+        rows.append("Share")
+        rows.append("Delete")
+        return rows
     }
 
     var body: some View {
@@ -267,6 +433,7 @@ struct RecordingDetailScreen: View {
                 .padding(.top, 6)
             Spacer(minLength: 0)
         }
+        .overlay(showToast ? toastView : nil)
         .onWheel { handle($0) }
         .sheet(item: Binding(
             get: { shareItem.map { ShareTarget(url: $0) } },
@@ -324,6 +491,22 @@ struct RecordingDetailScreen: View {
             model.recorder.playPauseCurrent(file)
         case "Rewind 15s":
             model.recorder.seekCurrent(-15)
+        case "Transcribing…":
+            break
+        case "Transcribe", "View Transcript":
+            if let entry = TranscriptStore.entry(for: file.id), entry.text.isEmpty == false,
+               !transcription.transcribing.contains(fileName) {
+                model.push(.transcript(file.id))
+            } else if transcription.downloadState == .ready, transcription.transcribing.isEmpty {
+                transcription.transcribe(file: file.id, sourceURL: file.url)
+            } else {
+                showToast = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { showToast = false }
+                Task { try? await transcription.ensureModels() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    showToast = false
+                }
+            }
         case "Share":
             shareItem = file.url
         case "Delete":
@@ -332,6 +515,22 @@ struct RecordingDetailScreen: View {
         default:
             break
         }
+    }
+
+    /// Brief "downloading speech model…" note on the detail screen.
+    @State private var showToast = false
+    private var toastView: some View {
+        VStack {
+            Spacer()
+            Text("Downloading speech model…")
+                .font(Theme.font(11, .bold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.black.opacity(0.75)))
+                .foregroundStyle(Color.white)
+                .padding(.bottom, 24)
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -344,4 +543,96 @@ struct ActivityView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+/// A recording's transcript: read-only text the wheel scrolls, Share
+/// exports it as clean .txt. MENU pops back.
+struct TranscriptScreen: View {
+    @Environment(AppModel.self) private var model
+    let fileName: String
+
+    @State private var textView: UITextView?
+    @State private var probeAnchor: UIView?
+    @State private var shareItem: URL?
+
+    private var entry: TranscriptEntry? { TranscriptStore.entry(for: fileName) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let entry, entry.text.isEmpty == false {
+                TextEditor(text: .constant(entry.text))
+                    .font(Theme.font(12))
+                    .scrollContentBackground(.hidden)
+                    .background(PaperBackground())
+                    .disabled(true)
+                shareCapsule
+                    .padding(.bottom, 6)
+            } else {
+                Spacer()
+                Text(entry?.state == "failed" ? "Transcription failed" : "Transcribing…")
+                    .font(Theme.font(13, .medium))
+                    .foregroundStyle(Theme.inkDim)
+                Spacer()
+            }
+        }
+        .onWheel { handle($0) }
+        .background(
+            TextViewProbe { probeAnchor = $0 }
+        )
+        .sheet(isPresented: Binding(get: { shareItem != nil }, set: { if !$0 { shareItem = nil } })) {
+            if let url = shareItem {
+                ActivityView(items: [url])
+            }
+        }
+    }
+
+    private var shareCapsule: some View {
+        Button {
+            let name = fileName.replacingOccurrences(of: ".m4a", with: "")
+            let clean = "Transcript — \(name)\n\n\(entry?.text ?? "")"
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(name).txt")
+            try? clean.write(to: url, atomically: true, encoding: .utf8)
+            shareItem = url
+        } label: {
+            Text("Share")
+                .font(Theme.font(12, .bold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(AnyShapeStyle(SelectionGradient())))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Wheel scrolls the backing text view, clamped to the document.
+    private func handle(_ event: ControlEvent) {
+        switch event {
+        case .tick(let d):
+            guard let tv = resolveTextView() else { break }
+            let step: CGFloat = d > 0 ? 42 : -42
+            let bottom = max(0, tv.contentSize.height - tv.bounds.height + tv.adjustedContentInset.bottom)
+            let target = min(max(tv.contentOffset.y + step, -tv.adjustedContentInset.top), bottom)
+            tv.setContentOffset(CGPoint(x: tv.contentOffset.x, y: target), animated: false)
+        case .menu:
+            model.pop()
+        default:
+            break
+        }
+    }
+
+    /// The backing UITextView, re-resolved if SwiftUI recreated it.
+    private func resolveTextView() -> UITextView? {
+        if let tv = textView, tv.window != nil { return tv }
+        guard let anchor = probeAnchor else { return nil }
+        var parent = anchor.superview
+        while let p = parent {
+            if let tv = p.firstSubview(ofType: UITextView.self) {
+                textView = tv
+                return tv
+            }
+            parent = p.superview
+        }
+        return nil
+    }
 }

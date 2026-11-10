@@ -29,6 +29,7 @@ struct ScreenRouter: View {
         case .recorder: return "Voice Memos"
         case .recordings: return "All Recordings"
         case .recordingDetail: return "Recording"
+        case .transcript(let name): return TranscriptStore.displayTitle(for: name)
         case .notes: return "Notes"
         case .noteEditor: return "Edit Note"
         case .clocks: return "Clocks"
@@ -95,6 +96,7 @@ struct ScreenRouter: View {
         case .recorder: RecorderScreen()
         case .recordings: RecordingsListScreen()
         case .recordingDetail(let name): RecordingDetailScreen(fileName: name)
+        case .transcript(let name): TranscriptScreen(fileName: name)
         // Notes
         case .notes: NotesListScreen()
         case .noteEditor(let name): NoteEditorScreen(fileName: name)
