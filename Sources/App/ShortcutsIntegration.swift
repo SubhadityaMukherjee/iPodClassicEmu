@@ -65,7 +65,8 @@ struct TranscribeRecordingIntent: AppIntent {
         try await mgr.ensureModels()
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let url = docs.appendingPathComponent("Recordings/\(recording.id)")
-        let text = await mgr.transcribeAndWait(file: recording.id, sourceURL: url)
+        let text = TranscriptStore.formatParagraphs(
+            await mgr.transcribeAndWait(file: recording.id, sourceURL: url))
         guard !text.isEmpty else {
             return .result(value: "", dialog: "Nothing transcribed — the recording may be silent.")
         }
@@ -86,7 +87,8 @@ struct GetTranscriptionIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        let text = TranscriptStore.entry(for: recording.id)?.text ?? ""
+        let raw = TranscriptStore.entry(for: recording.id)?.text ?? ""
+        let text = TranscriptStore.formatParagraphs(raw)
         guard !text.isEmpty else {
             return .result(value: "", dialog: "No transcript saved for that memo yet.")
         }

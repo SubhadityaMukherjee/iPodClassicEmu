@@ -17,6 +17,31 @@ final class TranscriptStoreTests: XCTestCase {
         file: "Recording 2026-01-02 03-04-05.m4a", text: "hello world",
         state: "done", date: Date(timeIntervalSince1970: 100), secondsDone: 12)
 
+    /// Five sentences: one full paragraph line plus the remainder.
+    func testFormatParagraphsGroupsSentences() {
+        let raw = "One. Two. Three. Four. Five. Six. Seven."
+        let out = TranscriptStore.formatParagraphs(raw)
+        let lines = out.components(separatedBy: "\n")
+        XCTAssertEqual(lines.count, 2, "7 sentences at 5/paragraph = 2 lines")
+        XCTAssertEqual(lines[0], "One. Two. Three. Four. Five.")
+        XCTAssertEqual(lines[1], "Six. Seven.")
+    }
+
+    func testFormatParagraphsIdempotentAndPreservesBreaks() {
+        let once = TranscriptStore.formatParagraphs("One. Two. Three. Four. Five. Six. Seven.")
+        let twice = TranscriptStore.formatParagraphs(once)
+        XCTAssertEqual(once, twice)
+        // An explicit blank line survives as a paragraph break.
+        let withBreak = TranscriptStore.formatParagraphs("First paragraph here.\n\nSecond one. Also this.")
+        XCTAssertTrue(withBreak.contains("\n\n"), "existing paragraph break preserved")
+    }
+
+    func testFormatParagraphsShortTextUnchanged() {
+        XCTAssertEqual(TranscriptStore.formatParagraphs("Only one sentence."),
+                       "Only one sentence.")
+        XCTAssertEqual(TranscriptStore.formatParagraphs(""), "")
+    }
+
     func testSaveLoadRoundtrip() {
         TranscriptStore.save(entry)
         let loaded = TranscriptStore.loadAll()

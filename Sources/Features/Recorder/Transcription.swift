@@ -42,6 +42,57 @@ enum TranscriptStore {
         return base.count > 26 ? "Transcript" : base
     }
 
+    /// Breaks a raw transcript into readable paragraphs: ICU sentence
+    /// detection (handles abbreviations like "Dr." correctly), grouped
+    /// into `paragraphSentences`-sentence lines, existing paragraph
+    /// breaks preserved (so the function is idempotent). Applied when a
+    /// transcript is saved; display/share re-apply it so older
+    /// single-paragraph transcripts format too.
+    static let paragraphSentences = 5
+
+    static func formatParagraphs(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return text }
+        // Two-level split: \n\n separates paragraphs, \n separates
+        // already-formatted lines inside one — re-formatting must keep
+        // both stable (idempotency).
+        let paragraphBlocks = trimmed.components(separatedBy: "\n\n")
+        var out: [String] = []
+        for block in paragraphBlocks {
+            var lines: [String] = []
+            for line in block.components(separatedBy: "\n") {
+                let clean = line.trimmingCharacters(in: .whitespaces)
+                guard !clean.isEmpty else { continue }
+                let sentences = Self.sentences(in: clean)
+                guard sentences.count > paragraphSentences else {
+                    lines.append(clean)
+                    continue
+                }
+                var i = 0
+                while i < sentences.count {
+                    let end = min(i + paragraphSentences, sentences.count)
+                    lines.append(sentences[i..<end].joined(separator: " "))
+                    i = end
+                }
+            }
+            if !lines.isEmpty { out.append(lines.joined(separator: "\n")) }
+        }
+        return out.joined(separator: "\n\n")
+    }
+
+    /// ICU sentence split — locale-aware, abbreviation-aware.
+    private static func sentences(in text: String) -> [String] {
+        var out: [String] = []
+        text.enumerateSubstrings(in: text.startIndex..<text.endIndex,
+                                 options: [.bySentences, .localized]) { sub, _, _, _ in
+            if let sub {
+                let s = sub.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !s.isEmpty { out.append(s) }
+            }
+        }
+        return out
+    }
+
     /// Upserts one entry (thread-safe enough: called from the main actor).
     static func save(_ entry: TranscriptEntry) {
         var all = loadAll()
@@ -207,7 +258,8 @@ final class TranscriptionManager {
         logger.notice("start \(file, privacy: .public)")
 
         func finish(state: String, text: String, seconds: Double) {
-            TranscriptStore.save(TranscriptEntry(file: file, text: text, state: state,
+            let stored = state == "done" ? TranscriptStore.formatParagraphs(text) : text
+            TranscriptStore.save(TranscriptEntry(file: file, text: stored, state: state,
                                                  date: Date(), secondsDone: seconds))
             let headroom = os_proc_available_memory() / 1_048_576
             let elapsed = max(1, Date().timeIntervalSince(startedAt))

@@ -170,6 +170,11 @@ struct RecordingsListScreen: View {
                 ActivityView(items: [url])
             }
         }
+        .sheet(isPresented: Binding(get: { shareText != nil }, set: { if !$0 { shareText = nil } })) {
+            if let text = shareText {
+                ActivityView(items: [text])
+            }
+        }
     }
 
     private var deletePanel: some View {
@@ -268,6 +273,7 @@ struct RecordingsListScreen: View {
     @State private var holdItem: RecordingFile?
     @State private var holdSelection = 0
     @State private var shareItem: URL?
+    @State private var shareText: String?
 
     /// Hold-menu rows depend on the recording's transcript state:
     /// transcription / view / retry / share text, then share audio /
@@ -334,12 +340,7 @@ struct RecordingsListScreen: View {
 
     private func shareTranscript(_ file: RecordingFile) {
         guard let entry = TranscriptStore.entry(for: file.id), !entry.text.isEmpty else { return }
-        let name = file.name.replacingOccurrences(of: ".m4a", with: "")
-        let clean = "Transcript — \(name)\n\n\(entry.text)"
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(name).txt")
-        try? clean.write(to: url, atomically: true, encoding: .utf8)
-        shareItem = url
+        shareText = TranscriptStore.formatParagraphs(entry.text)
     }
 
     private var holdPanel: some View {
@@ -560,11 +561,17 @@ struct TranscriptScreen: View {
 
     private var entry: TranscriptEntry? { TranscriptStore.entry(for: fileName) }
 
+    /// Formatted for reading: sentences grouped into paragraphs. Re-applied
+    /// at display so transcripts stored before formatting show it too.
+    private var formattedText: String {
+        TranscriptStore.formatParagraphs(entry?.text ?? "")
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
                 if let entry, entry.text.isEmpty == false {
-                    TextEditor(text: .constant(entry.text))
+                    TextEditor(text: .constant(formattedText))
                         .font(Theme.font(12))
                         .scrollContentBackground(.hidden)
                         .background(PaperBackground())
@@ -610,7 +617,7 @@ struct TranscriptScreen: View {
     /// Clean-text export: the plain transcript, shared as text.
     private func shareAsText() {
         guard let entry else { return }
-        shareText = entry.text
+        shareText = TranscriptStore.formatParagraphs(entry.text)
     }
 
     /// Wheel scrolls the backing text view, clamped to the document.
