@@ -95,3 +95,20 @@ struct GetTranscriptionIntent: AppIntent {
         return .result(value: text, dialog: "\(text.count) characters")
     }
 }
+
+/// Read Later: adds a URL to the Reader's Articles list. Pairs with a
+/// Shortcut that receives URLs from the share sheet, so any app's share
+/// button can file an article into the iPod for distraction-free reading.
+struct AddArticleIntent: AppIntent {
+    static var title: LocalizedStringResource = "Add Article to Reader"
+    static var description = IntentDescription(
+        "Saves a web article to the Reader's Articles list for offline reading.")
+
+    @Parameter(title: "URL") var url: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let book = try await ReaderStore.shared.addArticle(from: url)
+        return .result(dialog: "Saved \"\(book.title)\"")
+    }
+}

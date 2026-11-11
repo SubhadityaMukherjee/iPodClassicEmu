@@ -226,22 +226,83 @@ struct TimerScreen: View {
     @State private var segment: Segment = .startStop
     @State private var durationSegment: DurationSegment = .minute
     @State private var editingDuration = false
+    @State private var presetsOpen = false
+    @State private var presetSelection = 0
+
+    /// Quick-start durations (minutes) — hold center on the timer screen.
+    private let presets = [5, 10, 15, 30, 60]
 
     var body: some View {
-        VStack(spacing: 6) {
-            dial
-                .frame(maxHeight: 108)
-                .padding(.top, 4)
+        ZStack {
+            VStack(spacing: 6) {
+                dial
+                    .frame(maxHeight: 108)
+                    .padding(.top, 4)
 
-            Text(TimeFormat.hms(model.timer.remaining))
-                .font(.system(size: 26, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(Theme.ink)
+                Text(TimeFormat.hms(model.timer.remaining))
+                    .font(.system(size: 26, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.ink)
 
-            controls
-                .padding(.horizontal, 22)
+                controls
+                    .padding(.horizontal, 22)
+            }
+            .onWheel { handle($0) }
+            if presetsOpen {
+                ModalHost { presetsPanel }
+                    .zIndex(2)
+            }
         }
-        .onWheel { handle($0) }
+        .task {
+            // QA hook: open the presets panel without a gesture (screenshots).
+            if ProcessInfo.processInfo.environment["TIMER_PRESETS"] == "1" {
+                presetsOpen = true
+            }
+        }
+    }
+
+    private var presetsPanel: some View {
+        ModalPanel(title: "Presets", onClose: { closePresets() }) {
+            MenuList(
+                items: presets.map { m in
+                    MenuItem(id: "p.\(m)", title: "\(m) min",
+                             symbol: "timer", showsChevron: false, isActionRow: true)
+                } + [MenuItem(id: "cancel", title: "Cancel", showsChevron: false)],
+                selection: presetSelection, compact: true
+            )
+            .padding(.top, 2)
+        }
+    }
+
+    private func closePresets() {
+        withAnimation(.easeIn(duration: 0.15)) { presetsOpen = false }
+    }
+
+    /// Wheel ticks are raw here (the panel is small); selection moves
+    /// one row per detent with the standard feedback.
+    private func handlePresets(_ event: ControlEvent) -> Bool {
+        guard presetsOpen else { return false }
+        switch event {
+        case .tick(let d):
+            moveListSelection(&presetSelection, count: presets.count + 1, delta: d, settings: settings)
+            WheelFeedback.tick(dir: d)
+        case .select:
+            let idx = min(presetSelection, presets.count)
+            if idx < presets.count {
+                let minutes = presets[idx]
+                closePresets()
+                model.timer.start(duration: Double(minutes) * 60)
+                WheelHaptics.shared.ensureRunning()
+                WheelHaptics.shared.buttonPress(strength: 0.8)
+            } else {
+                closePresets()
+            }
+        case .menu:
+            closePresets()
+        default:
+            break
+        }
+        return true
     }
 
     private var dial: some View {
@@ -335,11 +396,19 @@ struct TimerScreen: View {
     // MARK: Input
 
     private func handle(_ event: ControlEvent) {
+        if handlePresets(event) { return }
         switch event {
         case .tick(let d):
             tickAdjust(by: d)
         case .select:
             selectCurrent()
+        case .centerHold:
+            // Hold center: quick presets (only when idle at the buttons).
+            guard !editingDuration else { break }
+            presetSelection = 0
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.85)
+            withAnimation(.easeOut(duration: 0.18)) { presetsOpen = true }
         case .menu:
             if editingDuration {
                 editingDuration = false

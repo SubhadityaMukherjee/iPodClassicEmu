@@ -5,6 +5,44 @@ import UniformTypeIdentifiers
 import UIKit
 import os
 
+/// Reader top level: Books and Articles (Read Later) are kept apart —
+/// both open the same reading screen, only the lists differ.
+struct ReaderHomeScreen: View {
+    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
+    @State private var selection = 0
+
+    private var store: ReaderStore { model.reader }
+
+    private var items: [MenuItem] {
+        [
+            MenuItem(id: "books", title: "Books",
+                     detail: "\(store.books.count - store.articles.count)", symbol: "book"),
+            MenuItem(id: "articles", title: "Articles",
+                     detail: "\(store.articles.count)", symbol: "newspaper"),
+        ]
+    }
+
+    var body: some View {
+        MenuList(items: items, selection: selection)
+            .onWheel { handle($0) }
+    }
+
+    private func handle(_ event: ControlEvent) {
+        switch event {
+        case .tick(let d):
+            moveListSelection(&selection, count: items.count, delta: d, settings: settings)
+        case .select:
+            model.push(items.indices.contains(selection) && selection == 1
+                       ? .readerArticles : .readerBooks)
+        case .menu:
+            model.pop()
+        default:
+            break
+        }
+    }
+}
+
 /// Reader menu: "Add from Files" plus the imported books.
 struct ReaderScreen: View {
     @Environment(AppModel.self) private var model
@@ -17,9 +55,12 @@ struct ReaderScreen: View {
 
     private var store: ReaderStore { model.reader }
 
+    /// Books only — articles (Read Later) live in their own list.
+    private var books: [ReaderStore.Book] { store.books.filter { $0.sourceURL == nil } }
+
     private var items: [MenuItem] {
         var rows = [MenuItem(id: "hdr.add", title: "Add from Files", symbol: "plus.circle.fill", showsChevron: false, isActionRow: true)]
-        rows += store.books.map { book in
+        rows += books.map { book in
             MenuItem(id: book.id, title: book.title, detail: book.kind == .pdf ? "PDF" : "EPUB")
         }
         return rows
@@ -106,8 +147,8 @@ struct ReaderScreen: View {
             }
         case .centerHold:
             // Hold a book row: delete it (with confirmation).
-            if selection > 0, store.books.indices.contains(selection - 1) {
-                deleteCandidate = store.books[selection - 1]
+            if selection > 0, books.indices.contains(selection - 1) {
+                deleteCandidate = books[selection - 1]
                 deleteSelection = 0
                 WheelHaptics.shared.ensureRunning()
                 WheelHaptics.shared.buttonPress(strength: 0.85)
@@ -116,6 +157,209 @@ struct ReaderScreen: View {
             if deleteCandidate != nil {
                 // MENU closes the confirmation first.
                 deleteCandidate = nil
+            } else {
+                model.pop()
+            }
+        default:
+            break
+        }
+    }
+}
+
+/// Articles (Read Later): URLs shared or pasted into the app, extracted
+/// to clean text, read through the same book pipeline. "Add Article"
+/// opens a touch-keyboard entry row; hold an article row to delete.
+struct ArticleListScreen: View {
+    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
+
+    @State private var selection = 0
+    @State private var deleteCandidate: ReaderStore.Book?
+    @State private var deleteSelection = 0
+    @State private var adding = false
+    @State private var urlString = ""
+    @State private var fetching = false
+    @State private var toast = ""
+    @FocusState private var focused: Bool
+
+    private var store: ReaderStore { model.reader }
+
+    private var items: [MenuItem] {
+        var rows = [MenuItem(id: "hdr.add", title: "Add Article", symbol: "plus.circle.fill", showsChevron: false, isActionRow: true)]
+        rows += store.articles.map { article in
+            MenuItem(id: article.id, title: article.title, detail: domain(of: article.sourceURL))
+        }
+        return rows
+    }
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 4) {
+                if adding {
+                    entryBar
+                }
+                MenuList(items: items, selection: selection, emptyText: "No Articles")
+                    .frame(maxHeight: .infinity)
+            }
+            .padding(.top, 4)
+            if deleteCandidate != nil {
+                ModalHost { deletePanel }
+                    .zIndex(2)
+            }
+            if !toast.isEmpty {
+                ToastCapsule(text: toast)
+                    .zIndex(3)
+            }
+        }
+        .onWheel { handle($0) }
+        .task {
+            // QA hook: add an article without typing (sim screenshots/tests).
+            if let url = ProcessInfo.processInfo.environment["READER_ADD_URL"], !fetching {
+                await add(url)
+            }
+        }
+    }
+
+    private var entryBar: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "link")
+                .font(Theme.font(13, .semibold))
+                .foregroundStyle(Theme.inkDim)
+            TextField("Paste article URL", text: $urlString)
+                .focused($focused)
+                .font(Theme.font(13, .medium))
+                .foregroundStyle(Theme.ink)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.go)
+                .padding(.vertical, 4)
+                .environment(\.colorScheme, .dark)
+                .onSubmit { commitAdd() }
+            if !urlString.isEmpty {
+                Button {
+                    urlString = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(Theme.font(13))
+                        .foregroundStyle(Theme.inkDim)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(white: 0.92))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.black.opacity(0.18), lineWidth: 0.8))
+        )
+        .padding(.horizontal, 6)
+        .onTapGesture { focused = true }
+    }
+
+    private var deletePanel: some View {
+        ModalPanel(title: "Delete Article", onClose: { deleteCandidate = nil }) {
+            VStack(spacing: 8) {
+                Text("\"\(deleteCandidate?.title ?? "")\" will be removed.")
+                    .font(Theme.font(13, .medium))
+                    .foregroundStyle(Theme.inkDim)
+                MenuList(
+                    items: [MenuItem(id: "cancel", title: "Cancel"),
+                            MenuItem(id: "delete", title: "Delete")],
+                    selection: deleteSelection, compact: true
+                )
+            }
+        }
+    }
+
+    private func domain(of urlString: String?) -> String {
+        guard let urlString, let url = URL(string: urlString) else { return "" }
+        return url.host ?? ""
+    }
+
+    private func beginAdd() {
+        adding = true
+        urlString = ""
+        // Focusing during the push transition corrupts the layout engine
+        // (SIGABRT in NSISEngine) — same guard as the music search.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            focused = true
+        }
+    }
+
+    private func commitAdd() {
+        focused = false
+        let url = urlString
+        adding = false
+        guard !url.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        Task { await add(url) }
+    }
+
+    private func add(_ urlString: String) async {
+        fetching = true
+        showToast("Fetching…")
+        do {
+            let book = try await store.addArticle(from: urlString)
+            showToast("Added \(book.title)")
+        } catch {
+            showToast(error.localizedDescription)
+        }
+        fetching = false
+        selection = 0
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation(.easeOut(duration: 0.2)) { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeIn(duration: 0.3)) { toast = "" }
+        }
+    }
+
+    // MARK: Input
+
+    private func handle(_ event: ControlEvent) {
+        switch event {
+        case .tick(let d):
+            if deleteCandidate != nil {
+                moveListSelection(&deleteSelection, count: 2, delta: d, settings: settings)
+            } else if adding {
+                break // keyboard entry: wheel does nothing
+            } else {
+                moveListSelection(&selection, count: items.count, delta: d, settings: settings)
+            }
+        case .select:
+            if deleteCandidate != nil {
+                let id = ["cancel", "delete"][min(deleteSelection, 1)]
+                if id == "delete", let article = deleteCandidate {
+                    store.remove(article)
+                    showToast("Deleted")
+                }
+                deleteCandidate = nil
+                selection = 0
+            } else if adding {
+                commitAdd()
+            } else if items.indices.contains(selection) {
+                let item = items[selection]
+                if item.id == "hdr.add" {
+                    beginAdd()
+                } else {
+                    model.push(.readerBook(item.id))
+                }
+            }
+        case .centerHold:
+            // Hold an article row: delete it (with confirmation).
+            if !adding, selection > 0, store.articles.indices.contains(selection - 1) {
+                deleteCandidate = store.articles[selection - 1]
+                deleteSelection = 0
+                WheelHaptics.shared.ensureRunning()
+                WheelHaptics.shared.buttonPress(strength: 0.85)
+            }
+        case .menu:
+            if deleteCandidate != nil {
+                deleteCandidate = nil
+            } else if adding {
+                adding = false
+                focused = false
             } else {
                 model.pop()
             }

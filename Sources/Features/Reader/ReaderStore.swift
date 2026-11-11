@@ -27,20 +27,22 @@ final class ReaderStore {
                                    // switching view modes never moves the page view)
         var reflowFraction: Double // pdf reflow: position within the chapter
         var dim: Int               // 0 bright, 1 dim, 2 darker (screen overlay)
+        var sourceURL: String?     // non-nil = article (Read Later); the origin URL
 
         /// Explicit because decoding must still read the retired
         /// `pdfContinuous` Bool that pre-reflow books persisted.
         enum CodingKeys: String, CodingKey {
             case id, kind, title, chapterIndex, scrollFraction, fontSize
             case fontFamily, lineSpacing, margin, scrollStep, pdfMode
-            case reflowChapter, reflowFraction, dim
+            case reflowChapter, reflowFraction, dim, sourceURL
             case pdfContinuousLegacy = "pdfContinuous"
         }
 
         init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
              scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
              lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 0,
-             pdfMode: Int = 0, reflowChapter: Int = 0, reflowFraction: Double = 0, dim: Int = 0) {
+             pdfMode: Int = 0, reflowChapter: Int = 0, reflowFraction: Double = 0,
+             dim: Int = 0, sourceURL: String? = nil) {
             self.id = id
             self.kind = kind
             self.title = title
@@ -55,6 +57,7 @@ final class ReaderStore {
             self.reflowChapter = reflowChapter
             self.reflowFraction = reflowFraction
             self.dim = dim
+            self.sourceURL = sourceURL
         }
 
         /// Tolerates books persisted by older versions (missing keys).
@@ -78,6 +81,7 @@ final class ReaderStore {
             reflowChapter = try c.decodeIfPresent(Int.self, forKey: .reflowChapter) ?? 0
             reflowFraction = try c.decodeIfPresent(Double.self, forKey: .reflowFraction) ?? 0
             dim = try c.decodeIfPresent(Int.self, forKey: .dim) ?? 0
+            sourceURL = try c.decodeIfPresent(String.self, forKey: .sourceURL)
         }
 
         /// Hand-written because CodingKeys carries the decode-only legacy
@@ -98,6 +102,7 @@ final class ReaderStore {
             try c.encode(reflowChapter, forKey: .reflowChapter)
             try c.encode(reflowFraction, forKey: .reflowFraction)
             try c.encode(dim, forKey: .dim)
+            try c.encodeIfPresent(sourceURL, forKey: .sourceURL)
         }
 
         /// EPUB font choices (persisted as `fontFamily` index): display
@@ -194,6 +199,54 @@ final class ReaderStore {
         let target = Self.booksRoot.appendingPathComponent(book.id)
         try? FileManager.default.removeItem(at: target)               // epub dir
         try? FileManager.default.removeItem(at: target.appendingPathExtension("pdf"))  // pdf file
+    }
+
+    // MARK: Articles (Read Later)
+
+    /// Articles are one-chapter mini-EPUBs written by ArticleExtractor —
+    /// identical reading pipeline (pagination, fonts, highlights), but
+    /// listed separately and tagged with their origin URL.
+    var articles: [Book] { books.filter { $0.sourceURL != nil } }
+
+    /// Downloads and extracts a web article, then registers it. Async:
+    /// the network fetch runs off the main actor.
+    @discardableResult
+    func addArticle(from urlString: String) async throws -> Book {
+        let html = try await ArticleExtractor.fetch(from: urlString)
+        let (title, paragraphs) = await Task.detached(priority: .userInitiated) {
+            ArticleExtractor.extract(html: html)
+        }.value
+        let xhtml = ArticleExtractor.xhtml(title: title, paragraphs: paragraphs)
+        let id = Self.uniqueArticleID(base: Self.articleID(for: title))
+        let dest = Self.booksRoot.appendingPathComponent(id)
+        try ArticleExtractor.writeMiniEpub(dir: dest, title: title, xhtml: xhtml)
+        let book = Book(id: id, kind: .epub, title: title, sourceURL: urlString)
+        books.insert(book, at: 0)
+        persist()
+        return book
+    }
+
+    /// "slug", "slug 2", … — never overwrites an existing article/book.
+    private static func uniqueArticleID(base: String) -> String {
+        let fm = FileManager.default
+        var candidate = base
+        var n = 2
+        while fm.fileExists(atPath: Self.booksRoot.appendingPathComponent(candidate).path)
+            || fm.fileExists(atPath: Self.booksRoot.appendingPathComponent(candidate).appendingPathExtension("pdf").path) {
+            candidate = "\(base) \(n)"
+            n += 1
+        }
+        return candidate
+    }
+
+    /// Article folder ID: a readable slug from the title.
+    private static func articleID(for title: String) -> String {
+        var slug = String(title.lowercased().map { ch -> Character in
+            ch.isLetter || ch.isNumber ? ch : "-"
+        })
+        while slug.contains("--") { slug = slug.replacingOccurrences(of: "--", with: "-") }
+        let trimmed = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return trimmed.isEmpty ? "article" : String(trimmed.prefix(48))
     }
 
     // MARK: Import

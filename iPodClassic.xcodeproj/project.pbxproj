@@ -70,7 +70,9 @@
 		CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9168F602DF28123A3C7389 /* RecorderModel.swift */; };
 		CF5321B4390A5BE161626910 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 90462DBBAE1970378F420CEE /* Assets.xcassets */; };
 		CF75043444DF6D0ED71EE84F /* TrackActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */; };
+		D02C0198585EAED846BF5DBB /* ArticleExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CC54D402F0138048777F665 /* ArticleExtractorTests.swift */; };
 		D125AB206DD4B1FE8D5E9041 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */; };
+		D5C53EE55B0A32B20C285C92 /* ArticleExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1035841ACC4F2D1DC6D74A91 /* ArticleExtractor.swift */; };
 		D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2E3AD1DB7B7119152CD5DA /* CalendarScreen.swift */; };
 		D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF076EEBD7582FD738F82631 /* FeatureTests.swift */; };
 		DA1FEB709FB893BD0D45B8DF /* NotesEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E266621CE1581D432D96D171 /* NotesEditorTests.swift */; };
@@ -131,6 +133,7 @@
 		0C9168F602DF28123A3C7389 /* RecorderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderModel.swift; sourceTree = "<group>"; };
 		0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackActivityAttributes.swift; sourceTree = "<group>"; };
 		0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */ = {isa = PBXFileReference; path = AlarmBeep.caf; sourceTree = "<group>"; };
+		1035841ACC4F2D1DC6D74A91 /* ArticleExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleExtractor.swift; sourceTree = "<group>"; };
 		1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmRingerOverlay.swift; sourceTree = "<group>"; };
 		1D783A264CBB399887431ACB /* MusicScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicScreens.swift; sourceTree = "<group>"; };
 		2252DE6110093E2FF64B7404 /* CRTOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRTOverlay.swift; sourceTree = "<group>"; };
@@ -168,6 +171,7 @@
 		8DE0B67D71510C6279340644 /* ClockFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockFace.swift; sourceTree = "<group>"; };
 		8EAC0590B8229DE23E30083F /* PlaybackSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSessionTests.swift; sourceTree = "<group>"; };
 		90462DBBAE1970378F420CEE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9CC54D402F0138048777F665 /* ArticleExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleExtractorTests.swift; sourceTree = "<group>"; };
 		A16CC36E7096FECFA8123BA8 /* TickSounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickSounds.swift; sourceTree = "<group>"; };
 		A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsIntegration.swift; sourceTree = "<group>"; };
 		A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenView.swift; sourceTree = "<group>"; };
@@ -380,6 +384,7 @@
 			isa = PBXGroup;
 			children = (
 				F18AE4C666A52A2EF759755A /* AlarmReconcileTests.swift */,
+				9CC54D402F0138048777F665 /* ArticleExtractorTests.swift */,
 				53777219020A6ED4B6227EC2 /* ClockStateTests.swift */,
 				483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */,
 				DF076EEBD7582FD738F82631 /* FeatureTests.swift */,
@@ -447,6 +452,7 @@
 		C585A99F82AF0A68B03ACC74 /* Reader */ = {
 			isa = PBXGroup;
 			children = (
+				1035841ACC4F2D1DC6D74A91 /* ArticleExtractor.swift */,
 				C7F775252FC095655EE129D8 /* EpubContainer.swift */,
 				F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */,
 				B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */,
@@ -665,6 +671,7 @@
 				CE6E87EC8A810CF7BF7AA62F /* AlarmStore.swift in Sources */,
 				84BE9FB1EF58F9433F774C38 /* AppModel.swift in Sources */,
 				24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */,
+				D5C53EE55B0A32B20C285C92 /* ArticleExtractor.swift in Sources */,
 				58033FFEF60260FBB8E71E00 /* ArtworkView.swift in Sources */,
 				82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */,
 				D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */,
@@ -729,6 +736,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				547D1A488A4F0E68D3C0267F /* AlarmReconcileTests.swift in Sources */,
+				D02C0198585EAED846BF5DBB /* ArticleExtractorTests.swift in Sources */,
 				4C705C26710B6749CAF056D5 /* ClockStateTests.swift in Sources */,
 				F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */,
 				D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */,

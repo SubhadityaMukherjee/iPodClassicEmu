@@ -39,5 +39,11 @@ struct iPodClassicShortcuts: AppShortcutsProvider {
             shortTitle: "Get Voice Memo Transcript",
             systemImageName: "doc.text"
         )
+        AppShortcut(
+            intent: AddArticleIntent(),
+            phrases: ["Add article to \(.applicationName)"],
+            shortTitle: "Add Article",
+            systemImageName: "newspaper"
+        )
     }
 }

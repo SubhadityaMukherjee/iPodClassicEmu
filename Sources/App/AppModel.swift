@@ -53,6 +53,8 @@ enum Route: Hashable {
     case playlistDetail(String)
     case genreAlbums(String)
     case nowPlaying
+    case readerBooks
+    case readerArticles
 
     // Photos
     case photos
@@ -235,6 +237,8 @@ final class AppModel {
         case "extras": return .extras
         case "flashlight": return .flashlight
         case "reader": return .reader
+        case "readerBooks": return .readerBooks
+        case "readerArticles": return .readerArticles
         case "search": return .musicSearch
         case "alarm": return .alarm
         case "timer": return .timer

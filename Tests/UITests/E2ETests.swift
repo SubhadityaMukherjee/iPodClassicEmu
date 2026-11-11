@@ -22,8 +22,12 @@ final class E2ETests: XCTestCase {
     @MainActor
     func testReaderEmptyStateRenders() throws {
         let app = launch(start: "reader")
-        XCTAssertTrue(app.staticTexts["Add from Files"].waitForExistence(timeout: 5),
-                      "Reader screen did not render its add row")
+        // Reader is now a Books/Articles selector; "Add from Files" lives
+        // one level down in the Books list.
+        XCTAssertTrue(app.staticTexts["Books"].waitForExistence(timeout: 5),
+                      "Reader selector did not render its Books row")
+        XCTAssertTrue(app.staticTexts["Articles"].waitForExistence(timeout: 3),
+                      "Reader selector did not render its Articles row")
         XCTAssertTrue(app.staticTexts["Reader"].waitForExistence(timeout: 3),
                       "Reader title bar missing")
     }
@@ -44,8 +48,13 @@ final class E2ETests: XCTestCase {
         for _ in 0..<5 { tick() }
         origin.withOffset(CGVector(dx: 0, dy: 0)).tap()
 
+        // Reader is a Books/Articles selector now — Books opens the list
+        // with its "Add from Files" row.
+        XCTAssertTrue(app.staticTexts["Books"].waitForExistence(timeout: 3),
+                      "Home → Reader selector failed")
+        origin.withOffset(CGVector(dx: 0, dy: 0)).tap()
         XCTAssertTrue(app.staticTexts["Add from Files"].waitForExistence(timeout: 3),
-                      "Home → Reader navigation failed")
+                      "Home → Reader → Books navigation failed")
     }
 
     @MainActor
