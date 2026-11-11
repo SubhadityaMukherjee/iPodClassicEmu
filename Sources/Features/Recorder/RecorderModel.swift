@@ -52,7 +52,16 @@ final class RecorderModel {
         guard !isRecording else { return }
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            // .allowBluetooth is required for the AirPods/HFP microphone:
+            // without it iOS engages the BT mic route, finds the category
+            // doesn't declare BT support, and falls back to the built-in
+            // mic — the AirPods route churns A2DP<->HFP and often drops
+            // entirely mid-recording. With it, AirPods make ONE clean
+            // A2DP->HFP switch at record start (mic + monitor through the
+            // AirPods); .defaultToSpeaker stays as the no-BT fallback
+            // (speaker instead of the quiet earpiece).
+            try session.setCategory(.playAndRecord, mode: .default,
+                                    options: [.defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true)
         } catch {
             return
