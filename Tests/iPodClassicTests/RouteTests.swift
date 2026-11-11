@@ -38,6 +38,7 @@ final class RouteTests: XCTestCase {
             .calendar, .extras, .flashlight, .reader, .musicSearch,
             .alarm, .timer, .stopwatch, .settings,
             .settingsClickwheel, .settingsDisplay, .settingsPlayback,
+            .artistSearch("x"), .transcript("Recording 2026-01-01.m4a"),
         ]
         for route in sample {
             model.stack = [route]

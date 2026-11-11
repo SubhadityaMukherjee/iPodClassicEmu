@@ -25,6 +25,8 @@ enum QASeed {
     /// Notes editor QA target (START_ROUTE=noteEditor + NOTES_QA=1): a fixed
     /// note name the editor fills with numbered scroll-test text.
     static let qaNoteName = "QA Note"
-    /// Recording the transcript QA route opens (must exist in Documents/Recordings).
-    static let transcriptFileName = "Recording 2026-11-10 17-00-00.m4a"
+    /// Recording the transcript QA route opens (must exist in
+    /// Documents/Recordings together with a done sidecar entry — seed
+    /// both via SIMCTL before a transcript screenshot run).
+    static let transcriptFileName = "Recording 2026-11-10 22-56-12.m4a"
 }

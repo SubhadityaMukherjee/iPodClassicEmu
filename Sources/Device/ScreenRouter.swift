@@ -19,6 +19,7 @@ struct ScreenRouter: View {
         case .musicRecent: return "Recently Added"
         case .coverFlow: return "Cover Flow"
         case .artistDetail(let id): return model.music.artistName(id)
+        case .artistSearch(let id): return model.music.artistName(id)
         case .albumDetail(let id): return model.music.albumTitle(id)
         case .playlistDetail(let id): return model.music.playlistName(id)
         case .genreAlbums(let genre): return genre
@@ -83,6 +84,7 @@ struct ScreenRouter: View {
         case .musicRecent: MusicListScreen(kind: .recent)
         case .coverFlow: CoverFlowScreen()
         case .artistDetail(let id): ArtistDetailScreen(artistID: id)
+        case .artistSearch(let id): ArtistSearchScreen(artistID: id)
         case .albumDetail(let id): AlbumDetailScreen(albumID: id)
         case .playlistDetail(let id): PlaylistDetailScreen(playlistID: id)
         case .genreAlbums(let genre): GenreAlbumsScreen(genre: genre)

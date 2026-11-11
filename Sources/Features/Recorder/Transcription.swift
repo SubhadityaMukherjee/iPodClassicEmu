@@ -82,7 +82,13 @@ final class TranscriptionManager {
         case failed(String)
     }
 
-    @MainActor private(set) var downloadState: DownloadState = .notStarted
+    @MainActor private(set) var downloadState: DownloadState = TranscriptionManager.hasCachedModels() ? .ready : .notStarted
+
+    /// True when the Parakeet Ultra model is fully cached on disk — the
+    /// UI must not show "Downloading" for a load that reads from cache.
+    nonisolated private static func hasCachedModels() -> Bool {
+        AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .ultra), version: .ultra)
+    }
 
     /// One-time sweep of sherpa-era model caches (superseded by
     /// FluidAudio's own cache) and QA test artifacts.
@@ -107,13 +113,20 @@ final class TranscriptionManager {
     /// Loads (downloading first if needed) the Parakeet Ultra CoreML
     /// models. FluidAudio caches the download; subsequent calls are
     /// instant (the first device load compiles for ANE, ~10 min once).
-    /// The download mirrors to a Live Activity with a progress bar.
+    /// A real download mirrors to a Live Activity; a cached load is
+    /// silent and keeps the state .ready so the UI never says
+    /// "Downloading" for work that reads from disk.
     @MainActor
     func ensureModels() async throws -> AsrManager {
         if let asrManager { return asrManager }
         TranscriptionManager.sweepLegacyCaches()
-        downloadState = .downloading(file: "asr-models", progress: nil)
-        LiveActivityManager.shared.downloadStarted()
+        let cached = TranscriptionManager.hasCachedModels()
+        if cached {
+            downloadState = .ready
+        } else {
+            downloadState = .downloading(file: "asr-models", progress: nil)
+            LiveActivityManager.shared.downloadStarted()
+        }
         do {
             let models = try await AsrModels.downloadAndLoad(version: .ultra, progressHandler: { p in
                 let fraction = p.fractionCompleted
@@ -132,11 +145,15 @@ final class TranscriptionManager {
             try await mgr.loadModels(models)
             asrManager = mgr
             downloadState = .ready
-            LiveActivityManager.shared.downloadFinished(success: true)
+            if !cached {
+                LiveActivityManager.shared.downloadFinished(success: true)
+            }
             return mgr
         } catch {
             downloadState = .failed(error.localizedDescription)
-            LiveActivityManager.shared.downloadFinished(success: false)
+            if !cached {
+                LiveActivityManager.shared.downloadFinished(success: false)
+            }
             throw error
         }
     }

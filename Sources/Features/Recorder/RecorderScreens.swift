@@ -549,73 +549,106 @@ struct ActivityView: UIViewControllerRepresentable {
 /// exports it as clean .txt. MENU pops back.
 struct TranscriptScreen: View {
     @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
     let fileName: String
 
     @State private var textView: UITextView?
     @State private var probeAnchor: UIView?
-    @State private var shareItem: URL?
+    @State private var shareText: String?
+    @State private var holdOpen = false
+    @State private var holdSelection = 0
 
     private var entry: TranscriptEntry? { TranscriptStore.entry(for: fileName) }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let entry, entry.text.isEmpty == false {
-                TextEditor(text: .constant(entry.text))
-                    .font(Theme.font(12))
-                    .scrollContentBackground(.hidden)
-                    .background(PaperBackground())
-                    .disabled(true)
-                shareCapsule
-                    .padding(.bottom, 6)
-            } else {
-                Spacer()
-                Text(entry?.state == "failed" ? "Transcription failed" : "Transcribing…")
-                    .font(Theme.font(13, .medium))
-                    .foregroundStyle(Theme.inkDim)
-                Spacer()
+        ZStack {
+            VStack(spacing: 0) {
+                if let entry, entry.text.isEmpty == false {
+                    TextEditor(text: .constant(entry.text))
+                        .font(Theme.font(12))
+                        .scrollContentBackground(.hidden)
+                        .background(PaperBackground())
+                        .disabled(true)
+                } else {
+                    Spacer()
+                    Text(entry?.state == "failed" ? "Transcription failed" : "Transcribing…")
+                        .font(Theme.font(13, .medium))
+                        .foregroundStyle(Theme.inkDim)
+                    Spacer()
+                }
+            }
+            if holdOpen {
+                ModalHost { holdPanel }
+                    .zIndex(2)
             }
         }
         .onWheel { handle($0) }
         .background(
             TextViewProbe { probeAnchor = $0 }
         )
-        .sheet(isPresented: Binding(get: { shareItem != nil }, set: { if !$0 { shareItem = nil } })) {
-            if let url = shareItem {
-                ActivityView(items: [url])
+        .sheet(isPresented: Binding(get: { shareText != nil }, set: { if !$0 { shareText = nil } })) {
+            if let text = shareText {
+                ActivityView(items: [text])
             }
         }
     }
 
-    private var shareCapsule: some View {
-        Button {
-            let name = fileName.replacingOccurrences(of: ".m4a", with: "")
-            let clean = "Transcript — \(name)\n\n\(entry?.text ?? "")"
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(name).txt")
-            try? clean.write(to: url, atomically: true, encoding: .utf8)
-            shareItem = url
-        } label: {
-            Text("Share")
-                .font(Theme.font(12, .bold))
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(AnyShapeStyle(SelectionGradient())))
+    private var holdPanel: some View {
+        ModalPanel(title: "Transcript Options", onClose: { closeHold() }) {
+            MenuList(items: [
+                MenuItem(id: "share", title: "Share", showsChevron: false),
+                MenuItem(id: "cancel", title: "Cancel", showsChevron: false),
+            ], selection: holdSelection, compact: true)
+                .padding(.top, 2)
         }
-        .buttonStyle(.plain)
+    }
+
+    private func closeHold() {
+        withAnimation(.easeIn(duration: 0.15)) { holdOpen = false }
+    }
+
+    /// Clean-text export: the plain transcript, shared as text.
+    private func shareAsText() {
+        guard let entry else { return }
+        shareText = entry.text
     }
 
     /// Wheel scrolls the backing text view, clamped to the document.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            guard let tv = resolveTextView() else { break }
-            let step: CGFloat = d > 0 ? 42 : -42
-            let bottom = max(0, tv.contentSize.height - tv.bounds.height + tv.adjustedContentInset.bottom)
-            let target = min(max(tv.contentOffset.y + step, -tv.adjustedContentInset.top), bottom)
-            tv.setContentOffset(CGPoint(x: tv.contentOffset.x, y: target), animated: false)
+            if holdOpen {
+                moveListSelection(&holdSelection, count: 2, delta: d, settings: settings)
+                WheelFeedback.tick(dir: d)
+            } else {
+                guard let tv = resolveTextView() else { return }
+                let step: CGFloat = d > 0 ? 42 : -42
+                let bottom = max(0, tv.contentSize.height - tv.bounds.height + tv.adjustedContentInset.bottom)
+                let target = min(max(tv.contentOffset.y + step, -tv.adjustedContentInset.top), bottom)
+                tv.setContentOffset(CGPoint(x: tv.contentOffset.x, y: target), animated: false)
+            }
+        case .select:
+            if holdOpen {
+                switch holdSelection {
+                case 0:
+                    closeHold()
+                    shareAsText()
+                default:
+                    closeHold()
+                }
+            }
+        case .centerHold:
+            guard entry?.text.isEmpty == false else { break }
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.85)
+            holdSelection = 0 // Share preselected, like the list hold menus
+            withAnimation(.easeOut(duration: 0.18)) { holdOpen = true }
         case .menu:
-            model.pop()
+            if holdOpen {
+                closeHold()
+            } else {
+                model.pop()
+            }
         default:
             break
         }

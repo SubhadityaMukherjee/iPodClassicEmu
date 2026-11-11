@@ -500,6 +500,7 @@ struct ArtistDetailScreen: View {
         [
             MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
             MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
+            MenuItem(id: "hdr.search", title: "Search", symbol: "magnifyingglass"),
         ]
     }
     private var totalRows: Int { headerItems.count + albums.count }
@@ -531,6 +532,8 @@ struct ArtistDetailScreen: View {
                 guard !songs.isEmpty else { return }
                 model.player.shufflePlay(songs)
                 model.push(.nowPlaying)
+            } else if selection == 2 {
+                model.push(.artistSearch(artistID))
             } else {
                 let idx = selection - headerItems.count
                 if albums.indices.contains(idx) {
@@ -539,6 +542,131 @@ struct ArtistDetailScreen: View {
             }
         case .menu:
             model.pop()
+        default:
+            break
+        }
+    }
+}
+
+/// Search limited to one artist's songs (Search row on the artist page):
+/// touch keyboard, wheel-driven results; select plays from the result.
+struct ArtistSearchScreen: View {
+    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
+    let artistID: String
+
+    @State private var query = ""
+    @State private var selection = 0
+    @FocusState private var focused: Bool
+    /// The artist's songs, loaded async — deriving them from the cache
+    /// synchronously no-ops when the page opens mid-library-load (see
+    /// ArtistDetailScreen).
+    @State private var songs: [Song] = []
+
+    /// Ranked title matches within the artist; album title as fallback.
+    private var results: [Song] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return [] }
+        var titleStart: [Song] = []
+        var titleContains: [Song] = []
+        var albumMatch: [Song] = []
+        for s in songs {
+            let t = s.title.lowercased()
+            if t.hasPrefix(q) {
+                titleStart.append(s)
+            } else if t.contains(q) {
+                titleContains.append(s)
+            } else if (s.albumTitle ?? "").lowercased().contains(q) {
+                albumMatch.append(s)
+            }
+        }
+        return titleStart + titleContains + albumMatch
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 5) {
+                Image(systemName: "magnifyingglass")
+                    .font(Theme.font(13, .semibold))
+                    .foregroundStyle(Theme.inkDim)
+                TextField("Search \(model.music.artistName(artistID))", text: $query)
+                    .focused($focused)
+                    .font(Theme.font(15, .medium))
+                    .foregroundStyle(Theme.ink)
+                    .submitLabel(.search)
+                    .padding(.vertical, 4)
+                    // Dark keyboard without global appearance proxies
+                    // (those crash the input assistant's layout engine).
+                    .environment(\.colorScheme, .dark)
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(Theme.font(13))
+                            .foregroundStyle(Theme.inkDim)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(white: 0.92))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.black.opacity(0.18), lineWidth: 0.8))
+            )
+            .padding(.horizontal, 6)
+            .onTapGesture { focused = true }
+            // Keep the selection inside the shrinking result list, or the
+            // wheel would be stuck at an out-of-range index (could not scroll).
+            .onChange(of: query) {
+                if selection >= results.count {
+                    selection = max(0, results.count - 1)
+                }
+            }
+
+            MenuList(
+                items: results.map { s in
+                    MenuItem(id: s.id.rawValue, title: s.title, subtitle: s.albumTitle ?? "", showsChevron: false)
+                },
+                selection: selection,
+                emptyText: query.isEmpty ? "Type to search" : "No Results",
+                style: .twoLine
+            )
+            .frame(maxHeight: .infinity)
+        }
+        .padding(.top, 4)
+        .onWheel { handle($0) }
+        .task(id: artistID) {
+            guard let artist = model.music.artist(artistID) else { return }
+            songs = await model.music.songs(forArtist: artist)
+        }
+        .onAppear {
+            // Focusing during the push transition corrupts the layout engine
+            // (SIGABRT in NSISEngine) — wait for the transition to settle.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                focused = true
+            }
+        }
+        .onDisappear { focused = false }
+    }
+
+    private func handle(_ event: ControlEvent) {
+        switch event {
+        case .tick(let d):
+            guard !query.isEmpty else { return }
+            moveListSelection(&selection, count: results.count, delta: d, settings: settings)
+        case .select:
+            let list = results
+            guard list.indices.contains(selection) else { return }
+            model.player.play(list, startingAt: selection)
+            model.push(.nowPlaying)
+        case .menu:
+            if focused {
+                focused = false
+            } else {
+                model.pop()
+            }
         default:
             break
         }

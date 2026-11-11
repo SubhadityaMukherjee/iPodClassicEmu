@@ -48,6 +48,7 @@ enum Route: Hashable {
     case musicRecent
     case coverFlow
     case artistDetail(String)
+    case artistSearch(String)
     case albumDetail(String)
     case playlistDetail(String)
     case genreAlbums(String)
@@ -221,6 +222,7 @@ final class AppModel {
         case "songs": return .musicSongs
         case "playlists": return .musicPlaylists
         case "nowplaying": return .nowPlaying
+        case "artistSearch": return .artistSearch("qa.artist.0")
         case "photos": return .photos
         case "camera": return .camera
         case "recorder": return .recorder
