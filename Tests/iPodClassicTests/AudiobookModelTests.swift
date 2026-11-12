@@ -42,7 +42,9 @@ final class AudiobookModelTests: XCTestCase {
         }
 
         var isPlaying: Bool { playing }
-        var playbackSeconds: Double { 0 }
+        /// Non-zero so the loop's "audio actually rendered" guard passes.
+        var fakePlaybackSeconds: Double = 30
+        var playbackSeconds: Double { fakePlaybackSeconds }
         var seekRequested: Bool {
             get { interrupted }
             set { interrupted = newValue }
@@ -50,6 +52,11 @@ final class AudiobookModelTests: XCTestCase {
 
         /// Marks the current page finished (natural end).
         func finishPage() {
+            playing = false
+        }
+
+        /// Marks the page dead (never rendered).
+        func killPage() {
             playing = false
         }
 
@@ -197,8 +204,22 @@ final class AudiobookModelTests: XCTestCase {
         model.stop()
     }
 
-    func testStopExitsToIdle() async throws {
-        let engine = MockEngine()
+    func testNoRenderedAudioFailsInsteadOfSkipping() async throws {
+        var engine = MockEngine()
+        engine.fakePlaybackSeconds = 0 // backend plays nothing
+        let box = FakeProvider(chapters: [[seg(0, "a"), seg(1, "b")]])
+        let model = AudiobookModel(engine: engine, synthesis: MockSynth())
+        model.start(provider: box.provider())
+        try await waitUntil({ engine.played.count == 1 }, "first play")
+        engine.killPage() // "ends" without ever rendering
+        try await waitUntil({ model.state == .failed("Audio playback failed") }, "guard trips")
+        // It must not have raced ahead to the next page.
+        XCTAssertEqual(engine.played.count, 1)
+        model.stop()
+        _ = engine // silence unused-mutable warning
+    }
+
+    func testStopExitsToIdle() async throws {        let engine = MockEngine()
         let box = FakeProvider(chapters: [[seg(0, "a")]])
         let model = makeModel(engine, box)
         try await waitUntil({ engine.played.count == 1 }, "playing")

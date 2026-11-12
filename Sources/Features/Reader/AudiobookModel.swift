@@ -154,28 +154,87 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         }
     }
 
+    /// Append-only engine trace (Documents/.audiobook_engine.txt) — every
+    /// start attempt and failure lands here in order.
+    private func engineLog(_ s: String) {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let path = docs.appendingPathComponent(".audiobook_engine.txt").path
+        let line = "\(Int(Date().timeIntervalSince1970)) \(s)\n"
+        if let h = FileHandle(forWritingAtPath: path) {
+            defer { try? h.close() }
+            _ = try? h.seekToEndOfFile()
+            h.write(Data(line.utf8))
+        } else {
+            try? line.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+        }
+    }
+
     func start(_ buffer: AVAudioPCMBuffer) -> Bool {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("audiobook_page.wav")
-        try? FileManager.default.removeItem(at: url)
+        // In-memory 16-bit PCM WAV → AVAudioPlayer(data:). The tmp-file
+        // route wrote zero-frame files on device (both Int16 and Float32),
+        // making play() return false; the data route has no filesystem in
+        // the path at all.
+        guard let data = Self.wavData(from: buffer) else {
+            engineLog("start failed: wav encode produced no data")
+            onDebug?("start failed: wav encode empty")
+            return false
+        }
         do {
-            let file = try AVAudioFile(forWriting: url, settings: buffer.format.settings)
-            try file.write(from: buffer)
-            let p = try AVAudioPlayer(contentsOf: url)
+            let p = try AVAudioPlayer(data: data)
             p.enableRate = true
             p.rate = currentRate
             p.volume = currentVolume
             p.delegate = self
             p.prepareToPlay()
             let ok = p.play()
-            player = ok ? p : nil
+            let seconds = Int(p.duration)
+            engineLog("start ok=\(ok) dur=\(seconds)s playing=\(p.isPlaying) rate=\(currentRate) vol=\(currentVolume)")
+            onDebug?("start ok=\(ok) dur=\(seconds)s playing=\(p.isPlaying)")
             Logger(subsystem: "com.ipodclassic.app", category: "tts")
-                .notice("start: \(Int(p.duration), privacy: .public)s ok=\(ok, privacy: .public)")
-            return ok
+                .notice("start: \(seconds, privacy: .public)s ok=\(ok, privacy: .public) playing=\(p.isPlaying, privacy: .public)")
+            if ok {
+                player = p
+                return true
+            }
+            return false
         } catch {
+            engineLog("start failed: \(error.localizedDescription)")
+            onDebug?("start failed: \(error.localizedDescription)")
             Logger(subsystem: "com.ipodclassic.app", category: "tts")
                 .notice("page playback failed: \(error.localizedDescription, privacy: .public)")
             return false
         }
+    }
+
+    /// Encode the float PCM buffer as a 16-bit mono WAV in memory.
+    static func wavData(from buffer: AVAudioPCMBuffer) -> Data? {
+        let frameCount = Int(buffer.frameLength)
+        let sampleRate = buffer.format.sampleRate
+        guard frameCount > 0, let src = buffer.floatChannelData?[0] else { return nil }
+        var pcm = Data(count: frameCount * 2)
+        pcm.withUnsafeMutableBytes { raw in
+            let dst = raw.bindMemory(to: Int16.self)
+            for i in 0..<frameCount {
+                let s = max(-1.0, min(1.0, src[i]))
+                dst[i] = Int16(s * 32767.0)
+            }
+        }
+        var data = Data()
+        data.reserveCapacity(44 + pcm.count)
+        func str(_ s: String) { data.append(contentsOf: s.utf8) }
+        func u16(_ v: UInt16) { var x = v.littleEndian; withUnsafeBytes(of: &x) { data.append(contentsOf: $0) } }
+        func u32(_ v: UInt32) { var x = v.littleEndian; withUnsafeBytes(of: &x) { data.append(contentsOf: $0) } }
+        str("RIFF"); u32(UInt32(36 + pcm.count)); str("WAVE")
+        str("fmt "); u32(16); u16(1); u16(1)
+        u32(UInt32(sampleRate)); u32(UInt32(Int(sampleRate) * 2)); u16(2); u16(16)
+        str("data"); u32(UInt32(pcm.count))
+        data.append(pcm)
+        return data
+    }
+
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        Logger(subsystem: "com.ipodclassic.app", category: "tts")
+            .notice("page decode error: \(error?.localizedDescription ?? "none", privacy: .public)")
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -566,23 +625,28 @@ final class AudiobookModel {
                     segmentNote = "playing \(Int(seconds))s"
                     writeStatus()
                     guard engine.start(buffer) else {
-                        // Playback failed to start — skip the page.
-                        i += 1
-                        continue
+                        // Playback failed to start — stop with the reason
+                        // visible (the engine note stays in the status).
+                        state = .failed("Audio playback failed")
+                        return
                     }
                     // Poll until the page ends. Polling (never awaiting a
                     // callback) is deliberate: lost completions stalled the
                     // whole audiobook; Task.sleep always resumes.
                     var idle = 0
                     var seeked = false
+                    var rendered = 0.0
                     while !Task.isCancelled {
                         if engine.seekRequested {
                             engine.seekRequested = false
                             seeked = true
                             break
                         }
-                        if state == .paused || engine.isPlaying {
+                        if state == .paused {
                             idle = 0
+                        } else if engine.isPlaying {
+                            idle = 0
+                            rendered = max(rendered, engine.playbackSeconds)
                         } else {
                             idle += 1
                             if idle >= 4 { break } // ~2 s past the end = page done
@@ -590,6 +654,17 @@ final class AudiobookModel {
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
                     if Task.isCancelled { return }
+                    // A page that "ended" without ever rendering is a dead
+                    // audio backend (decode errors etc.) — surface it
+                    // instead of racing through the book page by page.
+                    if !seeked, rendered < seconds * 0.5 {
+                        Logger(subsystem: "com.ipodclassic.app", category: "tts")
+                            .notice("no audio rendered (\(rendered, privacy: .public)s of \(seconds, privacy: .public)s)")
+                        segmentNote = "stopped after \(Int(rendered))s of \(Int(seconds))s"
+                        writeStatus()
+                        state = .failed("Audio playback failed")
+                        return
+                    }
                     if seeked {
                         // The reader moved underneath playback (wheel,
                         // chapter step). Resume at the page now showing;
