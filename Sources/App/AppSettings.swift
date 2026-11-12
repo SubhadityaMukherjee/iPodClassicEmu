@@ -33,6 +33,9 @@ final class AppSettings: ObservableObject {
         static let songSort = "music.sort.songs"      // 0 title 1 artist 2 duration 3 recent
         static let albumSort = "music.sort.albums"    // 0 title 1 artist 2 recent
         static let noteFont = "notes.fontSize"        // points; note editor text
+        static let audiobookVoice = "audiobook.voice"     // Supertonic3 voice raw value
+        static let audiobookSpeed = "audiobook.speed"     // index into AudiobookModel.speeds
+        static let audiobookVolume = "audiobook.volume"   // index into AudiobookModel.volumes
     }
 
     // MARK: Display
@@ -47,6 +50,24 @@ final class AppSettings: ObservableObject {
     /// Seconds of inactivity before the screen dims; 0 = never.
     var dimAfterSeconds: Int {
         get { int(K.dimAfter, 0) } set { objectWillChange.send(); store(newValue, K.dimAfter) }
+    }
+
+    // MARK: Audiobook (read aloud)
+
+    /// Supertonic-3 voice preset name (e.g. "M1").
+    var audiobookVoice: String {
+        get { d.string(forKey: K.audiobookVoice) ?? "M1" }
+        set { objectWillChange.send(); store(newValue, K.audiobookVoice) }
+    }
+    /// Playback speed; index into AudiobookModel.speeds.
+    var audiobookSpeedIndex: Int {
+        get { int(K.audiobookSpeed, 1) }
+        set { objectWillChange.send(); store(newValue, K.audiobookSpeed) }
+    }
+    /// Read-aloud volume; index into AudiobookModel.volumes.
+    var audiobookVolumeIndex: Int {
+        get { int(K.audiobookVolume, 2) }
+        set { objectWillChange.send(); store(newValue, K.audiobookVolume) }
     }
 
     // MARK: Clickwheel

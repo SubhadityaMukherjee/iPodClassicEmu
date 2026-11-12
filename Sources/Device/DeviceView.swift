@@ -91,7 +91,8 @@ struct DeviceView: View {
         _ = model.clockTick
         let after = TimeInterval(settings.dimAfterSeconds)
         guard after > 0 else { return false }
-        return model.idleSeconds > after && model.ringer == nil
+        // Playing audio keeps the backlight on (classic iPod behavior).
+        return model.idleSeconds > after && model.ringer == nil && !model.audiobook.isActive
     }
 
     private var dimOverlay: some View {

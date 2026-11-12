@@ -544,6 +544,12 @@ struct BookScreen: View {
                         panelOpen = true
                     }
                 }
+                // QA hook: start read-aloud automatically (device checks).
+                if ProcessInfo.processInfo.environment["READ_ALOUD_START"] == "1" {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        startReadAloud()
+                    }
+                }
             }
             // PDFKit posts selection changes; surface them in the
             // highlight bar (only one PDF view exists in the app).
@@ -565,11 +571,17 @@ struct BookScreen: View {
         }
         .onDisappear {
             model.transportClaimedByScreen = false
+            model.audiobook.stop()
             if let token = pdfSelectionToken {
                 NotificationCenter.default.removeObserver(token)
                 pdfSelectionToken = nil
             }
             saveLocation()
+        }
+        .onChange(of: model.audiobook.state) { _, state in
+            if case .failed(let message) = state {
+                showToast(message)
+            }
         }
         .onChange(of: styleStamp) { _, _ in
             // Font/margin changes change the page capacity — the old
@@ -813,8 +825,11 @@ struct BookScreen: View {
 
     private var bookSettings: [BookSetting] {
         guard let book else { return [] }
+        // Read Aloud is the top row in both branches; while an audiobook
+        // is active the panel switches to the audiobook rows entirely.
+        let readAloud = BookSetting(id: "tts", title: "Read Aloud", values: ["Off"], index: 0)
         if book.kind == .pdf {
-            var rows = [BookSetting(id: "view", title: "View", values: ["Continuous", "One Page", "Reflowed"],
+            var rows = [readAloud, BookSetting(id: "view", title: "View", values: ["Continuous", "One Page", "Reflowed"],
                                     index: min(max(book.pdfMode, 0), 2))]
             if isReflow {
                 let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
@@ -833,6 +848,7 @@ struct BookScreen: View {
         }
         let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
         return [
+            readAloud,
             BookSetting(id: "size", title: "Font Size", values: Self.fontSizes.map { "\($0) px" }, index: sizeIndex),
             BookSetting(id: "family", title: "Font", values: ReaderStore.Book.fontFamilyNames,
                         index: min(max(book.fontFamily, 0), ReaderStore.Book.fontFamilyNames.count - 1)),
@@ -845,6 +861,15 @@ struct BookScreen: View {
 
     private var panelRows: [MenuItem] {
         if panelIsSettings {
+            if model.audiobook.isActive {
+                return [
+                    MenuItem(id: "ttsState", title: model.audiobook.statusText, showsChevron: false),
+                    MenuItem(id: "voice", title: "Voice", detail: model.audiobook.voiceLabel, showsChevron: false),
+                    MenuItem(id: "volume", title: "Volume", detail: model.audiobook.volumeLabel, showsChevron: false),
+                    MenuItem(id: "speed", title: "Speed", detail: model.audiobook.speedLabel, showsChevron: false),
+                    MenuItem(id: "ttsExit", title: "Exit Read Aloud", showsChevron: false),
+                ]
+            }
             return bookSettings.map { setting in
                 MenuItem(id: setting.id, title: setting.title,
                          detail: setting.values.indices.contains(setting.index) ? setting.values[setting.index] : "",
@@ -870,7 +895,10 @@ struct BookScreen: View {
     }
 
     private var panelTitle: String {
-        panelIsSettings ? "Book Settings" : (isPDFOriginal ? "Contents" : "Chapters")
+        if panelIsSettings {
+            return model.audiobook.isActive ? "Read Aloud" : "Book Settings"
+        }
+        return isPDFOriginal ? "Contents" : "Chapters"
     }
 
     private func closePanel() {
@@ -948,6 +976,27 @@ struct BookScreen: View {
             b.scrollStep = wrapped(min(max(b.scrollStep, 0), 2), 3)
         case "dim":
             b.dim = wrapped(min(max(b.dim, 0), 2), 3)
+        case "tts":
+            // Not a cycle: activates read-aloud from the settings row.
+            startReadAloud()
+            return
+        case "ttsState":
+            // Status display row — nothing to cycle.
+            return
+        case "voice":
+            model.audiobook.voiceIndex += 1
+            return
+        case "volume":
+            model.audiobook.volumeIndex += 1
+            return
+        case "speed":
+            model.audiobook.speedIndex += 1
+            return
+        case "ttsExit":
+            model.audiobook.stop()
+            showToast("Read Aloud off")
+            closePanel()
+            return
         default:
             break
         }
@@ -1052,6 +1101,97 @@ struct BookScreen: View {
                 }
             }
         }
+    }
+
+    // MARK: Read aloud
+
+    /// Starts audiobook mode at the page the reader is showing. Music
+    /// yields — one audio source at a time.
+    @MainActor private func startReadAloud() {
+        guard book != nil else { return }
+        if model.player.isPlaying { model.player.togglePlayPause() }
+        model.audiobook.start(provider: makeAudiobookProvider())
+        closePanel()
+        showToast("Read Aloud starting")
+    }
+
+    @MainActor private func makeAudiobookProvider() -> AudiobookPageProvider {
+        AudiobookPageProvider(
+            segments: { await self.audiobookSegments() },
+            showPage: { self.audiobookShowPage($0) },
+            currentPage: { await self.audiobookCurrentPage() },
+            stepChapter: { self.audiobookStepChapter($0) },
+            language: { await self.audiobookLanguage() }
+        )
+    }
+
+    /// Page-view PDFs speak the current PDF page only; everything through
+    /// the web view (EPUB, articles, reflow) speaks the whole chapter
+    /// bucketed per page via the DOM extraction.
+    @MainActor private func audiobookSegments() async -> [AudiobookSegment] {
+        guard book != nil else { return [] }
+        if isPDFOriginal {
+            let idx = pdfController.currentPageIndex
+            let text = pdfController.document?.page(at: idx)?.string ?? ""
+            return text.isEmpty ? [] : [AudiobookSegment(page: idx, text: text)]
+        }
+        return await epubController.chapterSegments()
+    }
+
+    /// Turns the real reader to `page` — the same page turns manual
+    /// reading uses, so position persistence just works.
+    @MainActor private func audiobookShowPage(_ page: Int) {
+        guard book != nil else { return }
+        if isPDFOriginal {
+            pdfController.goToPage(page)
+            book?.chapterIndex = page
+        } else {
+            epubController.scrollToPage(page)
+            epubController.readerPosition { f, n in
+                self.liveFraction = f
+                if let b = self.book, let n, !self.isPDFOriginal {
+                    self.exactPages(n, forChapter: self.chapterIndex(of: b))
+                }
+            }
+        }
+    }
+
+    @MainActor private func audiobookCurrentPage() async -> Int {
+        guard book != nil else { return 0 }
+        if isPDFOriginal { return pdfController.currentPageIndex }
+        let (f, n) = await epubController.readerPositionAsync()
+        guard let n, n > 0 else { return 0 }
+        return min(n - 1, max(0, Int((f * Double(n)).rounded())))
+    }
+
+    /// Chapter step (PDF page-view: page step). Returns whether the
+    /// position actually moved — false ends the book.
+    @MainActor private func audiobookStepChapter(_ delta: Int) -> Bool {
+        guard var b = book else { return false }
+        if isPDFOriginal {
+            let before = pdfController.currentPageIndex
+            if delta > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
+            let after = pdfController.currentPageIndex
+            b.chapterIndex = after
+            book = b
+            return after != before
+        }
+        let next = chapterIndex(of: b) + delta
+        guard chapters.indices.contains(next) else { return false }
+        setChapter(next, on: &b)
+        setFraction(0, on: &b)
+        liveFraction = 0
+        book = b
+        model.reader.update(b)
+        return true
+    }
+
+    /// Language for synthesis, detected over the first pages of the
+    /// current chapter (stopword counts).
+    @MainActor private func audiobookLanguage() async -> String {
+        let segments = await audiobookSegments()
+        let text = segments.prefix(3).map(\.text).joined(separator: " ")
+        return AudiobookLanguage.detect(text)
     }
 
     // MARK: Actions
@@ -1169,12 +1309,14 @@ struct BookScreen: View {
                 moveListSelection(&panelSelection, count: panelRows.count, delta: d, settings: settings)
             } else if isPDFOriginal {
                 if d > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
+                model.audiobook.readerMoved()
                 // currentPage settles asynchronously; keep the progress
                 // bar honest.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     if self.isPDFOriginal {
                         self.book?.chapterIndex = self.pdfController.currentPageIndex
                     }
+                    self.model.audiobook.readerMoved()
                 }
             } else {
                 // Instant viewport-fraction jumps track the wheel 1:1.
@@ -1182,22 +1324,37 @@ struct BookScreen: View {
                 // per the Scroll Step setting). Instant, no animation.
                 let pages = [1, 2, 3][min(max(book?.scrollStep ?? 0, 0), 2)]
                 epubController.scrollByPages(d > 0 ? pages : -pages)
+                model.audiobook.readerMoved()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     // Exact page count for the open chapter converges the
                     // whole book's estimates as a side effect.
-                    epubController.readerPosition { f, n in
+                    self.epubController.readerPosition { f, n in
                         self.liveFraction = f
                         if let b = self.book, let n, !self.isPDFOriginal {
                             self.exactPages(n, forChapter: self.chapterIndex(of: b))
                         }
+                        // Wheel = seek while reading aloud: the loop
+                        // re-syncs to the page now showing.
+                        self.model.audiobook.readerMoved()
                     }
                 }
             }
         case .select:
             if panelOpen {
                 activatePanelRow()
+            } else if model.audiobook.isActive {
+                // While read-aloud is active, center = play/pause.
+                model.audiobook.togglePlayPause()
+                showToast(model.audiobook.state == .playing ? "Reading" : "Paused")
             } else {
                 openContents()
+            }
+        case .playPause:
+            // The reader claims transport while open; without an active
+            // audiobook the buttons do nothing here (music is stopped).
+            if model.audiobook.isActive {
+                model.audiobook.togglePlayPause()
+                showToast(model.audiobook.state == .playing ? "Reading" : "Paused")
             }
         case .centerHold:
             // Hold center: book settings (both PDF and EPUB).
@@ -1212,6 +1369,10 @@ struct BookScreen: View {
         case .menu:
             if panelOpen {
                 closePanel()
+            } else if model.audiobook.isActive {
+                // First MENU leaves audiobook mode; a second one exits the book.
+                model.audiobook.stop()
+                showToast("Read Aloud off")
             } else {
                 saveLocation()
                 model.pop()
@@ -1315,6 +1476,105 @@ final class EpubController {
         })()
         """
         webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    // MARK: Read-aloud support
+
+    /// URL whose didFinish navigation has fired; page extraction waits
+    /// until the web view's current URL matches it.
+    var lastFinishedURL: URL?
+
+    /// Jumps to an exact page index (audiobook page sync — DOM scroll,
+    /// same path as page turns).
+    @MainActor func scrollToPage(_ page: Int) {
+        webView?.evaluateJavaScript("window.scrollTo(window.innerWidth * \(page), 0)", completionHandler: nil)
+    }
+
+    @MainActor func readerPositionAsync() async -> (Double, Int?) {
+        await withCheckedContinuation { continuation in
+            readerPosition { fraction, count in
+                continuation.resume(returning: (fraction, count))
+            }
+        }
+    }
+
+    /// Waits until the loaded chapter's didFinish has fired (and layout
+    /// has had a beat to settle, mirroring the double restore in the
+    /// navigation delegate), so page geometry is trustworthy. Retries
+    /// well past the initial load window — returning early would make an
+    /// un-settled chapter look like an empty one and get skipped.
+    @MainActor func awaitChapterSettled() async -> Bool {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            if let url = webView?.url, url == lastFinishedURL {
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        Logger(subsystem: "com.ipodclassic.app", category: "tts")
+            .notice("chapter settle timeout url=\(self.webView?.url?.lastPathComponent ?? "nil", privacy: .public) finished=\(self.lastFinishedURL?.lastPathComponent ?? "nil", privacy: .public)")
+        return false
+    }
+
+    private struct RawSegment: Codable {
+        let p: Int
+        let t: String
+    }
+
+    /// The chapter's text bucketed per page: split every text node into
+    /// sentences, map each to its column via the range's document-space
+    /// rect (page = floor((rect.left + scrollX) / viewportWidth)), then
+    /// merge consecutive same-page sentences into one speakable unit.
+    /// Static script — no interpolation.
+    private static let segmentsJS = """
+    (function(){
+      var period = window.innerWidth;
+      var out = [];
+      var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+      var node;
+      while ((node = walker.nextNode())) {
+        var tag = node.parentElement ? node.parentElement.tagName : '';
+        if (tag === 'STYLE' || tag === 'SCRIPT') continue;
+        var text = node.nodeValue;
+        if (!text || !text.trim()) continue;
+        var re = /[^.!?\\n\\r]+[.!?]+["')\\]]*(\\s|$)|[^.!?\\n\\r]+[.!?]+["')\\]]*$|[^.!?]+$/g;
+        var m;
+        while ((m = re.exec(text))) {
+          var piece = m[0];
+          if (!piece.trim()) continue;
+          var r = document.createRange();
+          r.setStart(node, m.index);
+          r.setEnd(node, Math.min(text.length, m.index + piece.length));
+          var rect = r.getBoundingClientRect();
+          if (!rect || (rect.width < 0.5 && rect.height < 0.5)) continue;
+          var page = Math.max(0, Math.floor((rect.left + window.scrollX) / period));
+          out.push({p: page, t: piece.replace(/\\s+/g, ' ').trim()});
+        }
+      }
+      var merged = [];
+      for (var i = 0; i < out.length; i++) {
+        var last = merged[merged.length - 1];
+        if (last && last.p === out[i].p) { last.t += ' ' + out[i].t; }
+        else merged.push({p: out[i].p, t: out[i].t});
+      }
+      for (var j = 0; j < merged.length; j++) merged[j].t = merged[j].t.trim();
+      return JSON.stringify(merged);
+    })()
+    """
+
+    /// Per-page segments for the loaded chapter (EPUB, article, or PDF
+    /// reflow — everything that renders through the web view).
+    @MainActor func chapterSegments() async -> [AudiobookSegment] {
+        guard await awaitChapterSettled(), let webView else { return [] }
+        let raw: String? = await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript(Self.segmentsJS) { value, _ in
+                continuation.resume(returning: value as? String)
+            }
+        }
+        guard let data = raw?.data(using: .utf8),
+              let items = try? JSONDecoder().decode([RawSegment].self, from: data) else { return [] }
+        return items.filter { !$0.t.isEmpty }.map { AudiobookSegment(page: $0.p, text: $0.t) }
     }
 
     /// Reader stylesheet: viewport-sized columns (true pages). Body is
@@ -1436,6 +1696,7 @@ struct EpubWebView: UIViewRepresentable {
             // saved scroll position. Reflow (CSS + images) changes the
             // document height, so restore twice: immediately and again
             // after layout settles — both are idempotent.
+            parent.controller.lastFinishedURL = webview.url
             webview.evaluateJavaScript(EpubController.cssJS(for: parent.book), completionHandler: nil)
             if !parent.highlightTexts.isEmpty {
                 webview.evaluateJavaScript(HighlightJS.restore(texts: parent.highlightTexts), completionHandler: nil)
