@@ -37,11 +37,13 @@ struct ScreenRouter: View {
         case .clocks: return "Clocks"
         case .extras: return "Extras"
         case .flashlight: return "Flashlight"
+        case .binaural: return "Binaural"
         case .reader: return "Reader"
         case .readerBooks: return "Books"
         case .readerArticles: return "Articles"
         case .readerBook(let id): return model.reader.book(id: id)?.title ?? "Reader"
         case .calendar: return "Calendar"
+        case .binaural: return "Binaural"
         case .musicSearch: return "Search"
         case .alarm: return "Alarm Clock"
         case .timer: return "Timer"
@@ -122,12 +124,14 @@ struct ScreenRouter: View {
         case .clocks: ClocksMenuScreen()
         case .extras: ExtrasScreen()
         case .flashlight: FlashlightScreen()
+        case .binaural: BinauralScreen()
         case .reader: ReaderHomeScreen()
         case .readerBooks: ReaderScreen()
         case .readerArticles: ArticleListScreen()
         case .readerBook(let id): BookScreen(bookID: id)
         case .musicSearch: MusicSearchScreen()
         case .calendar: CalendarScreen()
+        case .binaural: BinauralScreen()
         case .alarm: AlarmScreen()
         case .timer: TimerScreen()
         case .stopwatch: StopwatchScreen()

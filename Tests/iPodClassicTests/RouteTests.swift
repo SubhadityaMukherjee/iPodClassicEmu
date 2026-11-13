@@ -14,7 +14,7 @@ final class RouteTests: XCTestCase {
         "notes", "noteEditor", "clocks", "calendar", "extras",
         "flashlight", "reader", "search", "alarm", "timer",
         "stopwatch", "settings", "clickwheel", "display", "playback",
-        "setup", "tour", "noteTrash",
+        "setup", "tour", "noteTrash", "binaural",
     ]
 
     func testEveryDocumentedRouteNameResolves() {
@@ -40,7 +40,7 @@ final class RouteTests: XCTestCase {
             .alarm, .timer, .stopwatch, .settings,
             .settingsClickwheel, .settingsDisplay, .settingsPlayback,
             .artistSearch("x"), .transcript("Recording 2026-01-01.m4a"),
-            .readerBooks, .readerArticles, .setup, .tour, .noteTrash,
+            .readerBooks, .readerArticles, .setup, .tour, .noteTrash, .binaural,
         ]
         for route in sample {
             model.stack = [route]

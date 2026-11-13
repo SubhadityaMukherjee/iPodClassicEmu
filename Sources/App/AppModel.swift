@@ -92,6 +92,9 @@ enum Route: Hashable {
     // Calendar
     case calendar
 
+    // Binaural
+    case binaural
+
     // Settings
     case settings
     case settingsClickwheel
@@ -128,6 +131,7 @@ final class AppModel {
     let timer = TimerModel()
     let stopwatch = StopwatchModel()
     let recents = RecentActivity.shared
+    let binaural = BinauralModel()
     let settings = AppSettings.shared
     let alarms = AlarmStore.shared
 
@@ -256,6 +260,7 @@ final class AppModel {
         case "noteTrash": return .noteTrash
         case "clocks": return .clocks
         case "calendar": return .calendar
+        case "binaural": return .binaural
         case "extras": return .extras
         case "flashlight": return .flashlight
         case "reader": return .reader
@@ -351,6 +356,7 @@ final class AppModel {
         if !transportClaimedByScreen {
             switch event {
             case .playPause:
+                if binaural.isPlaying { binaural.stop() }
                 player.togglePlayPause()
                 return
             case .next:
