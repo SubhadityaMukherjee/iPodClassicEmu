@@ -70,7 +70,7 @@ final class SetupUITests: XCTestCase {
         app.launchEnvironment["RESET_DEFAULTS"] = "1"
         app.launchEnvironment["SHOW_TOUR"] = "1"
         app.launch()
-        XCTAssertTrue(app.staticTexts["The classic, rebuilt"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.staticTexts["The iPod, rebuilt"].waitForExistence(timeout: 5),
                       "Feature tour did not render")
         menu(app)
         XCTAssertTrue(app.staticTexts["Welcome"].waitForExistence(timeout: 3),
@@ -83,7 +83,7 @@ final class SetupUITests: XCTestCase {
         app.launchEnvironment["RESET_DEFAULTS"] = "1"
         app.launchEnvironment["SHOW_TOUR"] = "1"
         app.launch()
-        XCTAssertTrue(app.staticTexts["The classic, rebuilt"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["The iPod, rebuilt"].waitForExistence(timeout: 5))
         // Six pages: center through all of them; the last advances to setup.
         for _ in 0..<6 { center(app) }
         XCTAssertTrue(app.staticTexts["Welcome"].waitForExistence(timeout: 3),

@@ -127,6 +127,7 @@ final class AppModel {
     let reader = ReaderStore.shared
     let timer = TimerModel()
     let stopwatch = StopwatchModel()
+    let recents = RecentActivity.shared
     let settings = AppSettings.shared
     let alarms = AlarmStore.shared
 

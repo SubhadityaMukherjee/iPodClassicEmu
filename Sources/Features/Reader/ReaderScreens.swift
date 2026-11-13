@@ -495,6 +495,10 @@ struct BookScreen: View {
         .onWheel { handle($0) }
         .onAppear {
             if book == nil {                book = model.reader.book(id: bookID)
+                // Recents: this book is the one to resume from home.
+                if let title = book?.title {
+                    model.recents.record(book: .init(id: bookID, title: title))
+                }
                 if book?.kind == .epub {
                     chapters = EpubParser.load(bookDir: Self.epubDir(for: book!))
                     highlights = HighlightStore.load(bookID: bookID, kind: .epub)

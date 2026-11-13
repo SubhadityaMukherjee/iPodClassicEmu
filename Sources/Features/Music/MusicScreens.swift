@@ -822,6 +822,10 @@ struct AlbumDetailScreen: View {
             ) { item in
                 item.id.hasPrefix("track.") ? album?.artwork : nil
             }
+            .onAppear {
+                // Recents: continuing this album from home.
+                model.recents.record(album: .init(id: albumID, title: model.music.albumTitle(albumID)))
+            }
             if !toast.isEmpty {
                 ToastCapsule(text: toast)
                     .zIndex(2)
@@ -934,6 +938,10 @@ struct PlaylistDetailScreen: View {
                 },
                 selection: selection, emptyText: "No Songs", style: .twoLine
             )
+            .onAppear {
+                // Recents: jumping back into this playlist from home.
+                model.recents.record(playlist: .init(id: playlistID, title: model.music.playlistName(playlistID)))
+            }
             if !toast.isEmpty {
                 ToastCapsule(text: toast)
                     .zIndex(2)

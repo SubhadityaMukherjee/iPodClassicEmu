@@ -1,5 +1,6 @@
 import Foundation
 import ActivityKit
+import os
 
 /// Mirrors the timer, stopwatch, or voice-memo recording as a Live Activity
 /// on the lock screen / Dynamic Island. One activity per kind, so a timer
@@ -52,7 +53,8 @@ final class LiveActivityManager {
     // MARK: Stopwatch
 
     func stopwatchStarted() {
-        start(.stopwatch, total: 0, staleDate: nil, state: countUp(base: 0))
+        start(.stopwatch, total: 0, staleDate: nil, state: countUp(base: 0),
+              retryState: { self.countUp(base: Self.stopwatchElapsedProvider()) })
     }
 
     func stopwatchPaused(elapsed: TimeInterval) {
@@ -78,7 +80,10 @@ final class LiveActivityManager {
     // MARK: Recorder
 
     func recorderStarted() {
-        start(.recorder, total: 0, staleDate: nil, state: countUp(base: 0))
+        // Live Activities can fail to start right after an install; the
+        // retry re-derives the elapsed base from the recorder.
+        start(.recorder, total: 0, staleDate: nil, state: countUp(base: 0),
+              retryState: { self.countUp(base: Self.recorderElapsedProvider()) })
     }
 
     func recorderPaused(elapsed: TimeInterval) {
@@ -179,13 +184,59 @@ final class LiveActivityManager {
     }
 
     private func start(_ kind: TrackActivityAttributes.Kind, total: TimeInterval,
-                       staleDate: Date?, state: TrackActivityAttributes.ContentState) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+                       staleDate: Date?, state: TrackActivityAttributes.ContentState,
+                       retryState: (() -> TrackActivityAttributes.ContentState)? = nil) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            scheduleRetry(kind, total: total, staleDate: staleDate, retryState: retryState)
+            return
+        }
         finish(kind)  // restart cleanly if one is already up
         let attributes = TrackActivityAttributes(kind: kind, total: total)
-        activities[kind] = try? Activity.request(
+        let requested = try? Activity.request(
             attributes: attributes, content: ActivityContent(state: state, staleDate: staleDate))
+        if requested == nil {
+            // Fresh installs race the system's widget-extension registration:
+            // the first request can fail while iOS is still setting the
+            // extension up. Retry shortly (with fresh state) instead of
+            // silently losing the activity.
+            Logger(subsystem: "com.ipodclassic.app", category: "liveactivity")
+                .notice("request failed for \(String(describing: kind), privacy: .public); retrying")
+            scheduleRetry(kind, total: total, staleDate: staleDate, retryState: retryState)
+            return
+        }
+        retryAttempts[kind] = 0
+        wanted.insert(kind)
+        activities[kind] = requested
         lastStates[kind] = state
+    }
+
+    /// Live Activities occasionally fail to start on the first launch after
+    /// an install; keep trying briefly. Cleared when the kind is finished
+    /// or after a few attempts.
+    private var retryAttempts: [TrackActivityAttributes.Kind: Int] = [:]
+    private var retryWork: [TrackActivityAttributes.Kind: DispatchWorkItem] = [:]
+    private var wanted: Set<TrackActivityAttributes.Kind> = []
+    /// Count-up kinds re-derive their elapsed base on retry so a
+    /// late-starting activity still shows the true elapsed time.
+    static var recorderElapsedProvider: () -> TimeInterval = { 0 }
+    static var stopwatchElapsedProvider: () -> TimeInterval = { 0 }
+
+    private func scheduleRetry(_ kind: TrackActivityAttributes.Kind, total: TimeInterval,
+                               staleDate: Date?,
+                               retryState: (() -> TrackActivityAttributes.ContentState)?) {
+        let attempts = (retryAttempts[kind] ?? 0) + 1
+        guard attempts <= 4 else { return }
+        retryAttempts[kind] = attempts
+        wanted.insert(kind)
+        retryWork[kind]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.wanted.contains(kind) else { return }
+            let fresh = retryState?() ?? self.lastStates[kind]
+            guard let fresh else { return }
+            self.start(kind, total: total, staleDate: staleDate, state: fresh, retryState: retryState)
+        }
+        retryWork[kind] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
     }
 
     private func update(_ kind: TrackActivityAttributes.Kind,
@@ -199,6 +250,10 @@ final class LiveActivityManager {
     private func finish(_ kind: TrackActivityAttributes.Kind,
                         finalState: TrackActivityAttributes.ContentState? = nil,
                         dismissalPolicy: ActivityUIDismissalPolicy = .immediate) {
+        wanted.remove(kind)
+        retryWork[kind]?.cancel()
+        retryWork[kind] = nil
+        retryAttempts[kind] = 0
         guard let activity = activities.removeValue(forKey: kind) else { return }
         lastStates[kind] = nil
         laps[kind] = nil

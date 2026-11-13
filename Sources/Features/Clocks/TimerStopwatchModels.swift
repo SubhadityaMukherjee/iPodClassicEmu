@@ -115,6 +115,12 @@ final class TimerModel {
 /// Stopwatch with laps.
 @Observable
 final class StopwatchModel {
+    init() {
+        // Live Activities retry on first-launch races with the true
+        // elapsed base, provided here.
+        LiveActivityManager.stopwatchElapsedProvider = { [weak self] in self?.elapsed ?? 0 }
+    }
+
     private(set) var elapsed: TimeInterval = 0
     private(set) var isRunning = false
     private(set) var laps: [TimeInterval] = []

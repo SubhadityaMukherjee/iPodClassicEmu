@@ -9,7 +9,7 @@ struct HomeScreen: View {
     @State private var selection = 0
 
     private var items: [MenuItem] {
-        [
+        var list: [MenuItem] = [
             MenuItem(id: "music", title: "Music"),
             MenuItem(id: "photos", title: "Photos"),
             MenuItem(id: "camera", title: "Camera"),
@@ -21,6 +21,28 @@ struct HomeScreen: View {
             MenuItem(id: "shuffleAll", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
             MenuItem(id: "nowplaying", title: "Now Playing"),
         ]
+        // Recents: one jump-back row per type with something to resume.
+        let r = model.recents
+        if r.book != nil || r.playlist != nil || r.album != nil || r.recording != nil || r.clock != nil {
+            list.append(MenuItem(id: "recents.header", title: "Recents", showsChevron: false, isActionRow: true))
+            if let e = r.book {
+                list.append(MenuItem(id: "recents.book", title: e.title, detail: "Book", symbol: "book", showsChevron: false))
+            }
+            if let e = r.playlist {
+                list.append(MenuItem(id: "recents.playlist", title: e.title, detail: "Playlist", symbol: "music.note.list", showsChevron: false))
+            }
+            if let e = r.album {
+                list.append(MenuItem(id: "recents.album", title: e.title, detail: "Album", symbol: "square.stack", showsChevron: false))
+            }
+            if let e = r.recording {
+                list.append(MenuItem(id: "recents.recording", title: e.title, detail: "Recording", symbol: "mic", showsChevron: false))
+            }
+            if r.clock != nil {
+                list.append(MenuItem(id: "recents.clock", title: r.clock == "timer" ? "Timer" : "Stopwatch",
+                                     detail: "Clocks", symbol: r.clock == "timer" ? "timer" : "stopwatch", showsChevron: false))
+            }
+        }
+        return list
     }
 
     var body: some View {
@@ -60,7 +82,12 @@ struct HomeScreen: View {
             model.player.shufflePlay(songs)
             model.push(.nowPlaying)
         case "nowplaying": model.push(.nowPlaying)
-        default: break
+        case "recents.book": model.push(.readerBook(model.recents.book?.id ?? ""))
+        case "recents.playlist": model.push(.playlistDetail(model.recents.playlist?.id ?? ""))
+        case "recents.album": model.push(.albumDetail(model.recents.album?.id ?? ""))
+        case "recents.recording": model.push(.recordingDetail(model.recents.recording?.id ?? ""))
+        case "recents.clock": model.push(model.recents.clock == "stopwatch" ? .stopwatch : .timer)
+        default: break // recents.header is a visual band, not an action
         }
     }
 
@@ -109,6 +136,16 @@ struct HomeScreen: View {
             } else {
                 glyph("play.rectangle.fill")
             }
+        case "recents.book":
+            glyph("book.fill")
+        case "recents.playlist":
+            glyph("music.note.list")
+        case "recents.album":
+            glyph("square.stack.3d.up.fill")
+        case "recents.recording":
+            glyph("mic.fill")
+        case "recents.clock":
+            LiveClockPreview()
         default:
             glyph("circle.fill")
         }

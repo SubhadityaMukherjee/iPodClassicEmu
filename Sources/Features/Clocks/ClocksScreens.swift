@@ -254,6 +254,8 @@ struct TimerScreen: View {
             }
         }
         .task {
+            // Recents: the last clock screen opened.
+            model.recents.record(clock: "timer")
             // QA hook: open the presets panel without a gesture (screenshots).
             if ProcessInfo.processInfo.environment["TIMER_PRESETS"] == "1" {
                 presetsOpen = true
@@ -526,6 +528,10 @@ struct StopwatchScreen: View {
                 .monospacedDigit()
                 .foregroundStyle(Theme.ink)
                 .padding(.top, 8)
+            .onAppear {
+                // Recents: the last clock screen opened.
+                model.recents.record(clock: "stopwatch")
+            }
 
             if !model.stopwatch.laps.isEmpty {
                 lapList

@@ -33,6 +33,26 @@ final class E2ETests: XCTestCase {
     }
 
     @MainActor
+    func testHomeShowsRecentsSection() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launchEnvironment["RECENTS_SEED"] = "1"
+        app.launch()
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        func tick() {
+            origin.withOffset(CGVector(dx: 64, dy: 64))
+                .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
+        }
+        // Recents rows sit below the standard home rows — scroll to them.
+        for _ in 0..<11 { tick() }
+        XCTAssertTrue(app.staticTexts["Recents"].waitForExistence(timeout: 3),
+                      "Recents header missing on home")
+        XCTAssertTrue(app.staticTexts["QA Book"].exists, "recent book row missing")
+    }
+
+    @MainActor
     func testReaderReachableFromHome() throws {
         let app = launch(start: "home")
         let wheel = app.otherElements["clickwheel"]

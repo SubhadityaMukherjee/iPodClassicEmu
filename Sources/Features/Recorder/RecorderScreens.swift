@@ -436,6 +436,10 @@ struct RecordingDetailScreen: View {
         }
         .overlay(showToast ? toastView : nil)
         .onWheel { handle($0) }
+        .onAppear {
+            // Recents: the last recording opened.
+            model.recents.record(recording: .init(id: fileName, title: TranscriptStore.displayTitle(for: fileName)))
+        }
         .sheet(item: Binding(
             get: { shareItem.map { ShareTarget(url: $0) } },
             set: { shareItem = $0?.url }

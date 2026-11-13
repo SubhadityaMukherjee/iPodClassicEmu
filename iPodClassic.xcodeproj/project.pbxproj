@@ -29,6 +29,7 @@
 		3F918DA5FAD2C48FFAD5F7C5 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DA368CF25B19FEF8CE837C /* NotesStore.swift */; };
 		48A1D433ED95B265BA9FFF8E /* MusicService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC998CD72BCE921ABFBE36B /* MusicService.swift */; };
 		49DCC1994A75C4D092BFC6F3 /* SettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B937A3043FF83416A501A21 /* SettingsScreens.swift */; };
+		4A7AA2D092F341A3B862F982 /* RecentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEC76A0EE8D725423D5E6476 /* RecentActivity.swift */; };
 		4BD1E8D4B100E2FDCBF6BCD1 /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7523D39BD43BC86DA36A65DF /* TranscriptStoreTests.swift */; };
 		4C705C26710B6749CAF056D5 /* ClockStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53777219020A6ED4B6227EC2 /* ClockStateTests.swift */; };
 		54710389A162814D393AAE41 /* MenuComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F9F9D030FECE8C1639FE2E6 /* MenuComponents.swift */; };
@@ -50,6 +51,7 @@
 		89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59116EF21FFA3688484F038F /* RecorderScreens.swift */; };
 		8A5ED5850A23A7E669057EB8 /* SetupScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930DFFDE7B5BAFC6023F6530 /* SetupScreen.swift */; };
 		8B9A0259A4FB90FE3B22B7B2 /* ShortcutsIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */; };
+		8C543BEA33191DBCBCEFDAC9 /* RecentActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A2022CFD4A2C6DB094F3C6 /* RecentActivityTests.swift */; };
 		8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */; };
 		926274E5A03AA2B2027F98AD /* AlarmBeep.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */; };
 		9C4C9202AFABDDB4C51444A2 /* ReaderHighlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */; };
@@ -190,6 +192,7 @@
 		BA58EF527B138B0EF70E505F /* WheelHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelHaptics.swift; sourceTree = "<group>"; };
 		BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteTests.swift; sourceTree = "<group>"; };
 		BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingScreen.swift; sourceTree = "<group>"; };
+		C0A2022CFD4A2C6DB094F3C6 /* RecentActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentActivityTests.swift; sourceTree = "<group>"; };
 		C23F5DF6E5C35750B9D76054 /* ReaderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderStore.swift; sourceTree = "<group>"; };
 		C5B5BBFC8B70B52A68077DD9 /* ScreenRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRouter.swift; sourceTree = "<group>"; };
 		C6461E37C6B4E93CC838424E /* WheelInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelInput.swift; sourceTree = "<group>"; };
@@ -217,6 +220,7 @@
 		F4B913734CF9998D90D60B58 /* LetterSnapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LetterSnapTests.swift; sourceTree = "<group>"; };
 		F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReflow.swift; sourceTree = "<group>"; };
 		FEAA91BB4F824B867C611B9E /* TourScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TourScreen.swift; sourceTree = "<group>"; };
+		FEC76A0EE8D725423D5E6476 /* RecentActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentActivity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -275,6 +279,7 @@
 				E06640F863889753F8AADBCC /* CameraShortcut.swift */,
 				06464256EE519A5BD50EA73F /* iPodClassicApp.swift */,
 				CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */,
+				FEC76A0EE8D725423D5E6476 /* RecentActivity.swift */,
 				930DFFDE7B5BAFC6023F6530 /* SetupScreen.swift */,
 				A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */,
 				FEAA91BB4F824B867C611B9E /* TourScreen.swift */,
@@ -409,6 +414,7 @@
 				6A06C23A4AB3B056577E9965 /* PDFReflowTests.swift */,
 				8EAC0590B8229DE23E30083F /* PlaybackSessionTests.swift */,
 				06E5B68A6556EACB64528E07 /* ReaderFontTests.swift */,
+				C0A2022CFD4A2C6DB094F3C6 /* RecentActivityTests.swift */,
 				BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */,
 				E8B1633CF255A1D13A05CF03 /* SongHoldStateTests.swift */,
 				7523D39BD43BC86DA36A65DF /* TranscriptStoreTests.swift */,
@@ -718,6 +724,7 @@
 				9C4C9202AFABDDB4C51444A2 /* ReaderHighlights.swift in Sources */,
 				C33C03ED0D677C9F137A329C /* ReaderScreens.swift in Sources */,
 				9F9E7B9E9A605FDA3A8D05B1 /* ReaderStore.swift in Sources */,
+				4A7AA2D092F341A3B862F982 /* RecentActivity.swift in Sources */,
 				CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */,
 				89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */,
 				8E33C07A0CB4A6DEDEB2333E /* ScreenRouter.swift in Sources */,
@@ -766,6 +773,7 @@
 				2448D01DF2C37F417EE051CB /* PDFReflowTests.swift in Sources */,
 				A5BBDA7AE0BB5444176F459E /* PlaybackSessionTests.swift in Sources */,
 				3745E1CB511E64BEE553FC6B /* ReaderFontTests.swift in Sources */,
+				8C543BEA33191DBCBCEFDAC9 /* RecentActivityTests.swift in Sources */,
 				BDCFE1DC543919A4192B71E2 /* RouteTests.swift in Sources */,
 				FEE979444A845DCA3D51C8FE /* SongHoldStateTests.swift in Sources */,
 				4BD1E8D4B100E2FDCBF6BCD1 /* TranscriptStoreTests.swift in Sources */,
@@ -838,7 +846,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -962,7 +970,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_NS_ASSERTIONS = NO;

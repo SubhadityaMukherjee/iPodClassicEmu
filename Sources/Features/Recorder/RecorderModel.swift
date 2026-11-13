@@ -17,6 +17,11 @@ struct RecordingFile: Identifiable, Equatable {
 /// playback, and file sharing. Files live in Documents/Recordings (.m4a).
 @Observable
 final class RecorderModel {
+    init() {
+        // Live Activities retry on first-launch races with the true
+        // elapsed base, provided here.
+        LiveActivityManager.recorderElapsedProvider = { [weak self] in self?.elapsed ?? 0 }
+    }
     private(set) var isRecording = false
     private(set) var isPaused = false
     private(set) var elapsed: TimeInterval = 0
