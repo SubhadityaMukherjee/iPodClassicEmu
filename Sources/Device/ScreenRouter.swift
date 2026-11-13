@@ -50,6 +50,7 @@ struct ScreenRouter: View {
         case .settingsDisplay: return "Display"
         case .settingsPlayback: return "Playback"
         case .settingsAbout: return "About"
+        case .setup: return "Welcome"
         case nil: return "iPod"
         }
     }
@@ -123,6 +124,7 @@ struct ScreenRouter: View {
         case .settingsDisplay: DisplaySettingsScreen()
         case .settingsPlayback: PlaybackSettingsScreen()
         case .settingsAbout: AboutScreen()
+        case .setup: SetupScreen()
         }
     }
 }

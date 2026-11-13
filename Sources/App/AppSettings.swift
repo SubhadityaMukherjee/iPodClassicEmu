@@ -42,7 +42,7 @@ final class AppSettings: ObservableObject {
     }
     /// Scanline intensity 0–3 (off, subtle, medium, strong).
     var scanlineIntensity: Int {
-        get { int(K.scanlines, 1) } set { objectWillChange.send(); store(newValue, K.scanlines) }
+        get { int(K.scanlines, 2) } set { objectWillChange.send(); store(newValue, K.scanlines) }
     }
     /// Seconds of inactivity before the screen dims; 0 = never.
     var dimAfterSeconds: Int {
@@ -55,13 +55,13 @@ final class AppSettings: ObservableObject {
         get { bool(K.haptics, true) } set { objectWillChange.send(); store(newValue, K.haptics) }
     }
     var scrollingHaptics: Int {
-        get { int(K.scrollHaptics, 2) } set { objectWillChange.send(); store(newValue, K.scrollHaptics) }
+        get { int(K.scrollHaptics, 3) } set { objectWillChange.send(); store(newValue, K.scrollHaptics) }
     }
     var buttonHaptics: Int {
         get { int(K.buttonHaptics, 2) } set { objectWillChange.send(); store(newValue, K.buttonHaptics) }
     }
     var tickSounds: Bool {
-        get { bool(K.tickSounds, true) } set { objectWillChange.send(); store(newValue, K.tickSounds) }
+        get { bool(K.tickSounds, false) } set { objectWillChange.send(); store(newValue, K.tickSounds) }
     }
     /// Allow the wheel to keep ticking past the end of a list (list wraps).
     /// Off by default: lists stop at the ends like a real iPod.
@@ -111,7 +111,7 @@ final class AppSettings: ObservableObject {
 
     /// 0 small, 1 standard, 2 large — scales menu text and row heights.
     var fontScale: Int {
-        get { int(K.fontScale, 1) } set { objectWillChange.send(); store(min(2, max(0, newValue)), K.fontScale) }
+        get { int(K.fontScale, 0) } set { objectWillChange.send(); store(min(2, max(0, newValue)), K.fontScale) }
     }
     static let fontLabels = ["Small", "Standard", "Large"]
     static let fontScales: [CGFloat] = [0.85, 1.0, 1.18]

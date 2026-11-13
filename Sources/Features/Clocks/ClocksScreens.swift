@@ -429,12 +429,11 @@ struct TimerScreen: View {
             }
             WheelFeedback.tick(dir: d)
         } else {
-            if segment == .setDuration {
-                model.timer.durationMinutes = wrap(model.timer.durationMinutes + d, 0, 59)
-                WheelFeedback.tick(dir: d)
-            } else {
-                _ = moveListSelectionInt(&rawSegmentIndex, count: Segment.allCases.count, delta: d)
-            }
+            // Scroll always navigates — even on Set Duration. (Hijacking
+            // ticks here as minute-adjustments made it impossible to
+            // scroll back out of the row; adjusting duration is what
+            // center-press editing mode is for.)
+            _ = moveListSelectionInt(&rawSegmentIndex, count: Segment.allCases.count, delta: d)
         }
     }
 

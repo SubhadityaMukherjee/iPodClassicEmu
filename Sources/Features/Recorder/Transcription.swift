@@ -137,7 +137,9 @@ final class TranscriptionManager {
 
     /// True when the Parakeet Ultra model is fully cached on disk — the
     /// UI must not show "Downloading" for a load that reads from cache.
-    nonisolated private static func hasCachedModels() -> Bool {
+    /// True when the ASR model cache already exists on disk (used to skip
+    /// the "download voice model?" step in first-run setup).
+    nonisolated static func hasCachedModels() -> Bool {
         AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .ultra), version: .ultra)
     }
 

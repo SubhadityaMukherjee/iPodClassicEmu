@@ -90,6 +90,13 @@ final class AlarmStore: ObservableObject {
                 DispatchQueue.main.async { self.permissionDenied = false }
                 self.installRequest()
             case .notDetermined:
+                // First-run setup owns the notification prompt (it asks
+                // for all permissions in one pass); once setup is done,
+                // arming an alarm prompts here as usual.
+                guard UserDefaults.standard.bool(forKey: "setup.done") else {
+                    DispatchQueue.main.async { self.permissionDenied = false }
+                    return
+                }
                 center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
                     DispatchQueue.main.async { self.permissionDenied = !granted }
                     if granted { self.installRequest() }

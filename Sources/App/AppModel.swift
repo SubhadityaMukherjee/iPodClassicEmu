@@ -97,6 +97,9 @@ enum Route: Hashable {
     case settingsDisplay
     case settingsPlayback
     case settingsAbout
+
+    // First-run setup
+    case setup
 }
 
 @Observable
@@ -162,6 +165,15 @@ final class AppModel {
                     Logger(subsystem: "com.ipodclassic.app", category: "transcribe").notice("QA setup failed: \(String(describing: error), privacy: .public)")
                 }
             }
+        }
+
+        // First launch: run the one-time setup wizard (permissions, voice
+        // model, defaults). RESET_DEFAULTS (UI tests) skips it so existing
+        // tests stay on home; SHOW_SETUP=1 forces it for QA.
+        let resetDefaults = ProcessInfo.processInfo.environment["RESET_DEFAULTS"] == "1"
+        let showSetup = ProcessInfo.processInfo.environment["SHOW_SETUP"] == "1"
+        if showSetup || (!resetDefaults && !UserDefaults.standard.bool(forKey: "setup.done")) {
+            stack = [.setup]
         }
 
         // QA hook: START_ROUTE opens a specific screen first (UI tests).
@@ -247,13 +259,22 @@ final class AppModel {
         case "clickwheel": return .settingsClickwheel
         case "display": return .settingsDisplay
         case "playback": return .settingsPlayback
+        case "setup": return .setup
         default: return nil
         }
     }
 
     private var lastInputAt = Date()
 
-    // MARK: Navigation
+    /// Finishes first-run setup: marks it done and lands on home.
+    func completeSetup() {
+        UserDefaults.standard.set(true, forKey: "setup.done")
+        // Notification scheduling was deferred while setup was pending
+        // (AlarmStore skips its prompt until setup.done); now that the
+        // permission pass has run, install any armed-alarm requests.
+        alarms.schedule()
+        stack = [.home]
+    }
 
     func push(_ route: Route) {
         guard stack.last != route else { return }
