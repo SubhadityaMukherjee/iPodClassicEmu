@@ -13,6 +13,9 @@ final class NotesStore {
     }
 
     private(set) var notes: [Note] = []
+    /// Deleted notes live in the hidden Notes/.trash folder until restored
+    /// or removed for good (the Trash screen browses this).
+    private(set) var trash: [Note] = []
 
     var notesURL: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -62,6 +65,67 @@ final class NotesStore {
         let url = notesURL.appendingPathComponent(name).appendingPathExtension("txt")
         try? FileManager.default.removeItem(at: url)
         loadNotes()
+    }
+
+    var trashURL: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Notes", isDirectory: true)
+            .appendingPathComponent(".trash", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Moves a note to the hidden trash folder (recoverable from the
+    /// Trash screen) instead of destroying it.
+    func trash(_ name: String) {
+        let fm = FileManager.default
+        let from = notesURL.appendingPathComponent(name).appendingPathExtension("txt")
+        guard fm.fileExists(atPath: from.path) else { return }
+        var target = trashURL.appendingPathComponent(name).appendingPathExtension("txt")
+        var n = 2
+        while fm.fileExists(atPath: target.path) {
+            target = trashURL.appendingPathComponent("\(name) \(n)").appendingPathExtension("txt")
+            n += 1
+        }
+        try? fm.moveItem(at: from, to: target)
+        loadNotes()
+        loadTrash()
+    }
+
+    func loadTrash() {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: trashURL, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+        trash = files.filter { $0.pathExtension.lowercased() == "txt" }
+            .map { url -> Note in
+                let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
+                let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                let preview = body.split(separator: "\n").joined(separator: " ")
+                let words = preview.split(separator: " ").prefix(7).joined(separator: " ")
+                return Note(name: url.deletingPathExtension().lastPathComponent, date: date, preview: words)
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    /// Moves a trashed note back into Notes (name uniquified on clash).
+    func restore(_ name: String) {
+        let fm = FileManager.default
+        let from = trashURL.appendingPathComponent(name).appendingPathExtension("txt")
+        guard fm.fileExists(atPath: from.path) else { return }
+        var target = notesURL.appendingPathComponent(name).appendingPathExtension("txt")
+        var n = 2
+        while fm.fileExists(atPath: target.path) {
+            target = notesURL.appendingPathComponent("\(name) \(n)").appendingPathExtension("txt")
+            n += 1
+        }
+        try? fm.moveItem(at: from, to: target)
+        loadNotes()
+        loadTrash()
+    }
+
+    func deleteForever(_ name: String) {
+        let url = trashURL.appendingPathComponent(name).appendingPathExtension("txt")
+        try? FileManager.default.removeItem(at: url)
+        loadTrash()
     }
 
     /// Debounced save used by the editor.

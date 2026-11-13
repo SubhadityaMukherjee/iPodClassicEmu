@@ -63,4 +63,30 @@ final class SetupUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["All Set!"].exists,
                        "Setup screen leaked through to home")
     }
+
+    @MainActor
+    func testTourRendersAndSkipLandsOnSetup() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launchEnvironment["SHOW_TOUR"] = "1"
+        app.launch()
+        XCTAssertTrue(app.staticTexts["The classic, rebuilt"].waitForExistence(timeout: 5),
+                      "Feature tour did not render")
+        menu(app)
+        XCTAssertTrue(app.staticTexts["Welcome"].waitForExistence(timeout: 3),
+                      "Skipping the tour did not land on the setup wizard")
+    }
+
+    @MainActor
+    func testTourWalksForwardToSetup() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launchEnvironment["SHOW_TOUR"] = "1"
+        app.launch()
+        XCTAssertTrue(app.staticTexts["The classic, rebuilt"].waitForExistence(timeout: 5))
+        // Six pages: center through all of them; the last advances to setup.
+        for _ in 0..<6 { center(app) }
+        XCTAssertTrue(app.staticTexts["Welcome"].waitForExistence(timeout: 3),
+                      "Walking the whole tour did not land on the setup wizard")
+    }
 }

@@ -13,7 +13,12 @@ struct CoverFlowScreen: View {
     @State private var overlaySelection = 0
     @State private var overlayTracks: [Song] = []
 
-    private var albums: [Album] { model.music.albums }
+    // Cover Flow runs in its own alphabetical-by-album order (the classic
+    // flip-through-the-crate feel), independent of the Music menu's
+    // album sort setting.
+    private var albums: [Album] {
+        model.music.albums.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
 
     private var currentAlbum: Album? {
         albums.indices.contains(index) ? albums[index] : nil

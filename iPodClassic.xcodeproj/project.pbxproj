@@ -17,6 +17,7 @@
 		10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE4F74ACAB7D2FE7FB6BD26 /* TimerStopwatchModels.swift */; };
 		183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06464256EE519A5BD50EA73F /* iPodClassicApp.swift */; };
 		19DEF858E4721571709A6227 /* Tick.caf in Resources */ = {isa = PBXBuildFile; fileRef = B7CEBDD3E18661EEC5335B6E /* Tick.caf */; };
+		1B31A15D4D1FE4BC30860312 /* LetterSnapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B913734CF9998D90D60B58 /* LetterSnapTests.swift */; };
 		2448D01DF2C37F417EE051CB /* PDFReflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A06C23A4AB3B056577E9965 /* PDFReflowTests.swift */; };
 		248C4E3AF18DF139E23AF446 /* TickSoft.caf in Resources */ = {isa = PBXBuildFile; fileRef = B9E142990608C64F576307AC /* TickSoft.caf */; };
 		24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC3AA5879EA27E592945C2 /* AppSettings.swift */; };
@@ -39,6 +40,7 @@
 		5EC6D52A802E1514CAE174A1 /* NowPlayingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF1642248D2AB79CE4DB183 /* NowPlayingScreen.swift */; };
 		62CB048E8A6943482DD8D1F8 /* TickSounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16CC36E7096FECFA8123BA8 /* TickSounds.swift */; };
 		6CBA67E33C845F4D22F2422D /* MusicScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D783A264CBB399887431ACB /* MusicScreens.swift */; };
+		7329DE1397D725EDB894E00A /* TourScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEAA91BB4F824B867C611B9E /* TourScreen.swift */; };
 		73FA6EAAFE03B6950EF38587 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 9FA83B1241C42CB2EE7E1529 /* FluidAudio */; };
 		7B50BFDA85F41723706F0125 /* iPodClassicWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7F8ADF4FC8E0E7C16628F2EA /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9362F34A0BC5DC660638C04 /* CameraModel.swift */; };
@@ -212,7 +214,9 @@
 		E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaVolumeController.swift; sourceTree = "<group>"; };
 		F0A7AB9F78390A8680299570 /* ClickWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickWheelView.swift; sourceTree = "<group>"; };
 		F18AE4C666A52A2EF759755A /* AlarmReconcileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmReconcileTests.swift; sourceTree = "<group>"; };
+		F4B913734CF9998D90D60B58 /* LetterSnapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LetterSnapTests.swift; sourceTree = "<group>"; };
 		F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReflow.swift; sourceTree = "<group>"; };
+		FEAA91BB4F824B867C611B9E /* TourScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TourScreen.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -273,6 +277,7 @@
 				CA0A6C1D9DB76AB97F4D6F24 /* LiveActivityManager.swift */,
 				930DFFDE7B5BAFC6023F6530 /* SetupScreen.swift */,
 				A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */,
+				FEAA91BB4F824B867C611B9E /* TourScreen.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -397,6 +402,7 @@
 				483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */,
 				5B9F5916057A060F4412A059 /* DefaultPreferencesTests.swift */,
 				DF076EEBD7582FD738F82631 /* FeatureTests.swift */,
+				F4B913734CF9998D90D60B58 /* LetterSnapTests.swift */,
 				7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */,
 				DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */,
 				6C746E09FCFDA897EB495D22 /* NotesStoreTests.swift */,
@@ -723,6 +729,7 @@
 				62CB048E8A6943482DD8D1F8 /* TickSounds.swift in Sources */,
 				AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */,
 				10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */,
+				7329DE1397D725EDB894E00A /* TourScreen.swift in Sources */,
 				E954CC287B67D09481ED552D /* TrackActivityAttributes.swift in Sources */,
 				0DC95624122FD47CA5C41E5F /* Transcription.swift in Sources */,
 				A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */,
@@ -752,6 +759,7 @@
 				F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */,
 				27B35D364DE25CFDBBF65887 /* DefaultPreferencesTests.swift in Sources */,
 				D9C3E1A951A095242DAEFF0D /* FeatureTests.swift in Sources */,
+				1B31A15D4D1FE4BC30860312 /* LetterSnapTests.swift in Sources */,
 				B96435FA601253641FD082E8 /* MenuSelectionTests.swift in Sources */,
 				8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */,
 				A69F98C929E1AC2E0B869145 /* NotesStoreTests.swift in Sources */,
@@ -830,7 +838,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -954,7 +962,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_NS_ASSERTIONS = NO;

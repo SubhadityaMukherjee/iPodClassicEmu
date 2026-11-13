@@ -55,6 +55,22 @@ private struct WheelFace: View {
                 )
                 .overlay(Circle().stroke(Color.white.opacity(0.05), lineWidth: 0.8))
                 .shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 3)
+                // Subtle inset rim, echoing the recessed LCD: a dark edge
+                // ring, strongest at the top, seated just inside the rim.
+                .overlay(
+                    ZStack {
+                        LinearGradient(colors: [.black.opacity(0.28), .clear],
+                                       startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.32))
+                        LinearGradient(colors: [.black.opacity(0.16), .clear],
+                                       startPoint: .bottom, endPoint: UnitPoint(x: 0.5, y: 0.9))
+                        LinearGradient(colors: [.black.opacity(0.11), .clear],
+                                       startPoint: .leading, endPoint: UnitPoint(x: 0.08, y: 0.5))
+                        LinearGradient(colors: [.black.opacity(0.11), .clear],
+                                       startPoint: .trailing, endPoint: UnitPoint(x: 0.92, y: 0.5))
+                    }
+                    .mask(Circle().strokeBorder(lineWidth: 9))
+                    .allowsHitTesting(false)
+                )
 
             GeometryReader { geo in
                 let d = min(geo.size.width, geo.size.height)
@@ -151,9 +167,9 @@ final class WheelCoordinator {
     static func rowsPerDetent(speed: Double) -> Int {
         switch abs(speed) {
         case ..<300: return 1
-        case ..<700: return 2
-        case ..<1200: return 3
-        case ..<2000: return 4
+        case ..<900: return 2
+        case ..<1800: return 3
+        case ..<3000: return 4
         default: return 6
         }
     }
@@ -309,16 +325,22 @@ final class WheelCoordinator {
         lastAngle = angle
         // Smoothed angular speed: instantaneous °/s over the event gap,
         // EMA-weighted so one fast event doesn't jump the multiplier. A
-        // long pause (> 0.5 s) means the spin stopped — start fresh.
+        // short pause (> 0.35 s) means the spin stopped — start fresh.
+        // While decelerating, shed speed quickly toward the instantaneous
+        // value: a slow ramp-down made every flick overshoot its target.
         let dt = now.timeIntervalSince(lastMoveAt)
         lastMoveAt = now
-        if dt >= 0.5 {
+        if dt >= 0.35 {
             degreesPerSecond = 0
         } else if dt > 0.004 {
             let instant = abs(d) / dt
-            degreesPerSecond = degreesPerSecond == 0
-                ? instant
-                : degreesPerSecond * 0.65 + instant * 0.35
+            if instant < degreesPerSecond {
+                degreesPerSecond = (degreesPerSecond + instant) / 2
+            } else {
+                degreesPerSecond = degreesPerSecond == 0
+                    ? instant
+                    : degreesPerSecond * 0.65 + instant * 0.35
+            }
         }
         accumulated += d
         let rows = Self.rowsPerDetent(speed: degreesPerSecond)

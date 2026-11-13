@@ -72,6 +72,7 @@ enum Route: Hashable {
     // Notes
     case notes
     case noteEditor(String)
+    case noteTrash
 
     // Clocks
     case clocks
@@ -98,7 +99,8 @@ enum Route: Hashable {
     case settingsPlayback
     case settingsAbout
 
-    // First-run setup
+    // First-run
+    case tour
     case setup
 }
 
@@ -167,12 +169,18 @@ final class AppModel {
             }
         }
 
-        // First launch: run the one-time setup wizard (permissions, voice
-        // model, defaults). RESET_DEFAULTS (UI tests) skips it so existing
-        // tests stay on home; SHOW_SETUP=1 forces it for QA.
+        // First launch: run the feature tour, then the one-time setup
+        // wizard (permissions, voice model, defaults). RESET_DEFAULTS
+        // (UI tests) skips both so existing tests stay on home;
+        // SHOW_TOUR=1 / SHOW_SETUP=1 force them for QA.
         let resetDefaults = ProcessInfo.processInfo.environment["RESET_DEFAULTS"] == "1"
         let showSetup = ProcessInfo.processInfo.environment["SHOW_SETUP"] == "1"
-        if showSetup || (!resetDefaults && !UserDefaults.standard.bool(forKey: "setup.done")) {
+        let showTour = ProcessInfo.processInfo.environment["SHOW_TOUR"] == "1"
+        if showSetup {
+            stack = [.setup]
+        } else if showTour || (!resetDefaults && !UserDefaults.standard.bool(forKey: "tour.done")) {
+            stack = [.tour]
+        } else if !resetDefaults && !UserDefaults.standard.bool(forKey: "setup.done") {
             stack = [.setup]
         }
 
@@ -244,6 +252,7 @@ final class AppModel {
         case "transcript": return .transcript(QASeed.transcriptFileName)
         case "notes": return .notes
         case "noteEditor": return .noteEditor(QASeed.qaNoteName)
+        case "noteTrash": return .noteTrash
         case "clocks": return .clocks
         case "calendar": return .calendar
         case "extras": return .extras
@@ -260,6 +269,7 @@ final class AppModel {
         case "display": return .settingsDisplay
         case "playback": return .settingsPlayback
         case "setup": return .setup
+        case "tour": return .tour
         default: return nil
         }
     }
@@ -274,6 +284,13 @@ final class AppModel {
         // permission pass has run, install any armed-alarm requests.
         alarms.schedule()
         stack = [.home]
+    }
+
+    /// Finishes the feature tour: marks it done and moves on to setup
+    /// (or straight home when setup already ran).
+    func completeTour() {
+        UserDefaults.standard.set(true, forKey: "tour.done")
+        stack = UserDefaults.standard.bool(forKey: "setup.done") ? [.home] : [.setup]
     }
 
     func push(_ route: Route) {

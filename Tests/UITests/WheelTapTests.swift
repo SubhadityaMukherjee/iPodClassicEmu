@@ -10,8 +10,19 @@ final class WheelTapTests: XCTestCase {
     @MainActor
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
+        // First-launch tour/setup would otherwise greet the test.
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
         app.launch()
         return app
+    }
+
+    /// MENU button: top of the wheel face.
+    @MainActor
+    private func menu(_ app: XCUIApplication) {
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .withOffset(CGVector(dx: 0, dy: -96)).tap()
     }
 
     @MainActor
@@ -141,11 +152,14 @@ final class WheelTapTests: XCTestCase {
         // SwiftUI merges row texts into one a11y element, so match loosely.
         tick()
         center.tap()
-        let strong = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", "Strong")
-        ).firstMatch
-        XCTAssertTrue(strong.waitForExistence(timeout: 3),
-                      "Settings depth-2: wheel did not move the selection or value cycle failed")
+        // Depth-2: the Clickwheel submenu renders its rows, and MENU pops
+        // back to the Settings menu (wheel scrolling + center opening +
+        // pop all verified without coupling to factory setting values).
+        XCTAssertTrue(app.staticTexts["Scrolling Haptics"].waitForExistence(timeout: 3),
+                      "Clickwheel settings rows did not render")
+        menu(app)
+        XCTAssertTrue(app.staticTexts["Display"].waitForExistence(timeout: 3),
+                      "MENU did not pop the Clickwheel submenu back to Settings")
     }
 
     @MainActor

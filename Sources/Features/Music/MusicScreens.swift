@@ -256,6 +256,13 @@ struct MusicListScreen: View {
     @State private var selection = 0
     @State private var toast = ""
     @State private var hold = SongHoldState()
+    // Letter snapping: a fast spin (≥5 net ticks inside 0.4 s) jumps the
+    // selection to the next letter group instead of crawling row by row,
+    // with the classic big-letter overlay while it's active.
+    @State private var tickBurst = 0
+    @State private var lastTickAt = Date.distantPast
+    @State private var letterOverlay: String?
+    @State private var letterHideWork: DispatchWorkItem?
 
     private static let songSortLabels = ["Title", "Artist", "Duration", "Recently Added"]
     private static let albumSortLabels = ["Title", "Artist", "Recently Added"]
@@ -335,6 +342,18 @@ struct MusicListScreen: View {
                 // Thumbnails resolve by album id; only thumbnail-style lists render them.
                 model.music.album(item.id)?.artwork
             }
+            if let letter = letterOverlay {
+                Text(letter)
+                    .font(.system(size: 50, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 76, height: 76)
+                    .background(Capsule().fill(Color.white.opacity(0.92)))
+                    .overlay(Capsule().stroke(Theme.inkDim.opacity(0.4), lineWidth: 1))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .padding(.trailing, 16)
+                    .zIndex(1)
+                    .allowsHitTesting(false)
+            }
             if !toast.isEmpty {
                 ToastCapsule(text: toast)
                     .zIndex(2)
@@ -349,6 +368,46 @@ struct MusicListScreen: View {
             if !model.music.loaded && !model.music.loading {
                 Task { await model.music.loadLibrary() }
             }
+        }
+    }
+
+    private var letterSnapEnabled: Bool {
+        kind == .songs || kind == .albums || kind == .artists
+    }
+
+    /// Jumps to the next letter group in `d`'s direction and shows the
+    /// classic letter overlay. Returns false when the row can't snap
+    /// (edge of the list) so the caller falls back to a normal move.
+    private func snapToLetter(by d: Int) -> Bool {
+        let titles = entryItems.map(\.title)
+        let entry = selection - headerItems.count
+        guard titles.indices.contains(entry),
+              let target = Self.letterSnapTarget(titles: titles, from: entry, dir: d)
+        else { return false }
+        selection = target + headerItems.count
+        letterOverlay = titles[target].first.map { String($0).uppercased() } ?? "#"
+        WheelFeedback.tick(dir: d)
+        letterHideWork?.cancel()
+        let work = DispatchWorkItem {
+            withAnimation(.easeIn(duration: 0.25)) { letterOverlay = nil }
+        }
+        letterHideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: work)
+        return true
+    }
+
+    /// Index of the next row whose leading letter differs from
+    /// `titles[index]`'s, scanning in `dir`; nil at the edge.
+    nonisolated static func letterSnapTarget(titles: [String], from index: Int, dir: Int) -> Int? {
+        guard titles.indices.contains(index) else { return nil }
+        func key(_ s: String) -> String { s.first.map { String($0).uppercased() } ?? "#" }
+        let current = key(titles[index])
+        var i = index
+        while true {
+            let next = i + dir
+            guard titles.indices.contains(next) else { return nil }
+            if key(titles[next]) != current { return next }
+            i = next
         }
     }
 
@@ -379,6 +438,10 @@ struct MusicListScreen: View {
         if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
         case .tick(let d):
+            let now = Date()
+            tickBurst = now.timeIntervalSince(lastTickAt) <= 0.4 ? tickBurst + d : d
+            lastTickAt = now
+            if letterSnapEnabled, abs(tickBurst) >= 5, snapToLetter(by: d) { break }
             moveListSelection(&selection, count: allItems.count, delta: d, settings: settings)
         case .select:
             if selection < headerItems.count {

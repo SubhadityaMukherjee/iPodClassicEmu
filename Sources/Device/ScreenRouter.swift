@@ -33,6 +33,7 @@ struct ScreenRouter: View {
         case .transcript(let name): return TranscriptStore.displayTitle(for: name)
         case .notes: return "Notes"
         case .noteEditor: return "Edit Note"
+        case .noteTrash: return "Trash"
         case .clocks: return "Clocks"
         case .extras: return "Extras"
         case .flashlight: return "Flashlight"
@@ -50,7 +51,8 @@ struct ScreenRouter: View {
         case .settingsDisplay: return "Display"
         case .settingsPlayback: return "Playback"
         case .settingsAbout: return "About"
-        case .setup: return "Welcome"
+        case .setup: return "Setup"
+        case .tour: return "Welcome"
         case nil: return "iPod"
         }
     }
@@ -62,15 +64,25 @@ struct ScreenRouter: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)  // layers always fill the screen…
                     .background(PaperBackground())                     // …so this paper covers everything below
                     .environment(\.acceptsWheelInput, index == model.stack.count - 1)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
+                    .transition(transition(for: route))
                     .zIndex(Double(index))
                     .allowsHitTesting(index == model.stack.count - 1)
             }
         }
         .clipped()
+    }
+
+    /// Classic iPod motion: screens slide in iPod-style; Now Playing gets
+    /// the video-iPod "flip" — it rotates in around the Y axis when you
+    /// pick a song and flips back out.
+    private func transition(for route: Route) -> AnyTransition {
+        route == .nowPlaying
+            ? .asymmetric(
+                insertion: .modifier(active: Flip(angle: 96, fade: 0), identity: Flip(angle: 0, fade: 1)),
+                removal: .modifier(active: Flip(angle: -96, fade: 0), identity: Flip(angle: 0, fade: 1)))
+            : .asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .trailing).combined(with: .opacity))
     }
 
     @ViewBuilder
@@ -105,6 +117,7 @@ struct ScreenRouter: View {
         // Notes
         case .notes: NotesListScreen()
         case .noteEditor(let name): NoteEditorScreen(fileName: name)
+        case .noteTrash: NoteTrashScreen()
         // Clocks
         case .clocks: ClocksMenuScreen()
         case .extras: ExtrasScreen()
@@ -125,7 +138,20 @@ struct ScreenRouter: View {
         case .settingsPlayback: PlaybackSettingsScreen()
         case .settingsAbout: AboutScreen()
         case .setup: SetupScreen()
+        case .tour: TourScreen()
         }
+    }
+}
+
+/// The video-iPod flip: rotate around the Y axis while fading, used for
+/// Now Playing push/pop.
+private struct Flip: ViewModifier {
+    let angle: Double
+    let fade: Double
+    func body(content: Content) -> some View {
+        content
+            .opacity(fade)
+            .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), perspective: 0.65)
     }
 }
 

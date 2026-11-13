@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Notes list: New Note row plus existing notes; hold center to delete.
+/// Notes list: New Note row plus existing notes; hold center for options
+/// (Share / Delete — delete goes to the Trash, recoverable from the
+/// Trash row at the bottom).
 struct NotesListScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
-    @State private var deleteCandidate: String?
-    @State private var deleteSelection = 0
+    @State private var toast = ""
 
     var body: some View {
         ZStack {
@@ -16,8 +17,8 @@ struct NotesListScreen: View {
                 emptyText: "No Notes",
                 style: .twoLine
             )
-            if deleteCandidate != nil {
-                ModalHost { deletePanel }
+            if !toast.isEmpty {
+                ToastCapsule(text: toast)
                     .zIndex(2)
             }
             if holdItem != nil {
@@ -26,7 +27,10 @@ struct NotesListScreen: View {
             }
         }
         .onWheel { handle($0) }
-        .onAppear { model.notes.loadNotes() }
+        .onAppear {
+            model.notes.loadNotes()
+            model.notes.loadTrash()
+        }
         .sheet(isPresented: Binding(get: { shareText != nil }, set: { if !$0 { shareText = nil } })) {
             if let text = shareText {
                 ActivityView(items: [text])
@@ -39,19 +43,10 @@ struct NotesListScreen: View {
         items.append(contentsOf: model.notes.notes.map { note in
             MenuItem(id: note.id, title: note.name, subtitle: note.preview.isEmpty ? nil : note.preview, detail: TimeFormat.friendly(note.date), showsChevron: true)
         })
-        return items
-    }
-
-    private var deletePanel: some View {
-        ModalPanel(title: "Delete Note", onClose: { deleteCandidate = nil }) {
-            VStack(spacing: 0) {
-                MenuRow(item: MenuItem(id: "del.yes", title: "Delete", showsChevron: false), selected: deleteSelection == 0)
-                    .frame(height: 30.5)
-                MenuRow(item: MenuItem(id: "del.no", title: "Cancel", showsChevron: false), selected: deleteSelection == 1)
-                    .frame(height: 30.5)
-            }
-            .padding(.top, 2)
+        if !model.notes.trash.isEmpty {
+            items.append(MenuItem(id: "__trash__", title: "Trash", detail: "\(model.notes.trash.count)", symbol: "trash", showsChevron: false))
         }
+        return items
     }
 
     private func handle(_ event: ControlEvent) {
@@ -63,31 +58,19 @@ struct NotesListScreen: View {
             case .select:
                 switch holdSelection {
                 case 0: shareText = "\(holdItem ?? "")\n\n\(model.notes.read(holdItem ?? ""))"; holdItem = nil
-                case 1: deleteCandidate = holdItem; deleteSelection = 1; holdItem = nil
+                case 1:
+                    // Straight to the trash — recoverable, so no extra
+                    // confirm level here.
+                    if let name = holdItem {
+                        model.notes.trash(name)
+                        if selection >= listItems.count { selection = max(0, listItems.count - 1) }
+                        showToast("Moved to Trash")
+                    }
+                    holdItem = nil
                 default: holdItem = nil
                 }
             case .menu, .menuHold:
                 holdItem = nil
-            default:
-                break
-            }
-            return
-        }
-        if deleteCandidate != nil {
-            switch event {
-            case .tick(let d):
-                deleteSelection = deleteSelection == 0 ? 1 : 0
-                WheelFeedback.tick(dir: d)
-            case .select:
-                if deleteSelection == 0, let name = deleteCandidate {
-                    model.notes.delete(name)
-                    withAnimation(.easeOut(duration: 0.18)) { deleteCandidate = nil }
-                    if selection >= listItems.count { selection = max(0, listItems.count - 1) }
-                } else {
-                    withAnimation(.easeOut(duration: 0.18)) { deleteCandidate = nil }
-                }
-            case .menu:
-                withAnimation(.easeOut(duration: 0.18)) { deleteCandidate = nil }
             default:
                 break
             }
@@ -101,12 +84,14 @@ struct NotesListScreen: View {
             if item.id == "__new__" {
                 let name = model.notes.create()
                 model.push(.noteEditor(name))
+            } else if item.id == "__trash__" {
+                model.push(.noteTrash)
             } else {
                 model.push(.noteEditor(item.id))
             }
         case .centerHold:
             let item = listItems[min(selection, listItems.count - 1)]
-            if item.id != "__new__" {
+            if item.id != "__new__" && item.id != "__trash__" {
                 holdItem = item.id
                 holdSelection = 0
             }
@@ -114,6 +99,13 @@ struct NotesListScreen: View {
             model.pop()
         default:
             break
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation(.easeOut(duration: 0.2)) { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeIn(duration: 0.3)) { toast = "" }
         }
     }
 
@@ -135,8 +127,11 @@ struct NotesListScreen: View {
                 MenuRow(item: MenuItem(id: "h.delete", title: "Delete", showsChevron: false), selected: holdSelection == 1)
                     .frame(height: 30.5)
                     .onTapGesture {
-                        deleteCandidate = holdItem
-                        deleteSelection = 1
+                        if let name = holdItem {
+                            model.notes.trash(name)
+                            if selection >= listItems.count { selection = max(0, listItems.count - 1) }
+                            showToast("Moved to Trash")
+                        }
                         holdItem = nil
                     }
                 MenuRow(item: MenuItem(id: "h.cancel", title: "Cancel", showsChevron: false), selected: holdSelection == 2)
@@ -185,7 +180,11 @@ struct NoteEditorScreen: View {
             .foregroundStyle(Theme.ink)
             .scrollContentBackground(.hidden)
             .background(PaperBackground())
-            .padding(.horizontal, 4)
+            // Comfortable text margins, matching the reader's content
+            // padding instead of hugging the LCD edges.
+            .padding(.leading, 12)
+            .padding(.trailing, 12)
+            .padding(.top, 6)
             .onAppear {
                 // Grey scroll indicator — the default renders white on
                 // the paper background.
@@ -442,4 +441,99 @@ struct TextViewProbe: UIViewRepresentable {
     }
 
     func updateUIView(_ v: UIView, context: Context) {}
+}
+
+/// Deleted notes: restore to the notes list, or remove for good.
+/// Center restores the selected note; hold center offers Delete Forever.
+struct NoteTrashScreen: View {
+    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
+    @State private var selection = 0
+    @State private var holdItem: String?
+    @State private var holdSelection = 0
+
+    var body: some View {
+        ZStack {
+            MenuList(
+                items: trashItems,
+                selection: selection,
+                emptyText: "Trash Empty",
+                style: .twoLine
+            )
+            if holdItem != nil {
+                ModalHost { panel }
+                    .zIndex(2)
+            }
+        }
+        .onWheel { handle($0) }
+        .onAppear { model.notes.loadTrash() }
+    }
+
+    private var trashItems: [MenuItem] {
+        model.notes.trash.map { note in
+            MenuItem(id: note.id, title: note.name, subtitle: note.preview.isEmpty ? nil : note.preview, detail: TimeFormat.friendly(note.date), showsChevron: false)
+        }
+    }
+
+    private var panel: some View {
+        ModalPanel(title: "Trashed Note", onClose: { holdItem = nil }) {
+            VStack(spacing: 0) {
+                MenuRow(item: MenuItem(id: "t.forever", title: "Delete Forever", showsChevron: false), selected: holdSelection == 0)
+                    .frame(height: 30.5)
+                    .onTapGesture {
+                        if let name = holdItem {
+                            model.notes.deleteForever(name)
+                            if selection >= trashItems.count { selection = max(0, trashItems.count - 1) }
+                        }
+                        holdItem = nil
+                    }
+                MenuRow(item: MenuItem(id: "t.cancel", title: "Cancel", showsChevron: false), selected: holdSelection == 1)
+                    .frame(height: 30.5)
+                    .onTapGesture { holdItem = nil }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func handle(_ event: ControlEvent) {
+        if holdItem != nil {
+            switch event {
+            case .tick(let d):
+                holdSelection = holdSelection == 0 ? 1 : 0
+                WheelFeedback.tick(dir: d)
+            case .select:
+                if holdSelection == 0, let name = holdItem {
+                    model.notes.deleteForever(name)
+                    if selection >= trashItems.count { selection = max(0, trashItems.count - 1) }
+                }
+                holdItem = nil
+            case .menu, .menuHold:
+                holdItem = nil
+            default:
+                break
+            }
+            return
+        }
+        switch event {
+        case .tick(let d):
+            moveListSelection(&selection, count: trashItems.count, delta: d, settings: settings)
+        case .select:
+            let item = trashItems[min(selection, max(0, trashItems.count - 1))]
+            if trashItems.isEmpty { break }
+            model.notes.restore(item.id)
+            WheelHaptics.shared.ensureRunning()
+            WheelHaptics.shared.buttonPress(strength: 0.7)
+            if selection >= trashItems.count { selection = max(0, trashItems.count - 1) }
+        case .centerHold:
+            let item = trashItems[min(selection, max(0, trashItems.count - 1))]
+            if !trashItems.isEmpty {
+                holdItem = item.id
+                holdSelection = 0
+            }
+        case .menu:
+            model.pop()
+        default:
+            break
+        }
+    }
 }
