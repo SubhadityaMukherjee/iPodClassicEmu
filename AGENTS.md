@@ -65,4 +65,4 @@ There is no linter; keep style consistent with surrounding code. Swift 5, iOS 18
 
 ## TestFlight
 
-Bump `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in `project.yml`, `xcodegen generate`, archive the `iPodClassic` scheme with Xcode, upload. MusicKit + notifications work on device with the personal team for development; TestFlight needs the paid team selected in Signing & Capabilities.
+Bump `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in `project.yml`, `xcodegen generate`, archive the `iPodClassic` scheme with Xcode, upload — or just run `scripts/ship.sh`: it builds Release and installs on the phone (paid team `46655DQD2X` first, falls back to the personal team `365U99GNTQ` if the paid account isn't active yet), `scripts/ship.sh --tf` additionally archives and uploads to TestFlight (auto-increments the build number). MusicKit + notifications work on device with the personal team for development; TestFlight needs the paid team selected in Signing & Capabilities.
