@@ -74,7 +74,6 @@
 		BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */; };
 		BDCFE1DC543919A4192B71E2 /* RouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */; };
 		C33C03ED0D677C9F137A329C /* ReaderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */; };
-		CBB414B3AE5E25D786C1F0F0 /* PDFReflowColumnTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AFF1157C207934C7045EF81 /* PDFReflowColumnTests.swift */; };
 		CCE5269ADD98979ED5F089DB /* ClockFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE0B67D71510C6279340644 /* ClockFace.swift */; };
 		CE6E87EC8A810CF7BF7AA62F /* AlarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8919784990F005864723A97 /* AlarmStore.swift */; };
 		CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9168F602DF28123A3C7389 /* RecorderModel.swift */; };
@@ -183,7 +182,6 @@
 		7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuSelectionTests.swift; sourceTree = "<group>"; };
 		826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelTapTests.swift; sourceTree = "<group>"; };
 		83813FFB62AFA2BA71D7B05D /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
-		8AFF1157C207934C7045EF81 /* PDFReflowColumnTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReflowColumnTests.swift; sourceTree = "<group>"; };
 		8DE0B67D71510C6279340644 /* ClockFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockFace.swift; sourceTree = "<group>"; };
 		8EAC0590B8229DE23E30083F /* PlaybackSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSessionTests.swift; sourceTree = "<group>"; };
 		90462DBBAE1970378F420CEE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -429,7 +427,6 @@
 				7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */,
 				DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */,
 				6C746E09FCFDA897EB495D22 /* NotesStoreTests.swift */,
-				8AFF1157C207934C7045EF81 /* PDFReflowColumnTests.swift */,
 				6A06C23A4AB3B056577E9965 /* PDFReflowTests.swift */,
 				8EAC0590B8229DE23E30083F /* PlaybackSessionTests.swift */,
 				06E5B68A6556EACB64528E07 /* ReaderFontTests.swift */,
@@ -793,7 +790,6 @@
 				B96435FA601253641FD082E8 /* MenuSelectionTests.swift in Sources */,
 				8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */,
 				A69F98C929E1AC2E0B869145 /* NotesStoreTests.swift in Sources */,
-				CBB414B3AE5E25D786C1F0F0 /* PDFReflowColumnTests.swift in Sources */,
 				2448D01DF2C37F417EE051CB /* PDFReflowTests.swift in Sources */,
 				A5BBDA7AE0BB5444176F459E /* PlaybackSessionTests.swift in Sources */,
 				3745E1CB511E64BEE553FC6B /* ReaderFontTests.swift in Sources */,

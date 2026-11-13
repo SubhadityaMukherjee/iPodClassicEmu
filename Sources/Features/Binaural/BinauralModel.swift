@@ -1,5 +1,7 @@
 import AVFoundation
+import MediaPlayer
 import SwiftUI
+import UIKit
 
 /// Live binaural-beat synthesis: two pure sine tones, one per channel,
 /// at carrier ± beat/2 — the brain perceives the difference as a slow
@@ -40,6 +42,60 @@ final class BinauralModel {
         self.defaults = defaults
     }
 
+    // MARK: Lock screen (Now Playing)
+
+    /// Publishes the session to the system Now Playing card (lock screen /
+    /// Control Center); nil clears it. Seam for unit tests.
+    var nowPlayingPublisher: (_ title: String?, _ elapsed: TimeInterval) -> Void = { title, elapsed in
+        let center = MPNowPlayingInfoCenter.default()
+        if let title {
+            center.nowPlayingInfo = [
+                MPMediaItemPropertyTitle: title,
+                MPMediaItemPropertyArtist: "iPod Classic",
+                MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
+                MPNowPlayingInfoPropertyPlaybackRate: 1.0,
+                MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
+            ]
+        } else {
+            center.nowPlayingInfo = nil
+        }
+    }
+    /// Tests disable system remote-command registration.
+    var usesSystemRemoteCommands = true
+    private var remoteInstalled = false
+
+    private func installRemoteCommands() {
+        guard usesSystemRemoteCommands, !remoteInstalled else { return }
+        remoteInstalled = true
+        let center = MPRemoteCommandCenter.shared()
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            if isPlaying { stop() } else if let active { toggle(active) }
+            return .success
+        }
+        center.pauseCommand.addTarget { [weak self] _ in
+            self?.stop()
+            return .success
+        }
+        center.playCommand.addTarget { [weak self] _ in
+            guard let self, !isPlaying, let active else { return .commandFailed }
+            toggle(active)
+            return .success
+        }
+        center.nextTrackCommand.isEnabled = false
+        center.previousTrackCommand.isEnabled = false
+        center.changePlaybackPositionCommand.isEnabled = false
+        UIApplication.shared.beginReceivingRemoteControlEvents()
+    }
+
+    private func publishNowPlaying() {
+        if isPlaying, let active {
+            nowPlayingPublisher("Binaural · \(active.name)", elapsed)
+        } else {
+            nowPlayingPublisher(nil, 0)
+        }
+    }
+
     // MARK: Volume
 
     /// Persisted index into `volumeLevels`.
@@ -74,6 +130,7 @@ final class BinauralModel {
         ticker?.invalidate()
         ticker = nil
         elapsed = 0
+        publishNowPlaying()
     }
 
     var statusLine: String {
@@ -86,10 +143,13 @@ final class BinauralModel {
         elapsed = 0
         isPlaying = true
         engine.start(beat: active.beat, carrier: Self.carrierHz, volume: volume)
+        installRemoteCommands()
+        publishNowPlaying()
         ticker?.invalidate()
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self, self.isPlaying else { return }
             elapsed += 1
+            publishNowPlaying()
         }
     }
 }
@@ -174,27 +234,34 @@ final class BinauralAudioEngine: NSObject, BinauralEngineType {
         engine.connect(node, to: output, format: format)
     }
 
-    /// Real-time render: per-frame linear gain ramp (~60 ms) for click-free
-    /// start/stop; separate phase accumulators per ear.
+    /// Real-time render: params are snapshotted under a brief lock, then
+    /// the per-frame loop runs LOCK-FREE — the real-time audio thread must
+    /// never hold a lock across work (priority inversion against the main
+    /// thread showed up as a periodic artifact under the tones). Gain
+    /// ramps per frame (~60 ms) for click-free start/stop; separate phase
+    /// accumulators per ear.
     private func render(frames: Int, into bufferList: UnsafeMutablePointer<AudioBufferList>) {
         lock.lock()
         let beatHz = beat
         let carrierHz = carrier
         let vol = volume
-        let rampStep = Float(1.0 / max(0.06 * sampleRate, 1))
-        if gain < targetGain { gain = min(targetGain, gain + rampStep) }
-        else if gain > targetGain { gain = max(targetGain, gain - rampStep) }
-        let g = gain
+        var g = gain
+        let target = targetGain
         let stepL = 2 * Double.pi * (carrierHz - beatHz / 2) / sampleRate
         let stepR = 2 * Double.pi * (carrierHz + beatHz / 2) / sampleRate
         var l = phaseL
         var r = phaseR
+        lock.unlock()
+
+        let rampStep = Float(1.0 / max(0.06 * sampleRate, 1))
         let abl = UnsafeMutableAudioBufferListPointer(bufferList)
         // Standard stereo output: buffer 0 = left, buffer 1 = right.
         if abl.count >= 2,
            let left = abl[0].mData?.assumingMemoryBound(to: Float.self),
            let right = abl[1].mData?.assumingMemoryBound(to: Float.self) {
             for i in 0..<frames {
+                if g < target { g = min(target, g + rampStep) }
+                else if g > target { g = max(target, g - rampStep) }
                 left[i] = Float(sin(l) * Double(vol) * Double(g))
                 right[i] = Float(sin(r) * Double(vol) * Double(g))
                 l += stepL
@@ -202,9 +269,11 @@ final class BinauralAudioEngine: NSObject, BinauralEngineType {
                 if l > 2 * Double.pi { l -= 2 * Double.pi }
                 if r > 2 * Double.pi { r -= 2 * Double.pi }
             }
-            phaseL = l
-            phaseR = r
         }
+        lock.lock()
+        gain = g
+        phaseL = l
+        phaseR = r
         lock.unlock()
     }
 }

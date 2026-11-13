@@ -24,7 +24,16 @@ final class BinauralModelTests: XCTestCase {
         let d = UserDefaults(suiteName: defaultsName)!
         d.removePersistentDomain(forName: defaultsName)
         model = BinauralModel(engine: engine, defaults: d)
+        model.usesSystemRemoteCommands = false
+        var published: [(title: String?, elapsed: TimeInterval)] = []
+        model.nowPlayingPublisher = { title, elapsed in
+            published.append((title, elapsed))
+            BinauralModelTests.lastPublished = published
+        }
+        BinauralModelTests.lastPublished = []
     }
+
+    static var lastPublished: [(title: String?, elapsed: TimeInterval)] = []
 
     override func tearDown() {
         UserDefaults(suiteName: defaultsName)!.removePersistentDomain(forName: defaultsName)
@@ -79,5 +88,14 @@ final class BinauralModelTests: XCTestCase {
     func testStopWhenIdleIsANoop() {
         model.stop()
         XCTAssertEqual(engine.stops, 0, "stop without playback shouldn't touch the engine")
+    }
+
+    func testNowPlayingPublishesOnStartAndClearsOnStop() {
+        model.toggle(preset("Schumann"))
+        let last = Self.lastPublished.last
+        XCTAssertEqual(last?.title, "Binaural · Schumann", "lock screen card titles the session")
+        XCTAssertEqual(last?.elapsed, 0)
+        model.stop()
+        XCTAssertEqual(Self.lastPublished.last?.title, nil, "stopping clears the Now Playing card")
     }
 }
