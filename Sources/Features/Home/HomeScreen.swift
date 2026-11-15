@@ -23,10 +23,13 @@ struct HomeScreen: View {
         ]
         // Recents: one jump-back row per type with something to resume.
         let r = model.recents
-        if r.book != nil || r.playlist != nil || r.album != nil || r.recording != nil || r.clock != nil {
+        if r.book != nil || r.playlist != nil || r.album != nil || r.recording != nil || r.binaural != nil || r.clock != nil {
             list.append(MenuItem(id: "recents.header", title: "Recents", showsChevron: false, isActionRow: true))
             if let e = r.book {
                 list.append(MenuItem(id: "recents.book", title: e.title, detail: "Book", symbol: "book", showsChevron: false))
+            }
+            if let e = r.binaural {
+                list.append(MenuItem(id: "recents.binaural", title: e.title, detail: "Binaural", symbol: "waveform", showsChevron: false))
             }
             if let e = r.playlist {
                 list.append(MenuItem(id: "recents.playlist", title: e.title, detail: "Playlist", symbol: "music.note.list", showsChevron: false))
@@ -83,6 +86,7 @@ struct HomeScreen: View {
             model.push(.nowPlaying)
         case "nowplaying": model.push(.nowPlaying)
         case "recents.book": model.push(.readerBook(model.recents.book?.id ?? ""))
+        case "recents.binaural": model.push(.binaural)
         case "recents.playlist": model.push(.playlistDetail(model.recents.playlist?.id ?? ""))
         case "recents.album": model.push(.albumDetail(model.recents.album?.id ?? ""))
         case "recents.recording": model.push(.recordingDetail(model.recents.recording?.id ?? ""))
@@ -138,6 +142,8 @@ struct HomeScreen: View {
             }
         case "recents.book":
             glyph("book.fill")
+        case "recents.binaural":
+            glyph("waveform")
         case "recents.playlist":
             glyph("music.note.list")
         case "recents.album":

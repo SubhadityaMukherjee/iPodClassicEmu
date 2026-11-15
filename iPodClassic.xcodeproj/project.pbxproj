@@ -14,6 +14,7 @@
 		0ADDDACB18BA7302F69083ED /* WheelInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6461E37C6B4E93CC838424E /* WheelInput.swift */; };
 		0B5BE9ABA8833A94B6A38943 /* QASeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002EA79AA1F8371F29742EE8 /* QASeed.swift */; };
 		0DC95624122FD47CA5C41E5F /* Transcription.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE71F60BC7953CF4C99B25 /* Transcription.swift */; };
+		0E2481FECAF7DF80EE26D14A /* PhotosE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A1C348FF35D312533F77B7 /* PhotosE2ETests.swift */; };
 		10B1C4FF68575FCC69D2F711 /* AlarmTone.caf in Resources */ = {isa = PBXBuildFile; fileRef = B9E813213263E69F0E5B46BF /* AlarmTone.caf */; };
 		10E0173F1D59E2A087E951C1 /* TimerStopwatchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE4F74ACAB7D2FE7FB6BD26 /* TimerStopwatchModels.swift */; };
 		183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06464256EE519A5BD50EA73F /* iPodClassicApp.swift */; };
@@ -180,6 +181,7 @@
 		79F96604B2BA5F0E6E4B917A /* BinauralModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinauralModelTests.swift; sourceTree = "<group>"; };
 		7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreens.swift; sourceTree = "<group>"; };
 		7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuSelectionTests.swift; sourceTree = "<group>"; };
+		80A1C348FF35D312533F77B7 /* PhotosE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosE2ETests.swift; sourceTree = "<group>"; };
 		826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelTapTests.swift; sourceTree = "<group>"; };
 		83813FFB62AFA2BA71D7B05D /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
 		8DE0B67D71510C6279340644 /* ClockFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockFace.swift; sourceTree = "<group>"; };
@@ -357,6 +359,7 @@
 			children = (
 				2FFA9E69DB00DC268067DD8B /* E2ETests.swift */,
 				E266621CE1581D432D96D171 /* NotesEditorTests.swift */,
+				80A1C348FF35D312533F77B7 /* PhotosE2ETests.swift */,
 				56BA4CAA0AC9BF279FB702C7 /* SetupUITests.swift */,
 				826AD6AADF5069E3B4384B9F /* WheelTapTests.swift */,
 			);
@@ -770,6 +773,7 @@
 			files = (
 				AF0B029055EBE310E79A0C5C /* E2ETests.swift in Sources */,
 				DA1FEB709FB893BD0D45B8DF /* NotesEditorTests.swift in Sources */,
+				0E2481FECAF7DF80EE26D14A /* PhotosE2ETests.swift in Sources */,
 				00F1EA8D78064E9950B10313 /* SetupUITests.swift in Sources */,
 				FC441BCF22529569C9289A56 /* WheelTapTests.swift in Sources */,
 			);

@@ -43,7 +43,6 @@ struct ScreenRouter: View {
         case .readerArticles: return "Articles"
         case .readerBook(let id): return model.reader.book(id: id)?.title ?? "Reader"
         case .calendar: return "Calendar"
-        case .binaural: return "Binaural"
         case .musicSearch: return "Search"
         case .alarm: return "Alarm Clock"
         case .timer: return "Timer"
@@ -131,7 +130,6 @@ struct ScreenRouter: View {
         case .readerBook(let id): BookScreen(bookID: id)
         case .musicSearch: MusicSearchScreen()
         case .calendar: CalendarScreen()
-        case .binaural: BinauralScreen()
         case .alarm: AlarmScreen()
         case .timer: TimerScreen()
         case .stopwatch: StopwatchScreen()

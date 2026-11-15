@@ -19,6 +19,7 @@ I wanted this not just because I wanted the vibes of an iPod but mainly because 
 - Full-device UI: black (or silver) body, working Hold switch, LCD with subtle CRT scanlines and backlight illusion
 - Real click wheel: angle-based scroll ticks (15°/detent), press-and-turn, hold timers with repeat, CoreHaptics tick feedback and click sounds, subtle sector seams and a dimmed wheel like real hardware
 - Wheel-only navigation with the classic quirks: MENU pops one level, MENU-hold goes home, PLAY-hold sleeps
+- **Recents** on the home menu: jump straight back into your last book, playlist, album, recording, binaural session, or the timer/stopwatch
 
 **Music (Apple Music via MusicKit)**
 
@@ -49,8 +50,9 @@ I wanted this not just because I wanted the vibes of an iPod but mainly because 
 **Reader**
 
 - Import PDFs and EPUBs from the Files app; everything stays on-device
+- **Read Later**: save any web article via the share sheet (or paste a URL) — it's extracted into a clean, reader-friendly chapter alongside your books
 - True page-based EPUB reading: pages filled with complete lines only (no half-cut text ever), one wheel tick = one page turn, adjustable font size (11–25 px), serif/sans, line spacing, margins, and screen dimming
-- PDFs render via PDFKit with continuous or one-page mode
+- PDFs render via PDFKit with continuous or one-page mode, and text PDFs can **reflow** through the same paginated engine as EPUBs
 - Chapter navigation with titles from the book's own table of contents; per-book position memory that survives force-quits and app updates
 - Page-accurate whole-book progress bar; highlights (EPUB and PDF) persist and mirror into a Notes file; hold center for per-book settings
 
@@ -63,8 +65,9 @@ I wanted this not just because I wanted the vibes of an iPod but mainly because 
 
 - Camera with wheel zoom, aspect-ratio switching (prev/next), lens flip (hold), wheel-driven capture — just like the real thing
 - You can map the camera in this app to your action button as well!
-- Photos grid + full-screen detail
-- Voice recorder: background-safe long recordings, pause/resume, playback, share sheet
+- Photo gallery: wheel-driven grid with sharp retina thumbnails, full-screen detail with pinch-zoom, pan, and share
+- Voice recorder: background-safe long recordings, pause/resume, playback, share sheet — plus **on-device transcription** (no cloud): view, retry, and share transcripts right from the memo
+- **Binaural beats**: live-synthesized tones with six presets (Delta through Gamma, plus Schumann 7.83 Hz) that keep playing while you browse, with a lock-screen Now Playing card
 - Notes editor with autosave; files visible in the Files app
 - Calendar, flashlight, and an About screen
 - Settings for haptics, wheel behavior, display (CRT/scanlines/dim), playback, and themes
@@ -117,7 +120,7 @@ xcodebuild -project iPodClassic.xcodeproj -scheme iPodClassic \
 ```
 
 - **Unit tests** (`Tests/iPodClassicTests/`) cover time formatting, wheel geometry, alarm math and weekday repeats, the player model, the reader store, ZIP/EPUB extraction and parsing, and the highlight store.
-- **UI tests** (`Tests/UITests/`) drive the click wheel with real touch events and verify navigation, the alarm ringer, search, and the reader end to end.
+- **UI tests** (`Tests/UITests/`) drive the click wheel with real touch events and verify navigation, the alarm ringer, search, the reader, and the photo gallery end to end.
 
 The app exposes launch-environment hooks for testing and screenshots: `RESET_DEFAULTS=1`, `START_ROUTE=<route>` (plus `readerLast` to reopen the last book), `FAKE_LIBRARY=1` (seed songs and a fake Now Playing track — MusicKit items can't be constructed in tests), `ALARM_FIRE_SECONDS=N`, `READER_IMPORT=<file>` + `READER_CHAPTER=<n>` + `READER_TICKS=<n>` for EPUB harness runs, `NOW_PLAYING_PANEL=1` / `BOOK_SETTINGS=1` to open the hold-panels. `scripts/round_corners.swift` rounds screenshot corners for the README.
 
@@ -131,7 +134,7 @@ Sources/
   Wheel/                    click wheel gestures, haptics, tick sounds
   UI/                       theme, menus, modal panels, artwork
   Features/                 one self-contained folder per feature
-    Music/  Photos/  Camera/  Recorder/  Notes/  Clocks/  Extras/  Reader/  Settings/
+    Music/  Photos/  Camera/  Recorder/  Notes/  Clocks/  Extras/  Binaural/  Reader/  Settings/
   Support/                  QA seed data for tests and screenshots
 Shared/                     activity attributes shared with the widget target
 Widgets/                    Live Activity widget extension

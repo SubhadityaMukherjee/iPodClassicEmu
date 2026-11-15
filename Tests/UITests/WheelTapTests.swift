@@ -174,13 +174,21 @@ final class WheelTapTests: XCTestCase {
         origin.withOffset(CGVector(dx: 64, dy: 64))
             .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
         center.tap()
-        XCTAssertTrue(app.staticTexts["No Photos"].waitForExistence(timeout: 3)
-                      || app.staticTexts["Allow photo access to see your gallery."].exists,
+        // Title bar — the same marker whether the library is empty,
+        // unauthorized, or populated (PhotosE2ETests may have granted access).
+        XCTAssertTrue(app.staticTexts["All Photos"].waitForExistence(timeout: 3),
                       "Photos screen did not open")
 
-        // Center again on the Photos screen (empty library → no-op). If a
-        // buried screen still listened, home would push a duplicate Photos.
+        // Center again on the Photos screen: with no library/no access it's
+        // a no-op; with photos it opens photo #0. Either way ONLY the top
+        // screen may react — if a buried screen listened too, home would
+        // push a duplicate Photos, and the MENU counts below would break.
         center.tap()
+        if app.staticTexts["Photo"].waitForExistence(timeout: 2) {
+            origin.withOffset(CGVector(dx: 0, dy: -96)).tap() // pop the detail back to the grid
+            XCTAssertTrue(app.staticTexts["All Photos"].waitForExistence(timeout: 3),
+                          "MENU did not pop the photo detail back to the grid")
+        }
 
         // MENU pops exactly one level: we must land back on HOME (its first
         // row is visible), not on another Photos screen. The last home row
@@ -204,13 +212,12 @@ final class WheelTapTests: XCTestCase {
         start.press(forDuration: 0.02, thenDragTo: end)
 
         // Selection should now be Photos; a center tap opens the Photos
-        // screen, whose empty-library hint is unique to that screen.
+        // screen — identified by its title bar, whatever the library state.
         let center = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         center.tap()
 
         XCTAssertTrue(
-            app.staticTexts["Allow photo access to see your gallery."].waitForExistence(timeout: 3)
-                || app.staticTexts["No Photos"].waitForExistence(timeout: 1),
+            app.staticTexts["All Photos"].waitForExistence(timeout: 3),
             "One tick did not move selection Music → Photos (or select broke)"
         )
     }

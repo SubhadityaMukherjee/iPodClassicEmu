@@ -101,6 +101,7 @@ struct PhotosGridScreen: View {
 /// One thumbnail cell with blue selection frame.
 private struct PhotoCell: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.displayScale) private var displayScale
     let asset: PHAsset?
     let selected: Bool
     let cellSize: CGFloat
@@ -125,14 +126,20 @@ private struct PhotoCell: View {
         }
         .task(id: asset?.localIdentifier) {
             guard let asset else { return }
-            let size = CGSize(width: cellSize * 2, height: cellSize * 2)
-            if let cached = model.photos.thumbnail(for: asset, size: size) {
-                image = cached
-            } else {
-                // Thumbnails decode async; re-check shortly after.
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                image = model.photos.thumbnail(for: asset, size: size)
+            // Decode at the REAL pixel density: a 2x bitmap in a 3x cell
+            // renders soft — the "blurry" gallery.
+            let scale = max(1, displayScale)
+            let size = CGSize(width: cellSize * scale, height: cellSize * scale)
+            // Thumbnails decode async; the model returns nil until the
+            // final (non-degraded) bitmap is cached — poll briefly.
+            for _ in 0..<20 {
+                if let cached = model.photos.thumbnail(for: asset, size: size) {
+                    image = cached
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 150_000_000)
             }
+            image = model.photos.thumbnail(for: asset, size: size)
         }
     }
 }
@@ -144,7 +151,11 @@ struct PhotoDetailScreen: View {
     @EnvironmentObject private var settings: AppSettings
     let index: Int
 
-    @State private var selection = 0
+    // Initialized from `index`, NOT 0 — a fresh screen must start decoding
+    // the photo that was clicked. Starting at 0 raced: the cancelled
+    // photo-0 load could land after the real one and overwrite it (the
+    // "opened the first photo" bug).
+    @State private var selection: Int
     @State private var image: UIImage?
     @State private var shareImage: UIImage?
 
@@ -152,6 +163,11 @@ struct PhotoDetailScreen: View {
     @State private var scale: CGFloat = 1
     @State private var baseScale: CGFloat = 1
     @State private var offset: CGSize = .zero
+
+    init(index: Int) {
+        self.index = index
+        _selection = State(initialValue: index)
+    }
 
     var body: some View {
         ZStack {
@@ -212,7 +228,6 @@ struct PhotoDetailScreen: View {
                 scale = 1; baseScale = 1; offset = .zero
             }
         }
-        .onAppear { selection = index }
         .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
             if let img = shareImage {
                 ActivityView(items: [img])
@@ -222,7 +237,12 @@ struct PhotoDetailScreen: View {
 
     private func load() async {
         guard let asset = model.photos.asset(at: selection) else { return }
-        image = await model.photos.loadFullImage(asset)
+        // PHImageManager ignores task cancellation: a superseded load still
+        // resumes and must not overwrite the photo now on screen.
+        let requested = selection
+        let loaded = await model.photos.loadFullImage(asset)
+        guard requested == selection, !Task.isCancelled else { return }
+        image = loaded
     }
 
     private func handle(_ event: ControlEvent) {

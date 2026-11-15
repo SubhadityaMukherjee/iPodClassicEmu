@@ -16,14 +16,19 @@ final class BinauralModelTests: XCTestCase {
 
     private var engine: MockEngine!
     private var model: BinauralModel!
+    private var recents: RecentActivity!
     private let defaultsName = "binaural-test-\(UUID().uuidString)"
+    private let recentsName = "binaural-recents-test-\(UUID().uuidString)"
 
     override func setUp() {
         super.setUp()
         engine = MockEngine()
         let d = UserDefaults(suiteName: defaultsName)!
         d.removePersistentDomain(forName: defaultsName)
-        model = BinauralModel(engine: engine, defaults: d)
+        let rd = UserDefaults(suiteName: recentsName)!
+        rd.removePersistentDomain(forName: recentsName)
+        recents = RecentActivity(defaults: rd)
+        model = BinauralModel(engine: engine, defaults: d, recents: recents)
         model.usesSystemRemoteCommands = false
         var published: [(title: String?, elapsed: TimeInterval)] = []
         model.nowPlayingPublisher = { title, elapsed in
@@ -37,6 +42,7 @@ final class BinauralModelTests: XCTestCase {
 
     override func tearDown() {
         UserDefaults(suiteName: defaultsName)!.removePersistentDomain(forName: defaultsName)
+        UserDefaults(suiteName: recentsName)!.removePersistentDomain(forName: recentsName)
         super.tearDown()
     }
 
@@ -97,5 +103,25 @@ final class BinauralModelTests: XCTestCase {
         XCTAssertEqual(last?.elapsed, 0)
         model.stop()
         XCTAssertEqual(Self.lastPublished.last?.title, nil, "stopping clears the Now Playing card")
+    }
+
+    func testStartingASessionRecordsRecentsEntry() {
+        model.toggle(preset("Alpha"))
+        XCTAssertEqual(recents.binaural?.id, "Alpha")
+        XCTAssertEqual(recents.binaural?.title, "Alpha")
+        // Switching presets updates the entry…
+        model.toggle(preset("Gamma"))
+        XCTAssertEqual(recents.binaural?.id, "Gamma")
+        // …and stopping keeps it — the home row jumps back to the last
+        // session even after it ended.
+        model.stop()
+        XCTAssertEqual(recents.binaural?.id, "Gamma")
+    }
+
+    func testRecentsEntryPersistsAcrossInstances() {
+        model.toggle(preset("Schumann"))
+        let rd = UserDefaults(suiteName: recentsName)!
+        let again = RecentActivity(defaults: rd)
+        XCTAssertEqual(again.binaural?.title, "Schumann")
     }
 }
