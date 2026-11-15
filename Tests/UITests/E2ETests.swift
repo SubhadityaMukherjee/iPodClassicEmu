@@ -10,10 +10,24 @@ final class E2ETests: XCTestCase {
     @MainActor
     private func launch(start: String, fakeLibrary: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
+        // A lingering instance from a previous test (e.g. one that left an
+        // audio session alive) can race the relaunch and the system drops
+        // the launch environment — always terminate first.
+        app.terminate()
         app.launchEnvironment["RESET_DEFAULTS"] = "1"
         app.launchEnvironment["START_ROUTE"] = start
         if fakeLibrary { app.launchEnvironment["FAKE_LIBRARY"] = "1" }
-        app.launch()
+        // Rare XCUI race on a warm app: the relaunch happens WITHOUT the
+        // launch environment, so the first-run tour appears instead of the
+        // route. Detect it and relaunch once with a settled process.
+        for _ in 0..<2 {
+            app.launch()
+            if !app.staticTexts["The iPod, rebuilt"].waitForExistence(timeout: 2) {
+                return app
+            }
+            app.terminate()
+            sleep(1)
+        }
         return app
     }
 
@@ -103,6 +117,12 @@ final class E2ETests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Stop"].waitForExistence(timeout: 3),
                       "starting a preset did not flip Off to Stop")
 
+        // Stop the session again (center on Delta toggles) so the Recents
+        // row has to actually RESUME playback when clicked.
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Off"].waitForExistence(timeout: 3),
+                      "second center press did not stop the session")
+
         // Back to home: MENU pops Binaural, MENU pops Extras. Home keeps
         // its selection (Extras, index 6) because buried routes stay alive.
         menu(wheelEl)
@@ -115,8 +135,101 @@ final class E2ETests: XCTestCase {
         for _ in 0..<5 { tick(wheelEl) }
         XCTAssertTrue(app.staticTexts["Recents"].exists, "Recents header not reached on home")
         wheelCenterTap(wheelEl)
+        // A fresh BinauralScreen shows "Off" when idle and "Stop" when
+        // playing — its appearance proves the session RESUMED, not just
+        // that the screen opened.
         XCTAssertTrue(app.staticTexts["Stop"].waitForExistence(timeout: 3),
-                      "Recents binaural row did not reopen the Binaural screen (session still playing)")
+                      "Recents binaural row did not resume the stopped session")
+    }
+
+    /// Launches onto home with the seeded Recents rows, guarding against
+    /// the XCUI env-drop race (see launch(_:fakeLibrary:)).
+    @MainActor
+    private func launchSeeded() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.terminate()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launchEnvironment["RECENTS_SEED"] = "1"
+        for _ in 0..<2 {
+            app.launch()
+            if !app.staticTexts["The iPod, rebuilt"].waitForExistence(timeout: 2) {
+                break
+            }
+            app.terminate()
+            sleep(1)
+        }
+        return app
+    }
+
+    @MainActor
+    func testRecentsTimerStartsWithSameDuration() throws {
+        let app = launchSeeded()
+        let wheelEl = wheel(app)
+
+        // Full seed: the clock row (Timer) is the 17th item — 16 ticks down.
+        for _ in 0..<16 { tick(wheelEl) }
+        XCTAssertTrue(app.staticTexts["Recents"].waitForExistence(timeout: 3),
+                      "Recents header missing")
+        // The row shows the persisted duration (RESET_DEFAULTS → 5 min).
+        XCTAssertTrue(app.staticTexts["5:00"].waitForExistence(timeout: 3),
+                      "Timer row does not display its duration")
+
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Timer"].waitForExistence(timeout: 3),
+                      "Timer screen did not open from the Recents row")
+        // The countdown must be RUNNING: the control row flips Start → Pause.
+        XCTAssertTrue(app.staticTexts["Pause"].waitForExistence(timeout: 3),
+                      "Recents Timer row did not start the countdown")
+        // …started from the persisted duration (~5:00; the digits tick down
+        // every second, so match the 00:05:xx → 00:04:xx window rather than
+        // one exact value).
+        let digits = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "00:0[45]:[0-9][0-9]")
+        ).firstMatch
+        XCTAssertTrue(digits.waitForExistence(timeout: 3),
+                      "Timer digits do not reflect the persisted 5:00 duration")
+    }
+
+    @MainActor
+    func testRecentsRecordingRowStartsRecording() throws {
+        let app = launchSeeded()
+        let wheelEl = wheel(app)
+
+        // The recording row is the 16th item — 15 ticks down.
+        for _ in 0..<15 { tick(wheelEl) }
+        XCTAssertTrue(app.staticTexts["Recents"].waitForExistence(timeout: 3),
+                      "Recents header missing")
+
+        // A fresh install gets the mic permission prompt on first capture —
+        // an APP-level alert that blocks queries. Register the monitor only
+        // now (a monitor active during the wheel drags perturbs event
+        // synthesis), then tap to start the capture and let XCUI accept it.
+        let monitor = addUIInterruptionMonitor(withDescription: "microphone access") { alert in
+            for label in ["OK", "Allow"] {
+                let button = alert.buttons[label]
+                if button.exists {
+                    button.tap()
+                    return true
+                }
+            }
+            return false
+        }
+        defer { removeUIInterruptionMonitor(monitor) }
+
+        wheelCenterTap(wheelEl)
+        app.tap() // lets XCUI evaluate the interruption monitor
+
+        XCTAssertTrue(app.staticTexts["Voice Memos"].waitForExistence(timeout: 3),
+                      "Voice Memos did not open from the Recents recording row")
+        XCTAssertTrue(app.staticTexts["RECORDING"].waitForExistence(timeout: 5),
+                      "Recents recording row did not start a capture")
+
+        // Stop & Save (row 1) so no capture survives the test — a lingering
+        // audio session poisons the next test's app launch.
+        tick(wheelEl)
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Record"].waitForExistence(timeout: 3),
+                      "Stop & Save did not return the recorder to idle")
     }
 
     @MainActor

@@ -124,4 +124,19 @@ final class BinauralModelTests: XCTestCase {
         let again = RecentActivity(defaults: rd)
         XCTAssertEqual(again.binaural?.title, "Schumann")
     }
+
+    func testResumePlaysWithoutTogglingOff() {
+        model.resume(preset("Alpha"))
+        XCTAssertTrue(model.isPlaying)
+        XCTAssertEqual(engine.starts.count, 1)
+        // Already playing that preset: resume must not restart (or stop) it.
+        model.resume(preset("Alpha"))
+        XCTAssertTrue(model.isPlaying)
+        XCTAssertEqual(engine.starts.count, 1)
+        // A different preset switches seamlessly.
+        model.resume(preset("Gamma"))
+        XCTAssertTrue(model.isPlaying)
+        XCTAssertEqual(model.active?.name, "Gamma")
+        XCTAssertEqual(engine.starts.count, 2)
+    }
 }

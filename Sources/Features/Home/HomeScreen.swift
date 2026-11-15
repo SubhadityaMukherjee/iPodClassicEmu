@@ -41,8 +41,13 @@ struct HomeScreen: View {
                 list.append(MenuItem(id: "recents.recording", title: e.title, detail: "Recording", symbol: "mic", showsChevron: false))
             }
             if r.clock != nil {
-                list.append(MenuItem(id: "recents.clock", title: r.clock == "timer" ? "Timer" : "Stopwatch",
-                                     detail: "Clocks", symbol: r.clock == "timer" ? "timer" : "stopwatch", showsChevron: false))
+                let isTimer = r.clock == "timer"
+                let duration = Double(model.timer.durationHours) * 3600
+                    + Double(model.timer.durationMinutes) * 60
+                    + Double(model.timer.durationSeconds)
+                list.append(MenuItem(id: "recents.clock", title: isTimer ? "Timer" : "Stopwatch",
+                                     detail: isTimer ? TimeFormat.duration(duration) : "Clocks",
+                                     symbol: isTimer ? "timer" : "stopwatch", showsChevron: false))
             }
         }
         return list
@@ -86,11 +91,65 @@ struct HomeScreen: View {
             model.push(.nowPlaying)
         case "nowplaying": model.push(.nowPlaying)
         case "recents.book": model.push(.readerBook(model.recents.book?.id ?? ""))
-        case "recents.binaural": model.push(.binaural)
-        case "recents.playlist": model.push(.playlistDetail(model.recents.playlist?.id ?? ""))
-        case "recents.album": model.push(.albumDetail(model.recents.album?.id ?? ""))
-        case "recents.recording": model.push(.recordingDetail(model.recents.recording?.id ?? ""))
-        case "recents.clock": model.push(model.recents.clock == "stopwatch" ? .stopwatch : .timer)
+        case "recents.binaural":
+            // Resume the session: open the screen and make sure the preset
+            // plays. Music pauses first — two beat sources don't mix (same
+            // rule as the Binaural screen).
+            model.push(.binaural)
+            if let name = model.recents.binaural?.id,
+               let preset = BinauralModel.presets.first(where: { $0.id == name }) {
+                if model.player.isPlaying { model.player.togglePlayPause() }
+                model.binaural.resume(preset)
+            }
+        case "recents.playlist":
+            // Shuffle-play the playlist straight into Now Playing; fall back
+            // to the playlist page if it's gone from the library.
+            let id = model.recents.playlist?.id ?? ""
+            Task { @MainActor in
+                guard let playlist = model.music.playlist(id) else {
+                    model.push(.playlistDetail(id))
+                    return
+                }
+                let tracks = await model.music.tracks(forPlaylist: playlist)
+                guard !tracks.isEmpty else {
+                    model.push(.playlistDetail(id))
+                    return
+                }
+                model.player.shufflePlay(tracks)
+                model.push(.nowPlaying)
+            }
+        case "recents.album":
+            let id = model.recents.album?.id ?? ""
+            Task { @MainActor in
+                guard let album = model.music.album(id) else {
+                    model.push(.albumDetail(id))
+                    return
+                }
+                let tracks = await model.music.tracks(forAlbum: album)
+                guard !tracks.isEmpty else {
+                    model.push(.albumDetail(id))
+                    return
+                }
+                model.player.shufflePlay(tracks)
+                model.push(.nowPlaying)
+            }
+        case "recents.recording":
+            // Resume the recorder activity: open Voice Memos and start a
+            // new capture (silently skipped when mic access is missing).
+            model.push(.recorder)
+            model.recorder.start()
+        case "recents.clock":
+            if model.recents.clock == "stopwatch" {
+                model.push(.stopwatch)
+            } else {
+                // Start the countdown with the last-set duration — the same
+                // values the timer screen's own Start row uses.
+                let duration = Double(model.timer.durationHours) * 3600
+                    + Double(model.timer.durationMinutes) * 60
+                    + Double(model.timer.durationSeconds)
+                model.timer.start(duration: duration)
+                model.push(.timer)
+            }
         default: break // recents.header is a visual band, not an action
         }
     }

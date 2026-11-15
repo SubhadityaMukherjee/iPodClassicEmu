@@ -63,8 +63,14 @@ final class BinauralModel {
                 MPNowPlayingInfoPropertyPlaybackRate: 1.0,
                 MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
             ]
+            center.playbackState = .playing
         } else {
             center.nowPlayingInfo = nil
+            // The audio session stays active (shared with music), and with
+            // state .unknown the system keeps the app in the Now Playing
+            // stack — the card lingered showing "playing" after stop.
+            // .stopped explicitly removes it.
+            center.playbackState = .stopped
         }
     }
     /// Tests disable system remote-command registration.
@@ -128,6 +134,13 @@ final class BinauralModel {
             active = preset
             startPlayback()
         }
+    }
+
+    /// Recents jump-back: make sure this preset is playing — starts it or
+    /// switches presets, but never stops an already-playing session.
+    func resume(_ preset: Preset) {
+        if isPlaying, active == preset { return }
+        toggle(preset)
     }
 
     func stop() {

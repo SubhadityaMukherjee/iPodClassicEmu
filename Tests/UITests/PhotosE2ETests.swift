@@ -13,9 +13,20 @@ final class PhotosE2ETests: XCTestCase {
     @MainActor
     private func launch(seedRecents: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
+        app.terminate() // never relaunch over a lingering instance (drops env)
         app.launchEnvironment["RESET_DEFAULTS"] = "1"
         if seedRecents { app.launchEnvironment["RECENTS_SEED"] = "1" }
-        app.launch()
+        for _ in 0..<2 {
+            app.launch()
+            // Env-drop guard: a warm relaunch can lose the environment and
+            // land on the first-run tour — relaunch once with a settled
+            // process.
+            if !app.staticTexts["The iPod, rebuilt"].waitForExistence(timeout: 2) {
+                break
+            }
+            app.terminate()
+            sleep(1)
+        }
         return app
     }
 
