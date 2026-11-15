@@ -18,6 +18,9 @@ final class PhotoLibraryModel {
     /// for the whole session (a large library cost tens of MB that never
     /// came back). Cost = decoded bitmap bytes.
     private let thumbnails = NSCache<NSString, UIImage>()
+    /// Asset+size keys with a decode in flight, so repeated cache misses
+    /// (the grid polls) don't stack duplicate PHImageManager requests.
+    private var inflight = Set<String>()
 
     init() {
         thumbnails.totalCostLimit = 64 * 1024 * 1024
@@ -30,21 +33,50 @@ final class PhotoLibraryModel {
         return assets[index]
     }
 
+    /// Cached bitmap for asset+size, or nil — which also kicks off the
+    /// decode (deduped per key). The key includes the size: the home
+    /// preview and the grid request different resolutions, and a shared
+    /// key made one screen inherit the other's (blurry) bitmap.
     func thumbnail(for asset: PHAsset, size: CGSize) -> UIImage? {
-        let key = asset.localIdentifier as NSString
+        let key = thumbnailKey(asset, size: size)
         if let cached = thumbnails.object(forKey: key) { return cached }
+        requestThumbnail(asset, size: size, key: key)
+        return nil
+    }
+
+    private func thumbnailKey(_ asset: PHAsset, size: CGSize) -> NSString {
+        "\(asset.localIdentifier)|\(Int(size.width))x\(Int(size.height))" as NSString
+    }
+
+    private func requestThumbnail(_ asset: PHAsset, size: CGSize, key: NSString) {
+        let k = key as String
+        guard !inflight.contains(k) else { return }
+        inflight.insert(k)
         let options = PHImageRequestOptions()
         options.deliveryMode = .opportunistic
         options.isNetworkAccessAllowed = true
         options.resizeMode = .fast
         imageManager.requestImage(
             for: asset, targetSize: size, contentMode: .aspectFill, options: options
-        ) { [weak self] image, _ in
-            guard let image else { return }
-            let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
-            self?.thumbnails.setObject(image, forKey: key, cost: cost)
+        ) { [weak self] image, info in
+            // PHImageManager delivers on an arbitrary queue; `inflight` is
+            // main-thread state, so hop before touching it.
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let errored = info?[PHImageErrorKey] != nil
+                    || ((info?[PHImageCancelledKey] as? NSNumber)?.boolValue ?? false)
+                if errored {
+                    self.inflight.remove(k)
+                    return
+                }
+                let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                guard !degraded, let image else { return } // final delivery follows
+                // Decoded final bitmap: cache it and open the dedup window.
+                let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+                self.thumbnails.setObject(image, forKey: key, cost: cost)
+                self.inflight.remove(k)
+            }
         }
-        return nil
     }
 
     func loadFullImage(_ asset: PHAsset, maxSize: CGFloat = 1800) async -> UIImage? {
@@ -96,6 +128,8 @@ final class PhotoLibraryModel {
     // Home preview
     var latestThumbnail: UIImage? {
         guard let assets, assets.count > 0 else { return nil }
-        return thumbnail(for: assets[0], size: CGSize(width: 300, height: 300))
+        // 600 px covers the preview pane at 3x — the old 300 request made
+        // the first photo (the one shown here) look soft on retina.
+        return thumbnail(for: assets[0], size: CGSize(width: 600, height: 600))
     }
 }

@@ -15,6 +15,7 @@ final class RecentActivityTests: XCTestCase {
         store.record(playlist: .init(id: "p1", title: "Chill"))
         store.record(album: .init(id: "a1", title: "An Album"))
         store.record(recording: .init(id: "r.m4a", title: "Memo"))
+        store.record(binaural: .init(id: "Delta", title: "Delta"))
         store.record(clock: "stopwatch")
 
         let again = RecentActivity(defaults: d)
@@ -22,6 +23,7 @@ final class RecentActivityTests: XCTestCase {
         XCTAssertEqual(again.playlist?.title, "Chill")
         XCTAssertEqual(again.album?.title, "An Album")
         XCTAssertEqual(again.recording?.title, "Memo")
+        XCTAssertEqual(again.binaural?.title, "Delta")
         XCTAssertEqual(again.clock, "stopwatch")
     }
 

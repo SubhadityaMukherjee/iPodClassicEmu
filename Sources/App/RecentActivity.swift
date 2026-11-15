@@ -18,6 +18,7 @@ final class RecentActivity {
     private(set) var playlist: Entry?
     private(set) var album: Entry?
     private(set) var recording: Entry?
+    private(set) var binaural: Entry?
     /// "timer" or "stopwatch" — whichever screen was opened last.
     private(set) var clock: String?
 
@@ -32,6 +33,7 @@ final class RecentActivity {
             playlist = saved.playlist
             album = saved.album
             recording = saved.recording
+            binaural = saved.binaural
             clock = saved.clock
         }
         // QA hook: seed entries so the home Recents rows render in tests
@@ -41,6 +43,7 @@ final class RecentActivity {
             playlist = Entry(id: "qa.playlist", title: "QA Playlist")
             album = Entry(id: "qa.album", title: "QA Album")
             recording = Entry(id: "qa-recording.m4a", title: "QA Recording")
+            binaural = Entry(id: "qa.binaural", title: "QA Binaural")
             clock = "timer"
         }
     }
@@ -50,12 +53,13 @@ final class RecentActivity {
         var playlist: Entry?
         var album: Entry?
         var recording: Entry?
+        var binaural: Entry?
         var clock: String?
     }
 
     private func save() {
         let saved = Saved(book: book, playlist: playlist, album: album,
-                          recording: recording, clock: clock)
+                          recording: recording, binaural: binaural, clock: clock)
         if let data = try? JSONEncoder().encode(saved) {
             defaults.set(data, forKey: key)
         }
@@ -65,5 +69,6 @@ final class RecentActivity {
     func record(playlist: Entry) { self.playlist = playlist; save() }
     func record(album: Entry) { self.album = album; save() }
     func record(recording: Entry) { self.recording = recording; save() }
+    func record(binaural: Entry) { self.binaural = binaural; save() }
     func record(clock: String) { self.clock = clock; save() }
 }

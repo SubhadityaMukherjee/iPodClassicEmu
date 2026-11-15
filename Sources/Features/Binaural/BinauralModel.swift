@@ -36,10 +36,17 @@ final class BinauralModel {
     private let engine: BinauralEngineType
     private var ticker: Timer?
     private let defaults: UserDefaults
+    /// Home-screen Recents store; every session start records the preset
+    /// so the home screen can jump back. Injectable so unit tests can
+    /// redirect it (nil disables recording).
+    private let recents: RecentActivity?
 
-    init(engine: BinauralEngineType = BinauralAudioEngine(), defaults: UserDefaults = .standard) {
+    init(engine: BinauralEngineType = BinauralAudioEngine(),
+         defaults: UserDefaults = .standard,
+         recents: RecentActivity? = RecentActivity.shared) {
         self.engine = engine
         self.defaults = defaults
+        self.recents = recents
     }
 
     // MARK: Lock screen (Now Playing)
@@ -140,6 +147,7 @@ final class BinauralModel {
 
     private func startPlayback() {
         guard let active else { return }
+        recents?.record(binaural: .init(id: active.name, title: active.name))
         elapsed = 0
         isPlaying = true
         engine.start(beat: active.beat, carrier: Self.carrierHz, volume: volume)

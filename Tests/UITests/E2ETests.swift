@@ -17,6 +17,33 @@ final class E2ETests: XCTestCase {
         return app
     }
 
+    // MARK: Wheel helpers
+
+    @MainActor
+    private func wheel(_ app: XCUIApplication) -> XCUIElement {
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5), "clickwheel element not found")
+        return wheel
+    }
+
+    @MainActor
+    private func tick(_ wheel: XCUIElement) {
+        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        origin.withOffset(CGVector(dx: 64, dy: 64))
+            .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
+    }
+
+    @MainActor
+    private func menu(_ wheel: XCUIElement) {
+        wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .withOffset(CGVector(dx: 0, dy: -96)).tap()
+    }
+
+    @MainActor
+    private func wheelCenterTap(_ wheel: XCUIElement) {
+        wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
     // MARK: Reader
 
     @MainActor
@@ -38,18 +65,58 @@ final class E2ETests: XCTestCase {
         app.launchEnvironment["RESET_DEFAULTS"] = "1"
         app.launchEnvironment["RECENTS_SEED"] = "1"
         app.launch()
-        let wheel = app.otherElements["clickwheel"]
-        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
-        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        func tick() {
-            origin.withOffset(CGVector(dx: 64, dy: 64))
-                .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
-        }
+        let wheelEl = wheel(app)
         // Recents rows sit below the standard home rows — scroll to them.
-        for _ in 0..<11 { tick() }
+        // 11 ticks lands on the QA Book row; the binaural row is the next
+        // one and only renders once selected (the menu shows a window).
+        for _ in 0..<11 { tick(wheelEl) }
         XCTAssertTrue(app.staticTexts["Recents"].waitForExistence(timeout: 3),
                       "Recents header missing on home")
         XCTAssertTrue(app.staticTexts["QA Book"].exists, "recent book row missing")
+        tick(wheelEl)
+        XCTAssertTrue(app.staticTexts["QA Binaural"].exists, "recent binaural row missing")
+    }
+
+    @MainActor
+    func testBinauralSessionJumpsBackFromRecents() throws {
+        // Start on HOME (START_ROUTE replaces the stack — extras would leave
+        // no home in it, and the two MENU pops would hit the root guard).
+        let app = launch(start: "home")
+        let wheelEl = wheel(app)
+
+        // Home: Extras is the 7th row — six ticks, open it.
+        for _ in 0..<6 { tick(wheelEl) }
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Clocks"].waitForExistence(timeout: 3),
+                      "Extras menu did not open")
+
+        // Extras: Clocks, Calendar, Binaural — two ticks down, open it.
+        for _ in 0..<2 { tick(wheelEl) }
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Off"].waitForExistence(timeout: 3),
+                      "Binaural screen did not open")
+
+        // One tick selects Delta; center starts the session — the Off row
+        // flips to Stop, and the preset is recorded into Recents.
+        tick(wheelEl)
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Stop"].waitForExistence(timeout: 3),
+                      "starting a preset did not flip Off to Stop")
+
+        // Back to home: MENU pops Binaural, MENU pops Extras. Home keeps
+        // its selection (Extras, index 6) because buried routes stay alive.
+        menu(wheelEl)
+        menu(wheelEl)
+        XCTAssertTrue(app.staticTexts["Music"].waitForExistence(timeout: 3),
+                      "two MENU presses did not return home")
+
+        // From selection 6 the Recents binaural row is 5 ticks away
+        // (Settings, Shuffle All, Now Playing, Recents header, row).
+        for _ in 0..<5 { tick(wheelEl) }
+        XCTAssertTrue(app.staticTexts["Recents"].exists, "Recents header not reached on home")
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Stop"].waitForExistence(timeout: 3),
+                      "Recents binaural row did not reopen the Binaural screen (session still playing)")
     }
 
     @MainActor
