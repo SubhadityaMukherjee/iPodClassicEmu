@@ -78,6 +78,20 @@ struct AlarmScreen: View {
                         .underline()
                         .padding(.bottom, 6)
                 }
+            } else if alarm.enabled && alarm.pendingAlarmCount == 0 {
+                // Armed but nothing pending: the alarm will not ring. This
+                // is the silent-death state — surface it instead of hiding it.
+                Text("Alarm is on but not scheduled — it may not ring.\nToggle it off and on to re-arm.")
+                    .font(Theme.font(11, .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.red.opacity(0.85))
+                    .padding(.bottom, 6)
+            }
+            // QA hook: pending-request readout for the reschedule E2E.
+            if ProcessInfo.processInfo.environment["ALARM_DEBUG"] == "1" {
+                Text("QA pending: \(alarm.pendingAlarmCount.map(String.init) ?? "?")")
+                    .font(Theme.font(10, .medium))
+                    .foregroundStyle(Theme.inkDim)
             }
         }
         .onWheel { handle($0) }
@@ -90,6 +104,19 @@ struct AlarmScreen: View {
             if let s = ProcessInfo.processInfo.environment["ALARM_FIRE_SECONDS"], let secs = Double(s), secs > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + secs) {
                     AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
+                }
+            }
+            // QA hook: set the alarm to fire N seconds from now (the
+            // backgrounded keep-alive fire path — checkFire).
+            if let s = ProcessInfo.processInfo.environment["ALARM_SET_NOW_PLUS"], let secs = Double(s), secs > 0 {
+                let target = Date().addingTimeInterval(secs)
+                let c = Calendar.current.dateComponents([.hour, .minute], from: target)
+                if let h24 = c.hour, let m = c.minute {
+                    var h = h24 % 12
+                    if h == 0 { h = 12 }
+                    alarm.hour = h
+                    alarm.minute = m
+                    alarm.isPM = h24 >= 12
                 }
             }
         }

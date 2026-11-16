@@ -16,6 +16,10 @@ final class AlarmStore: ObservableObject {
     @Published var repeatDays: [Bool] { didSet { persist(); if enabled { schedule() } } }
     /// True when notifications are denied — the alarm cannot ring.
     @Published private(set) var permissionDenied = false
+    /// Pending alarm-family notification requests (nil = not yet known).
+    /// Published so the alarm screen can warn when the alarm is "on" but
+    /// nothing is actually scheduled to ring — the silent-death state.
+    @Published private(set) var pendingAlarmCount: Int?
 
     private let d = UserDefaults.standard
     private enum K { static let enabled = "alarm.enabled"; static let hour = "alarm.hour"; static let minute = "alarm.minute"; static let pm = "alarm.pm"; static let repeatDays = "alarm.repeatDays" }
@@ -93,7 +97,12 @@ final class AlarmStore: ObservableObject {
                 // First-run setup owns the notification prompt (it asks
                 // for all permissions in one pass); once setup is done,
                 // arming an alarm prompts here as usual.
-                guard UserDefaults.standard.bool(forKey: "setup.done") else {
+                // First-run setup owns the notification prompt (it asks
+                // for all permissions in one pass); once setup is done,
+                // arming an alarm prompts here as usual. ALARM_GRANT=1
+                // (UI tests) lets the prompt fire regardless of setup.
+                guard UserDefaults.standard.bool(forKey: "setup.done")
+                        || ProcessInfo.processInfo.environment["ALARM_GRANT"] == "1" else {
                     DispatchQueue.main.async { self.permissionDenied = false }
                     return
                 }
@@ -122,11 +131,14 @@ final class AlarmStore: ObservableObject {
         content.userInfo["kind"] = "alarm"
 
         let center = UNUserNotificationCenter.current()
+        let group = DispatchGroup()
         let add: (UNNotificationRequest) -> Void = { request in
+            group.enter()
             center.add(request) { error in
                 if let error {
                     WheelEventLog.log("alarm schedule failed: \(error.localizedDescription)")
                 }
+                group.leave()
             }
         }
 
@@ -149,6 +161,7 @@ final class AlarmStore: ObservableObject {
                                           trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)))
             }
         }
+        group.notify(queue: .main) { [weak self] in self?.refreshPendingCount() }
     }
 
     /// Removes every alarm-family request: the repeating triggers, all
@@ -157,6 +170,20 @@ final class AlarmStore: ObservableObject {
     func cancel() {
         let ids = ["alarm.daily", "alarm.snooze"] + (1...7).map { "alarm.day.\($0)" }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        // The removal lands on the notification daemon in milliseconds;
+        // hop the main queue so the refresh reads the post-cancel state.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.refreshPendingCount()
+        }
+    }
+
+    /// Publishes how many alarm requests are actually pending — the
+    /// ground truth for "the alarm says ON but will not ring".
+    private func refreshPendingCount() {
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            let count = requests.filter { $0.identifier.hasPrefix("alarm.") }.count
+            DispatchQueue.main.async { self.pendingAlarmCount = count }
+        }
     }
 
     // MARK: - In-app firing (keeps ringing even when locked or muted)
@@ -171,6 +198,11 @@ final class AlarmStore: ObservableObject {
     /// at the alarm time — full volume, even on the silent switch.
     func startKeepAlive() {
         guard enabled, monitor == nil else { return }
+        // Heal before the night matters: if a previous fire/dismiss cycle
+        // died mid-way (force-quit, crash, reboot), the pending requests
+        // may be gone while enabled is still true — without this the
+        // alarm silently never rings again.
+        reconcile()
         // The monitor must always run; the silent audio below is only
         // needed when nothing else keeps the process alive. While music
         // plays, leave the session alone — reconfiguring it can interrupt
@@ -211,11 +243,22 @@ final class AlarmStore: ObservableObject {
         lastFireDay = key
         // The app handles today's ring; drop today's (duplicate) system
         // notification — both pending AND already-delivered, or the banner
-        // would flash alongside the ringer overlay.
+        // would flash alongside the ringer overlay. WARNING: removing a
+        // REPEATING request kills every future occurrence too — this was
+        // the "alarm says on but never rings again" bug. Re-schedule as
+        // soon as the removal lands: the matching minute has already
+        // passed, so the next fire is tomorrow.
         let ids = ["alarm.daily", "alarm.snooze"] + (1...7).map { "alarm.day.\($0)" }
         let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: ids)
         center.removeDeliveredNotifications(withIdentifiers: ids)
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+        // Removing a REPEATING request kills every future occurrence —
+        // re-schedule as soon as the removal lands (the matching minute
+        // has passed, so the next fire is tomorrow). Without this the
+        // alarm stays "on" but never rings again.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.schedule()
+        }
         stopKeepAlive()
         DispatchQueue.main.async {
             AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))

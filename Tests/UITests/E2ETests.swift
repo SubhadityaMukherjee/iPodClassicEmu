@@ -8,7 +8,8 @@ final class E2ETests: XCTestCase {
     }
 
     @MainActor
-    private func launch(start: String, fakeLibrary: Bool = false) -> XCUIApplication {
+    private func launch(start: String, fakeLibrary: Bool = false,
+                        extra: [String: String] = [:]) -> XCUIApplication {
         let app = XCUIApplication()
         // A lingering instance from a previous test (e.g. one that left an
         // audio session alive) can race the relaunch and the system drops
@@ -17,6 +18,7 @@ final class E2ETests: XCTestCase {
         app.launchEnvironment["RESET_DEFAULTS"] = "1"
         app.launchEnvironment["START_ROUTE"] = start
         if fakeLibrary { app.launchEnvironment["FAKE_LIBRARY"] = "1" }
+        for (k, v) in extra { app.launchEnvironment[k] = v }
         // Rare XCUI race on a warm app: the relaunch happens WITHOUT the
         // launch environment, so the first-run tour appears instead of the
         // route. Detect it and relaunch once with a settled process.
@@ -333,5 +335,69 @@ final class E2ETests: XCTestCase {
                       "hold on a song row kicked us off the songs screen")
         XCTAssertFalse(app.staticTexts["Not Playing"].exists || app.buttons["Done"].exists,
                        "hold on a song row unexpectedly navigated")
+    }
+
+    /// The full alarm lifecycle that produced the "alarm says on but never
+    /// rings" bug: grant notification permission, arm, BACKGROUND the app
+    /// (keep-alive path), let the alarm minute pass so checkFire handles
+    /// the ring in-app — then confirm the repeating schedule SURVIVED
+    /// (checkFire used to remove the repeating requests permanently).
+    /// The QA pending readout on the alarm screen is the ground truth.
+    @MainActor
+    func testAlarmStaysScheduledAfterBackgroundedFire() throws {
+        // The notification permission prompt is an app-level alert; accept
+        // it via the interruption monitor (registered before launch).
+        let monitor = addUIInterruptionMonitor(withDescription: "notifications") { alert in
+            for label in ["Allow", "OK"] {
+                let button = alert.buttons[label]
+                if button.exists {
+                    button.tap()
+                    return true
+                }
+            }
+            return false
+        }
+        defer { removeUIInterruptionMonitor(monitor) }
+
+        let app = launch(start: "alarm", extra: [
+            "ALARM_ENABLE": "1",
+            "ALARM_GRANT": "1",
+            "ALARM_DEBUG": "1",
+            // Fire 75s out so the backgrounded keep-alive monitor (1s tick)
+            // handles the ring through checkFire, not the direct hook.
+            "ALARM_SET_NOW_PLUS": "75",
+        ])
+        let wheelEl = wheel(app)
+        app.tap() // lets XCUI evaluate the notification prompt
+
+        // Authorized + scheduled: the daily request is pending.
+        let pendingOne = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "QA pending: 1")
+        ).firstMatch
+        XCTAssertTrue(pendingOne.waitForExistence(timeout: 10),
+                      "arming the alarm did not install the daily request (no prompt granted?)")
+
+        // Background the app: keep-alive starts; the alarm minute passes.
+        XCUIDevice.shared.press(.home)
+        sleep(85)
+        app.activate()
+
+        // The in-app ringer must have fired while backgrounded.
+        XCTAssertTrue(app.staticTexts["Snooze"].waitForExistence(timeout: 10),
+                      "checkFire did not start the ringer for the alarm minute")
+
+        // Dismiss via Stop (tick down one row, center) — NOT snooze, so no
+        // extra pending request muddies the count.
+        tick(wheelEl)
+        wheelCenterTap(wheelEl)
+        XCTAssertTrue(app.staticTexts["Snooze"].waitForNonExistence(timeout: 5),
+                      "ringer did not dismiss")
+
+        // THE regression: after the fire + dismissal, the daily request
+        // must be pending again (checkFire re-schedules; RingerManager.stop
+        // re-schedules; the foreground heal re-schedules — at least one
+        // must have landed).
+        XCTAssertTrue(pendingOne.waitForExistence(timeout: 10),
+                      "alarm schedule did not survive the backgrounded fire — this is the silent-death bug")
     }
 }

@@ -75,6 +75,11 @@ struct iPodClassicApp: App {
                         if model.alarms.enabled { model.alarms.startKeepAlive() }
                     case .active:
                         model.alarms.stopKeepAlive()
+                        // Heal the alarm on every foreground: if a fire/
+                        // dismiss cycle died mid-way (force-quit, crash,
+                        // reboot), the notification requests are gone while
+                        // the alarm still reads "on" — reconcile re-arms.
+                        if model.alarms.enabled { model.alarms.reconcile() }
                         // Returning to the foreground is activity. The
                         // process stays alive in the background (playback
                         // audio session), so idleSeconds keeps growing
