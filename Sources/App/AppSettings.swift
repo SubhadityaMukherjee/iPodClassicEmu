@@ -55,14 +55,15 @@ final class AppSettings: ObservableObject {
 
     // MARK: Audiobook (read aloud)
 
-    /// Read Aloud TTS engine ("qwen" default; "breeze" experimental).
+    /// Read Aloud TTS engine ("supertonic" default; "qwen"/"breeze"
+    /// experimental MLX engines).
     var readAloudEngine: String {
-        get { d.string(forKey: K.readAloudEngine) ?? "qwen" }
+        get { d.string(forKey: K.readAloudEngine) ?? "supertonic" }
         set { objectWillChange.send(); store(newValue, K.readAloudEngine) }
     }
-    /// Read Aloud voice preset name (engine-specific, e.g. "Ryan").
+    /// Read Aloud voice preset name (engine-specific, e.g. "M1").
     var audiobookVoice: String {
-        get { d.string(forKey: K.audiobookVoice) ?? "Ryan" }
+        get { d.string(forKey: K.audiobookVoice) ?? "M1" }
         set { objectWillChange.send(); store(newValue, K.audiobookVoice) }
     }
     /// Playback speed; index into AudiobookModel.speeds.

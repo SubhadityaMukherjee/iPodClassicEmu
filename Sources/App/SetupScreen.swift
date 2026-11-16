@@ -321,7 +321,7 @@ struct SetupScreen: View {
                     advance()
                 } else if ttsChoice == 0 {
                     ttsDownloadStarted = true
-                    Task { try? await ReadAloudVoiceStore.shared.loadModelIfNeeded() }
+                    Task { try? await ReadAloudVoiceStore.shared.prepare() }
                 } else {
                     advance() // not now
                 }

@@ -294,9 +294,9 @@ struct ReadAloudSettingsScreen: View {
         if cached {
             rows.append(MenuItem(id: "delete", title: "Delete Model", detail: "Free Space", showsChevron: false))
         }
-        if engine == .breeze {
+        if engine.isExperimental {
             rows.append(MenuItem(
-                id: "warning", title: "Experimental — may crash 8 GB devices", showsChevron: false))
+                id: "warning", title: "Experimental — may crash this device", showsChevron: false))
         }
         return rows
     }
@@ -346,13 +346,13 @@ struct ReadAloudSettingsScreen: View {
                 toast = "Already downloaded"
             } else {
                 toast = "Download started"
-                Task { try? await store.loadModelIfNeeded() }
+                Task { try? await store.prepare() }
             }
         case "delete":
             let engine = store.engine
             ReadAloudVoiceStore.deleteModel(engine)
             store.engine = engine // re-probe state for this engine
-            toast = engine == .breeze ? "Deleted ~3 GB" : "Deleted ~700 MB"
+            toast = "Deleted"
         case "warning":
             break
         default:

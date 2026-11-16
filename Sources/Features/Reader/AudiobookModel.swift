@@ -375,13 +375,16 @@ final class AudiobookModel {
             currentVoice = Self.voices[wrapped] // didSet persists + invalidates
         }
     }
-    /// Voices of the SELECTED engine (Qwen: Ryan/Aiden; Breeze: design
-    /// presets). The stored preference falls back to the first when the
-    /// engine changes and the old name doesn't exist.
+    /// Voices of the SELECTED engine (Supertonic: M1–M5/F1–F5; Qwen:
+    /// Ryan/Aiden; Breeze: design presets). The stored preference falls
+    /// back to the first when the engine changes and the old name
+    /// doesn't exist.
     nonisolated static var voices: [String] {
-        AppSettings.shared.readAloudEngine == "breeze"
-            ? ReadAloudVoiceStore.Engine.breeze.voices
-            : ReadAloudVoiceStore.Engine.qwen.voices
+        switch AppSettings.shared.readAloudEngine {
+        case "qwen": return ReadAloudVoiceStore.Engine.qwen.voices
+        case "breeze": return ReadAloudVoiceStore.Engine.breeze.voices
+        default: return ReadAloudVoiceStore.Engine.supertonic.voices
+        }
     }
     nonisolated static var voiceCount: Int { voices.count }
     private var currentVoice: String {
@@ -694,7 +697,7 @@ final class AudiobookModel {
             keepAlive.start()
             defer { keepAlive.stop() }
             let store = ReadAloudVoiceStore.shared
-            _ = try await store.loadModelIfNeeded()
+            _ = try await store.prepare()
             stage("model-ready")
             stage("synth-start")
             let t0 = Date()
