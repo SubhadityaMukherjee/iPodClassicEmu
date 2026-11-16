@@ -184,8 +184,6 @@ struct HomeScreen: View {
             glyph("square.and.pencil")
         case "reader":
             glyph("book.fill")
-        case "clocks":
-            LiveClockPreview()
         case "extras":
             glyph("sparkles")
         case "shuffleAll":

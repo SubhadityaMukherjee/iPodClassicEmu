@@ -331,15 +331,11 @@ struct NowPlayingScreen: View {
         guard let song else { return }
         do {
             _ = try await MusicLibrary.shared.add(song, to: playlist)
-            toast = "Added to \(playlist.name)"
+            showToast("Added to \(playlist.name)")
         } catch {
-            toast = "Couldn't add to playlist"
+            showToast("Couldn't add to playlist")
         }
         closeMenu()
-        withAnimation(.easeOut(duration: 0.2)) {}
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-            withAnimation(.easeIn(duration: 0.3)) { toast = "" }
-        }
     }
 
     private func goToAlbum() async {

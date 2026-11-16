@@ -74,4 +74,37 @@ final class AlarmReconcileTests: XCTestCase {
         XCTAssertFalse(remaining.contains("alarm.snooze"),
                        "a snoozed alarm left pending after disable would ring 9 minutes later as a ghost")
     }
+
+    /// installRequest must be a no-op (beyond the clean-slate cancel) while
+    /// the alarm is disabled. It runs from several unconditional call sites
+    /// — the alarm screen's permission prompt, RingerManager.stop() after a
+    /// TIMER ringer, setup completion, the ALARM_ENABLE=0 QA hook — and used
+    /// to install repeating requests anyway: a ghost ring at the set time
+    /// with the toggle reading Off (until the next launch healed it).
+    func testInstallRequestInstallsNothingWhileDisabled() async throws {
+        let store = AlarmStore.shared
+        store.enabled = true
+        await addStaleTrigger(identifier: "alarm.daily", minute: 41)
+
+        store.enabled = false
+        store.installRequest()
+
+        let remaining = await pendingAlarmIdentifiers()
+        XCTAssertTrue(remaining.isEmpty,
+                      "installRequest with the alarm disabled must not leave requests pending (got \(remaining))")
+    }
+
+    /// And the enabled path still schedules — the gate must not have
+    /// broken the normal arm flow.
+    func testInstallRequestSchedulesWhileEnabled() async throws {
+        let store = AlarmStore.shared
+        store.enabled = true
+        store.installRequest()
+
+        let remaining = await pendingAlarmIdentifiers()
+        XCTAssertTrue(remaining.contains("alarm.daily"),
+                      "installRequest with the alarm enabled must schedule the daily trigger (got \(remaining))")
+
+        store.enabled = false  // tearDown restores; this also cleans up
+    }
 }

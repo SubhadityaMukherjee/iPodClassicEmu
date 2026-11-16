@@ -518,18 +518,20 @@ struct NoteTrashScreen: View {
         case .tick(let d):
             moveListSelection(&selection, count: trashItems.count, delta: d, settings: settings)
         case .select:
-            let item = trashItems[min(selection, max(0, trashItems.count - 1))]
-            if trashItems.isEmpty { break }
+            // Empty trash: nothing to restore. (The subscript must stay
+            // behind this guard — trashItems[0] on an empty array traps,
+            // and this screen stays up after the last item is restored.)
+            guard !trashItems.isEmpty else { break }
+            let item = trashItems[min(selection, trashItems.count - 1)]
             model.notes.restore(item.id)
             WheelHaptics.shared.ensureRunning()
             WheelHaptics.shared.buttonPress(strength: 0.7)
             if selection >= trashItems.count { selection = max(0, trashItems.count - 1) }
         case .centerHold:
-            let item = trashItems[min(selection, max(0, trashItems.count - 1))]
-            if !trashItems.isEmpty {
-                holdItem = item.id
-                holdSelection = 0
-            }
+            guard !trashItems.isEmpty else { break }
+            let item = trashItems[min(selection, trashItems.count - 1)]
+            holdItem = item.id
+            holdSelection = 0
         case .menu:
             model.pop()
         default:
