@@ -54,9 +54,9 @@ final class AppSettings: ObservableObject {
 
     // MARK: Audiobook (read aloud)
 
-    /// Supertonic-3 voice preset name (e.g. "M1").
+    /// Read Aloud voice preset name ("Narrator", "Warm", …).
     var audiobookVoice: String {
-        get { d.string(forKey: K.audiobookVoice) ?? "M1" }
+        get { d.string(forKey: K.audiobookVoice) ?? "Narrator" }
         set { objectWillChange.send(); store(newValue, K.audiobookVoice) }
     }
     /// Playback speed; index into AudiobookModel.speeds.

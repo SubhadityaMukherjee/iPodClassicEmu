@@ -1,6 +1,4 @@
 import AVFoundation
-import CoreML
-import FluidAudio
 import Foundation
 import Observation
 import OSLog
@@ -257,7 +255,7 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
 }
 
 /// Naive language detection over a chapter's text: stopword counts decide
-/// among Supertonic-3's common languages. Falls back to English when the
+/// among the common reader languages. Falls back to English when the
 /// counts are inconclusive (short texts, names, numbers).
 enum AudiobookLanguage {
     static let supported = ["en", "nl", "de", "fr", "es", "it"]
@@ -290,118 +288,18 @@ enum AudiobookLanguage {
     }
 }
 
-/// Synthesis seam: the real implementation wraps Supertonic-3 (download,
-/// model load, voice styles); tests supply a mock. Voice identity travels
-/// as its raw name so tests need no FluidAudio types.
+/// Synthesis seam: the real implementation is ReadAloudVoiceStore
+/// (Breeze TTS 2 via MLX — download, load, voice presets); tests supply a
+/// mock. Voice identity travels as its preset name string.
 @MainActor
 protocol AudiobookSynthesizerType: AnyObject {
     /// Download + load the pipeline once (idempotent).
     func ensureReady() async throws
-    func synthesize(_ text: String, language: String, voiceName: String) async throws -> [Float]
+    func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int)
 }
 
-/// Supertonic-3 backend: ~400 MB CoreML pipeline downloaded on first use,
-/// per-voice style presets fetched on demand.
-///
-/// Uses an explicit cache root (`Application Support/FluidAudio/TTS`).
-/// The SDK's own default (`fluidaudio`, lowercase) collides on
-/// case-insensitive APFS with the `FluidAudio` directory the ASR models
-/// already created — the create fails with EIO — so the audiobook pins
-/// the capital-case path everything else already uses.
-private final class SupertonicSynthesis: AudiobookSynthesizerType {
-    private var manager: Supertonic3Manager?
-    private var styles: [String: Supertonic3VoiceStyle] = [:]
-    private var readyTask: Task<Void, Error>?
-
-    fileprivate static func ttsCacheRoot() -> URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let root = support.appendingPathComponent("FluidAudio/TTS", isDirectory: true)
-        if !FileManager.default.fileExists(atPath: root.path) {
-            try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        }
-        return root
-    }
-
-    private static func purgeRepo() {
-        let repo = ttsCacheRoot().appendingPathComponent("supertonic-3", isDirectory: true)
-        try? FileManager.default.removeItem(at: repo)
-    }
-
-    private func downloadOnce() async throws {
-        let cache = Self.ttsCacheRoot()
-        let repoDir = cache.appendingPathComponent("supertonic-3", isDirectory: true)
-        try? FileManager.default.createDirectory(at: repoDir, withIntermediateDirectories: true)
-        // The supertonic-3-coreml HF repo ships BOTH `Config.json` (a 2-byte
-        // stub) and `config.json` — distinct on HuggingFace, a fatal
-        // collision on Apple's case-insensitive filesystem: the downloader's
-        // `partial → move` for the second name fails against the first
-        // (code 516) and aborts the whole download, reproducibly on device.
-        // downloadAndCreate's own pass cannot be filtered, so fetch the tree
-        // here with the stub skipped and the redundant artifacts pruned;
-        // the loader then finds every required file present and skips its
-        // download entirely (it never reads Config.json — its companions
-        // are tts.json + unicode_indexer.json).
-        Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("tree fetch start")
-        _ = try await ModelHub.download(
-            .supertonic3, subdirectory: "", to: repoDir,
-            shouldSkip: { path in
-                if path == "Config.json" { return true }
-                if path.hasSuffix(".mlpackage") { return true } // sources, not needed
-                return false
-            })
-        Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("tree fetch done")
-        // The simulator has no ANE; asking for one can stall CoreML's
-        // compile. CPU-only there, CPU+ANE on device.
-        #if targetEnvironment(simulator)
-        let units: MLComputeUnits = .cpuOnly
-        #else
-        let units: MLComputeUnits = .cpuAndNeuralEngine
-        #endif
-        manager = try await Supertonic3Manager.downloadAndCreate(cacheDirectory: cache, computeUnits: units)
-        Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("pipeline ready")
-    }
-
-    /// Downloads the pipeline once (idempotent, single-flight). A failed
-    /// attempt purges the half-written repo dir — interrupted downloads
-    /// leave `*.partial` staging files the next pass cannot move over —
-    /// and retries clean before surfacing the error.
-    func ensureReady() async throws {
-        if manager != nil { return }
-        if let readyTask { try await readyTask.value; return }
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await self.downloadOnce()
-            } catch {
-                Self.purgeRepo()
-                try await self.downloadOnce()
-            }
-        }
-        readyTask = task
-        defer { readyTask = nil }
-        try await task.value
-    }
-
-    func synthesize(_ text: String, language: String, voiceName: String) async throws -> [Float] {
-        guard let manager else {
-            throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "engine not ready"])
-        }
-        let style: Supertonic3VoiceStyle
-        if let cached = styles[voiceName] {
-            style = cached
-        } else {
-            let voice = Supertonic3Voice(name: voiceName) ?? .m1
-            style = try await Supertonic3ResourceDownloader.loadVoiceStyle(
-                voice, directory: Self.ttsCacheRoot())
-            styles[voiceName] = style
-        }
-        let (samples, _) = try await manager.synthesize(text: text, language: language, style: style)
-        return samples
-    }
-}
-
-/// Audiobook mode for the book reader: on-device neural TTS (Supertonic-3
-/// via FluidAudio) that reads the open book page by page through the same
+/// Audiobook mode for the book reader: on-device neural TTS (Breeze TTS 2
+/// via MLX, see BreezeTTS.swift) that reads the open book page by page through the same
 /// page-turn path as manual reading, so exiting mid-page leaves the reader
 /// exactly where listening stopped.
 @Observable
@@ -476,11 +374,10 @@ final class AudiobookModel {
             currentVoice = Self.voices[wrapped] // didSet persists + invalidates
         }
     }
-    nonisolated static let voices: [Supertonic3Voice] = Supertonic3Voice.allCases
-    /// Count without exposing FluidAudio types to tests.
+    nonisolated static let voices: [String] = ReadAloudVoiceStore.voices.map(\.name)
     nonisolated static var voiceCount: Int { voices.count }
-    private var currentVoice: Supertonic3Voice {
-        didSet { AppSettings.shared.audiobookVoice = currentVoice.rawValue }
+    private var currentVoice: String {
+        didSet { AppSettings.shared.audiobookVoice = currentVoice }
     }
 
     private let engine: AudiobookAudioEngineType
@@ -493,14 +390,14 @@ final class AudiobookModel {
     private var cache: [String: AVAudioPCMBuffer] = [:]
 
     convenience init() {
-        self.init(engine: AudiobookAudioEngine(), synthesis: SupertonicSynthesis())
+        self.init(engine: AudiobookAudioEngine(), synthesis: ReadAloudVoiceStore.shared)
     }
 
     init(engine: AudiobookAudioEngineType, synthesis: AudiobookSynthesizerType) {
         self.engine = engine
         self.synthesis = synthesis
         let stored = AppSettings.shared.audiobookVoice
-        self.currentVoice = Supertonic3Voice(name: stored) ?? .m1
+        self.currentVoice = Self.voices.first { $0 == stored } ?? Self.voices[0]
         self.engine.rate = Self.speeds[AppSettings.shared.audiobookSpeedIndex]
         let vol = AppSettings.shared.audiobookVolumeIndex
         self.engine.outputVolume = Self.volumes[min(max(vol, 0), Self.volumes.count - 1)]
@@ -515,7 +412,7 @@ final class AudiobookModel {
     var rate: Float { engine.rate }
 
     /// Panel labels.
-    var voiceLabel: String { currentVoice.rawValue }
+    var voiceLabel: String { currentVoice }
     var speedLabel: String {
         let v = Self.speeds[min(max(speedIndex, 0), Self.speeds.count - 1)]
         return v == v.rounded() ? String(format: "%.0f×", v) : String(format: "%g×", v)
@@ -681,7 +578,10 @@ final class AudiobookModel {
                 } catch {
                     Logger(subsystem: "com.ipodclassic.app", category: "tts")
                         .notice("synth failed: \(error.localizedDescription, privacy: .public)")
-                    state = .failed("Speech failed")
+                    // Surface the underlying message — the voice store's
+                    // errors are user-meaningful ("needs a real device",
+                    // download failures); a generic label hid them.
+                    state = .failed(error.localizedDescription.isEmpty ? "Speech failed" : error.localizedDescription)
                     return
                 }
             }
@@ -707,14 +607,14 @@ final class AudiobookModel {
 
     private func bufferFor(_ segment: AudiobookSegment, language: String) async throws -> AVAudioPCMBuffer {
         if let cached = cache[segment.text] { return cached }
-        let samples = try await synthesize(segment.text, language: language)
-        let buffer = Self.makeBuffer(samples)
+        let (samples, sampleRate) = try await synthesize(segment.text, language: language)
+        let buffer = Self.makeBuffer(samples, sampleRate: sampleRate)
         cache.removeAll()
         cache[segment.text] = buffer
         return buffer
     }
 
-    private func synthesize(_ text: String, language: String) async throws -> [Float] {
+    private func synthesize(_ text: String, language: String) async throws -> (samples: [Float], sampleRate: Int) {
         if !pipelineReady {
             state = .downloading
             LiveActivityManager.shared.downloadStarted()
@@ -734,13 +634,13 @@ final class AudiobookModel {
             state = .loading
             LiveActivityManager.shared.downloadFinished(success: true)
         }
-        return try await synthesis.synthesize(text, language: language, voiceName: currentVoice.rawValue)
+        return try await synthesis.synthesize(text, language: language, voiceName: currentVoice)
     }
 
     // MARK: Audio
 
-    static func makeBuffer(_ samples: [Float]) -> AVAudioPCMBuffer {
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    static func makeBuffer(_ samples: [Float], sampleRate: Int) -> AVAudioPCMBuffer {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1)!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(samples.count, 1)))!
         buffer.frameLength = AVAudioFrameCount(samples.count)
         if let dst = buffer.floatChannelData?[0] {
@@ -765,22 +665,16 @@ final class AudiobookModel {
         }
         do {
             stage("download-start")
-            #if targetEnvironment(simulator)
-            let units: MLComputeUnits = .cpuOnly
-            #else
-            let units: MLComputeUnits = .cpuAndNeuralEngine
-            #endif
-            let m = try await Supertonic3Manager.downloadAndCreate(
-                cacheDirectory: SupertonicSynthesis.ttsCacheRoot(), computeUnits: units)
+            let store = ReadAloudVoiceStore.shared
+            _ = try await store.loadModelIfNeeded()
             stage("model-ready")
-            let style = try await Supertonic3ResourceDownloader.loadVoiceStyle(
-                currentVoice, directory: SupertonicSynthesis.ttsCacheRoot())
             stage("synth-start")
             let t0 = Date()
-            let (samples, duration) = try await m.synthesize(text: text, language: AudiobookLanguage.detect(text), style: style)
+            let (samples, sampleRate) = try await store.synthesize(text: text, voiceName: currentVoice)
+            let duration = Double(samples.count) / Double(max(sampleRate, 1))
             let rtf = Date().timeIntervalSince(t0) / Double(max(duration, 0.001))
             stage("synth-done")
-            let buffer = Self.makeBuffer(samples)
+            let buffer = Self.makeBuffer(samples, sampleRate: sampleRate)
             if let file = try? AVAudioFile(forWriting: docs.appendingPathComponent("qa_tts.wav"),
                                            settings: buffer.format.settings) {
                 try? file.write(from: buffer)

@@ -22,6 +22,7 @@ struct SettingsScreen: View {
             MenuItem(id: "display", title: "Display"),
             MenuItem(id: "playback", title: "Playback"),
             MenuItem(id: "about", title: "About"),
+            MenuItem(id: "redoSetup", title: "Run Setup Again", symbol: "arrow.counterclockwise", showsChevron: false),
         ]
     }
 
@@ -59,6 +60,10 @@ struct SettingsScreen: View {
         case "display": model.push(.settingsDisplay)
         case "playback": model.push(.settingsPlayback)
         case "about": model.push(.settingsAbout)
+        case "redoSetup":
+            // Re-run the first-launch wizard (permissions, voice models,
+            // factory preferences). completeSetup() lands back on home.
+            model.push(.setup)
         default: break
         }
     }

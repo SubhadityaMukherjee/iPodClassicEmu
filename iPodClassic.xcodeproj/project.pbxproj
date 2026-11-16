@@ -44,6 +44,7 @@
 		62CB048E8A6943482DD8D1F8 /* TickSounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16CC36E7096FECFA8123BA8 /* TickSounds.swift */; };
 		6B80BBFAE72E9948F3B17307 /* BinauralModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F96604B2BA5F0E6E4B917A /* BinauralModelTests.swift */; };
 		6CBA67E33C845F4D22F2422D /* MusicScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D783A264CBB399887431ACB /* MusicScreens.swift */; };
+		702E605A2E8C92A8C6BD9D10 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 88FDD2D24363939804D3DCE0 /* MLXAudioCore */; };
 		7329DE1397D725EDB894E00A /* TourScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEAA91BB4F824B867C611B9E /* TourScreen.swift */; };
 		73FA6EAAFE03B6950EF38587 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 9FA83B1241C42CB2EE7E1529 /* FluidAudio */; };
 		7B50BFDA85F41723706F0125 /* iPodClassicWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -76,7 +77,9 @@
 		B97B52676E74A4029CEA2466 /* PDFReflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */; };
 		BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */; };
 		BDCFE1DC543919A4192B71E2 /* RouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */; };
+		C28E52C6D874CD0BF64AABFD /* BreezeTTS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FCCDB70552E9D20B53A609 /* BreezeTTS.swift */; };
 		C33C03ED0D677C9F137A329C /* ReaderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3B4E8B6F6AD8A9E8273947 /* ReaderScreens.swift */; };
+		C4FEF358E6851317A4775EED /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = C4E3DB847F3605FEE13E65BF /* MLXAudioTTS */; };
 		CCE5269ADD98979ED5F089DB /* ClockFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE0B67D71510C6279340644 /* ClockFace.swift */; };
 		CE6E87EC8A810CF7BF7AA62F /* AlarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8919784990F005864723A97 /* AlarmStore.swift */; };
 		CEB64025D67DA5C18017C933 /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9168F602DF28123A3C7389 /* RecorderModel.swift */; };
@@ -147,6 +150,7 @@
 		0F111ADEC20D007E2D55671F /* TrackActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackActivityAttributes.swift; sourceTree = "<group>"; };
 		0FBDC51C85014242F6A14F95 /* AlarmBeep.caf */ = {isa = PBXFileReference; path = AlarmBeep.caf; sourceTree = "<group>"; };
 		1035841ACC4F2D1DC6D74A91 /* ArticleExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleExtractor.swift; sourceTree = "<group>"; };
+		14FCCDB70552E9D20B53A609 /* BreezeTTS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreezeTTS.swift; sourceTree = "<group>"; };
 		1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmRingerOverlay.swift; sourceTree = "<group>"; };
 		1D783A264CBB399887431ACB /* MusicScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicScreens.swift; sourceTree = "<group>"; };
 		200C938E15034523126C2E9B /* AudiobookModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobookModel.swift; sourceTree = "<group>"; };
@@ -241,6 +245,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				73FA6EAAFE03B6950EF38587 /* FluidAudio in Frameworks */,
+				C4FEF358E6851317A4775EED /* MLXAudioTTS in Frameworks */,
+				702E605A2E8C92A8C6BD9D10 /* MLXAudioCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -500,6 +506,7 @@
 			children = (
 				1035841ACC4F2D1DC6D74A91 /* ArticleExtractor.swift */,
 				200C938E15034523126C2E9B /* AudiobookModel.swift */,
+				14FCCDB70552E9D20B53A609 /* BreezeTTS.swift */,
 				C7F775252FC095655EE129D8 /* EpubContainer.swift */,
 				F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */,
 				B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */,
@@ -600,6 +607,8 @@
 			name = iPodClassic;
 			packageProductDependencies = (
 				9FA83B1241C42CB2EE7E1529 /* FluidAudio */,
+				C4E3DB847F3605FEE13E65BF /* MLXAudioTTS */,
+				88FDD2D24363939804D3DCE0 /* MLXAudioCore */,
 			);
 			productName = iPodClassic;
 			productReference = 3CD94B70B82FB1804DC5AAD1 /* iPodClassic.app */;
@@ -679,6 +688,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				A215EE6C9078CBF2EAE76BAF /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D8A095556DCBD5F361F6000F /* Products */;
@@ -723,6 +733,7 @@
 				B733F817F5B3B9093CB866F2 /* AudiobookModel.swift in Sources */,
 				034B77ACC3835DB4B0D14E06 /* BinauralModel.swift in Sources */,
 				CFDD1A4C408D3DD5D81C6940 /* BinauralScreen.swift in Sources */,
+				C28E52C6D874CD0BF64AABFD /* BreezeTTS.swift in Sources */,
 				82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */,
 				D93BC0C3A503AABC32924039 /* CalendarScreen.swift in Sources */,
 				7F8ADF4FC8E0E7C16628F2EA /* CameraModel.swift in Sources */,
@@ -1157,6 +1168,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		A215EE6C9078CBF2EAE76BAF /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Neywa-Labs/mlx-audio-swift.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
@@ -1168,10 +1187,20 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		88FDD2D24363939804D3DCE0 /* MLXAudioCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A215EE6C9078CBF2EAE76BAF /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioCore;
+		};
 		9FA83B1241C42CB2EE7E1529 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		C4E3DB847F3605FEE13E65BF /* MLXAudioTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A215EE6C9078CBF2EAE76BAF /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioTTS;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

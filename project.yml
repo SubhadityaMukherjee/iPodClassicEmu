@@ -9,6 +9,9 @@ packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git
     from: 0.18.3
+  MLXAudio:
+    url: https://github.com/Neywa-Labs/mlx-audio-swift.git
+    branch: main
 
 settings:
   base:
@@ -66,6 +69,10 @@ targets:
       - package: FluidAudio
         product: FluidAudio
         traits: []
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXAudio
+        product: MLXAudioCore
 
   iPodClassicWidgets:
     type: app-extension
