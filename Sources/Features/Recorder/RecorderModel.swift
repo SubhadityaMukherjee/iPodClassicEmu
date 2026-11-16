@@ -119,11 +119,14 @@ final class RecorderModel {
         isPaused = false
         stopTimer()
         LiveActivityManager.shared.recorderEnded()
-        deactivateSessionIfNeeded()
+        leaveSessionActive()
         loadRecordings()
     }
 
-    private func deactivateSessionIfNeeded() {
+    /// Keeps the shared .playback session active after recording (music
+    /// and background audio depend on it — never deactivate), and lets
+    /// other audio (e.g. a paused music app) resume.
+    private func leaveSessionActive() {
         if player == nil {
             try? AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
         }

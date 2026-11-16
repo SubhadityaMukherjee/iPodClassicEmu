@@ -72,4 +72,27 @@ final class NotesEditorTests: XCTestCase {
         XCTAssertTrue(rescrolledY > postKeyboardY,
                       "Wheel ticks stopped scrolling after a keyboard cycle (y=\(postKeyboardY) → \(rescrolledY))")
     }
+
+    /// Regression (audit 2026-11-16): with the trash empty, center (and
+    /// hold-center) subscripted trashItems before the empty guard — a
+    /// crash. The trash screen stays up after the last note is restored
+    /// or deleted forever, so this is trivially reachable.
+    @MainActor
+    func testEmptyTrashCenterTapDoesNotCrash() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["RESET_DEFAULTS"] = "1"
+        app.launchEnvironment["START_ROUTE"] = "noteTrash"
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Trash Empty"].waitForExistence(timeout: 5),
+                      "Trash screen (empty) did not open")
+
+        // Center press on the empty trash must be a harmless no-op.
+        let wheel = app.otherElements["clickwheel"]
+        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
+        wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(app.staticTexts["Trash Empty"].exists, "App crashed or left the trash screen on empty center press")
+        XCTAssertEqual(app.state, .runningForeground)
+    }
 }

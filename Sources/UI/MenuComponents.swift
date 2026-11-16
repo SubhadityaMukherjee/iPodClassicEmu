@@ -102,7 +102,14 @@ struct MenuList: View {
                     windowIndex = new
                 }
             }
-            .onChange(of: items.count) { _, _ in windowIndex = 0 }
+            .onChange(of: items.count) { _, _ in
+                // List contents changed (library refresh): keep showing
+                // roughly where the user was. Resetting to 0 teleported
+                // the viewport to the top while the selection stayed deep
+                // — one wasted tick, and the blue row vanished.
+                let n = visibleRows(from: windowIndex, height: geo.size.height, m: m)
+                windowIndex = min(max(0, windowIndex), max(0, items.count - n))
+            }
         }
         .overlay {
             if items.isEmpty {

@@ -79,7 +79,11 @@ struct iPodClassicApp: App {
                         // dismiss cycle died mid-way (force-quit, crash,
                         // reboot), the notification requests are gone while
                         // the alarm still reads "on" — reconcile re-arms.
-                        if model.alarms.enabled { model.alarms.reconcile() }
+                        // Unconditional: with the alarm OFF it cancels any
+                        // ghost requests installed earlier this session
+                        // (gating on `enabled` would leave those alive
+                        // until the next launch).
+                        model.alarms.reconcile()
                         // Returning to the foreground is activity. The
                         // process stays alive in the background (playback
                         // audio session), so idleSeconds keeps growing

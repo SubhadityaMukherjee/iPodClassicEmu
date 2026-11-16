@@ -260,10 +260,6 @@ struct PhotoDetailScreen: View {
             }
         case .menu:
             model.pop()
-        case .prev:
-            _ = moveListSelection(&selection, count: model.photos.count, delta: -1, settings: settings)
-        case .next:
-            _ = moveListSelection(&selection, count: model.photos.count, delta: 1, settings: settings)
         default:
             break
         }

@@ -426,14 +426,6 @@ struct MusicListScreen: View {
         }
     }
 
-    private var thumbStyle: Bool { kind == .albums || kind == .recent }
-
-    private func thumbProvider(_ item: MenuItem) -> Artwork? {
-        model.music.album(item.id)?.artwork
-    }
-
-    // MARK: Input
-
     private func handle(_ event: ControlEvent) {
         if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
@@ -894,10 +886,15 @@ struct AlbumDetailScreen: View {
             CoverFlowLaunch.shared.pendingAlbumID = albumID
             model.push(.coverFlow)
         case 1:
-            model.player.play(tracks.isEmpty ? model.music.songs : tracks)
+            // Guard like PlaylistDetail: playing the whole library because
+            // this album's tracks hadn't finished loading was a surprise,
+            // not a fallback.
+            guard !tracks.isEmpty else { return }
+            model.player.play(tracks)
             model.push(.nowPlaying)
         case 2:
-            model.player.shufflePlay(tracks.isEmpty ? model.music.songs : tracks)
+            guard !tracks.isEmpty else { return }
+            model.player.shufflePlay(tracks)
             model.push(.nowPlaying)
         default:
             let idx = selection - headerItems.count

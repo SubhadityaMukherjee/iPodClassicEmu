@@ -506,11 +506,8 @@ struct RecordingDetailScreen: View {
                 transcription.transcribe(file: file.id, sourceURL: file.url)
             } else {
                 showToast = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { showToast = false }
                 Task { try? await transcription.ensureModels() }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                    showToast = false
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { showToast = false }
             }
         case "Share":
             shareItem = file.url

@@ -1228,8 +1228,6 @@ struct BookScreen: View {
 
 // MARK: - EPUB rendering
 
-// MARK: - EPUB rendering
-
 /// Command handle for the parent screen to drive the web view.
 final class EpubController {
     weak var webView: WKWebView?

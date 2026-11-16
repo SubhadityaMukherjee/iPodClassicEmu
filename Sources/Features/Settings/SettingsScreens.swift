@@ -64,8 +64,8 @@ struct SettingsScreen: View {
     }
 }
 
-/// Generic settings page with value-cycling rows: wheel changes the selected
-/// row's value; rows with `route` push on center instead.
+/// Generic settings page with value-cycling rows: the wheel moves between
+/// rows; center on a row cycles its value (or pushes `route`).
 struct ValueSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings

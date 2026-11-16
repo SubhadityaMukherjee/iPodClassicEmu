@@ -150,8 +150,6 @@ struct CalendarScreen: View {
 
     // MARK: Data
 
-    private var gridDays: String { "" } // placeholder to keep grouping obvious
-
     /// Dates laid out in a 7-column grid; nil = leading/trailing blank cell.
     private func gridDays(for date: Date) -> [Date?] {
         guard let interval = cal.dateInterval(of: .month, for: date) else { return [] }
@@ -185,10 +183,6 @@ struct CalendarScreen: View {
                 selected = next
                 WheelFeedback.tick(dir: d)
             }
-        case .prev:
-            selected = cal.date(byAdding: .month, value: -1, to: selected) ?? selected
-        case .next:
-            selected = cal.date(byAdding: .month, value: 1, to: selected) ?? selected
         case .menu:
             model.pop()
         default:

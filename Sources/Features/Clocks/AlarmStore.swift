@@ -116,11 +116,22 @@ final class AlarmStore: ObservableObject {
         }
     }
 
-    private func installRequest() {
+    /// Installs the repeating requests for the currently armed alarm.
+    /// Internal (not private) so AlarmReconcileTests can exercise the
+    /// disabled gate directly — the full schedule() path needs
+    /// notification authorization the unit-test runner can't grant.
+    func installRequest() {
         // Clean slate first: stale requests from earlier repeat-mode
         // toggles would otherwise ring alongside the current set (the
         // alarm "rings twice" and resurrects after Stop).
         cancel()
+        // Nothing installs while the alarm is off. schedule() is also
+        // called for its side effects (permission prompt on the alarm
+        // screen, post-ringer re-arm, setup completion) — those used to
+        // land here with the alarm disabled and install repeating
+        // requests anyway: a ghost that rings at the set time with the
+        // toggle reading Off until the next relaunch healed it.
+        guard enabled else { return }
         let content = UNMutableNotificationContent()
         content.title = "Alarm"
         content.body = "\(displayText) · \(repeatLabel)"
