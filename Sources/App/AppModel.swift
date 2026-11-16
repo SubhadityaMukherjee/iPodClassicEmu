@@ -108,6 +108,7 @@ enum Route: Hashable {
 }
 
 @Observable
+@MainActor
 final class AppModel {
     var stack: [Route] = [.home]
 
@@ -134,6 +135,7 @@ final class AppModel {
     let binaural = BinauralModel()
     let settings = AppSettings.shared
     let alarms = AlarmStore.shared
+    let audiobook = AudiobookModel()
 
     let controlBus = PassthroughSubject<ControlEvent, Never>()
     /// Events while the alarm/timer ringer is up go here instead, so the
@@ -171,6 +173,14 @@ final class AppModel {
                     setStatus("FAILED: \(error)")
                     Logger(subsystem: "com.ipodclassic.app", category: "transcribe").notice("QA setup failed: \(String(describing: error), privacy: .public)")
                 }
+            }
+        }
+
+        // QA hook: QA_TTS runs the TTS pipeline end-to-end (model
+        // download, load, synthesize) and writes stages to qa_status.txt.
+        if let text = ProcessInfo.processInfo.environment["QA_TTS"] {
+            Task { @MainActor in
+                await audiobook.qaHook(text: text)
             }
         }
 
@@ -240,7 +250,7 @@ final class AppModel {
         }
     }
 
-    static func route(named name: String) -> Route? {
+    nonisolated static func route(named name: String) -> Route? {
         switch name {
         case "home": return .home
         case "music": return .music
@@ -398,7 +408,8 @@ final class AppModel {
 
     func startRinger(_ context: RingerContext) {
         ringer = context
-        // Actual sound: .playback session ignores the silent switch.
+        // App-owned audio always plays at media volume; the loud, ringer-
+        // volume sound comes from the system notification (see RingerManager).
         RingerManager.shared.startSound()
     }
 }

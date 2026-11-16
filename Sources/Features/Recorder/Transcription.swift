@@ -26,6 +26,16 @@ enum TranscriptStore {
             .appendingPathComponent(".transcripts.json")
     }
 
+    /// The sidecar lives inside Recordings/; make sure the folder exists so
+    /// a fresh install (or erased simulator) can save before the first
+    /// recording creates it.
+    private static func ensureDirectory() {
+        let dir = url.deletingLastPathComponent()
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+
     static func loadAll() -> [TranscriptEntry] {
         guard let data = try? Data(contentsOf: url),
               let entries = try? JSONDecoder().decode([TranscriptEntry].self, from: data) else { return [] }
@@ -95,6 +105,7 @@ enum TranscriptStore {
 
     /// Upserts one entry (thread-safe enough: called from the main actor).
     static func save(_ entry: TranscriptEntry) {
+        ensureDirectory()
         var all = loadAll()
         if let idx = all.firstIndex(where: { $0.file == entry.file }) {
             all[idx] = entry
@@ -107,6 +118,7 @@ enum TranscriptStore {
     }
 
     static func remove(for file: String) {
+        ensureDirectory()
         var all = loadAll()
         all.removeAll { $0.file == file }
         if let data = try? JSONEncoder().encode(all) {

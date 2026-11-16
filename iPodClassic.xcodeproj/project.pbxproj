@@ -51,6 +51,7 @@
 		82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2252DE6110093E2FF64B7404 /* CRTOverlay.swift */; };
 		84BE9FB1EF58F9433F774C38 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FF7E771867E7BE0B289EE5 /* AppModel.swift */; };
 		8597481095F12B2C194F87FC /* NotesScrollTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB9D303648B22CE1E54B4FC /* NotesScrollTests.swift */; };
+		8666FBF276B03771BDBF724E /* AudiobookModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8012886E4153BAF267BB6B2 /* AudiobookModelTests.swift */; };
 		89DD749F8A866745DF1D1A08 /* RecorderScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59116EF21FFA3688484F038F /* RecorderScreens.swift */; };
 		8A5ED5850A23A7E669057EB8 /* SetupScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930DFFDE7B5BAFC6023F6530 /* SetupScreen.swift */; };
 		8B9A0259A4FB90FE3B22B7B2 /* ShortcutsIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27AC5900221DBDC037A7BA4 /* ShortcutsIntegration.swift */; };
@@ -70,6 +71,7 @@
 		AE8A9D30DCA46141223929DB /* TimeFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B37641D1E5AA57A45A02D07 /* TimeFormat.swift */; };
 		AEBF95D90A2A55989C2F7BF4 /* iPodClassicWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47CFD786881A4C8FC43D00DB /* iPodClassicWidgets.swift */; };
 		AF0B029055EBE310E79A0C5C /* E2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FFA9E69DB00DC268067DD8B /* E2ETests.swift */; };
+		B733F817F5B3B9093CB866F2 /* AudiobookModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200C938E15034523126C2E9B /* AudiobookModel.swift */; };
 		B96435FA601253641FD082E8 /* MenuSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0BA7A87D4C96CA3F5D5FCF /* MenuSelectionTests.swift */; };
 		B97B52676E74A4029CEA2466 /* PDFReflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */; };
 		BD385C973C2B8FE4B512DB80 /* CameraScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8A71CA3A1EC39B1041F72E /* CameraScreen.swift */; };
@@ -147,6 +149,7 @@
 		1035841ACC4F2D1DC6D74A91 /* ArticleExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleExtractor.swift; sourceTree = "<group>"; };
 		1B6FD591B11F8960B7386F64 /* AlarmRingerOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmRingerOverlay.swift; sourceTree = "<group>"; };
 		1D783A264CBB399887431ACB /* MusicScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicScreens.swift; sourceTree = "<group>"; };
+		200C938E15034523126C2E9B /* AudiobookModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobookModel.swift; sourceTree = "<group>"; };
 		2252DE6110093E2FF64B7404 /* CRTOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRTOverlay.swift; sourceTree = "<group>"; };
 		2252FD3DDEC10A47D988C6D3 /* iPodClassicTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = iPodClassicTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2803B556B5B7050105E7CFB4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -194,6 +197,7 @@
 		A2D27AABC7BF76B6F5AEB616 /* ScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenView.swift; sourceTree = "<group>"; };
 		B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHighlights.swift; sourceTree = "<group>"; };
 		B7CEBDD3E18661EEC5335B6E /* Tick.caf */ = {isa = PBXFileReference; path = Tick.caf; sourceTree = "<group>"; };
+		B8012886E4153BAF267BB6B2 /* AudiobookModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobookModelTests.swift; sourceTree = "<group>"; };
 		B882A05605D681D6A37EC722 /* BinauralScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinauralScreen.swift; sourceTree = "<group>"; };
 		B9E142990608C64F576307AC /* TickSoft.caf */ = {isa = PBXFileReference; path = TickSoft.caf; sourceTree = "<group>"; };
 		B9E813213263E69F0E5B46BF /* AlarmTone.caf */ = {isa = PBXFileReference; path = AlarmTone.caf; sourceTree = "<group>"; };
@@ -421,6 +425,7 @@
 			children = (
 				F18AE4C666A52A2EF759755A /* AlarmReconcileTests.swift */,
 				9CC54D402F0138048777F665 /* ArticleExtractorTests.swift */,
+				B8012886E4153BAF267BB6B2 /* AudiobookModelTests.swift */,
 				79F96604B2BA5F0E6E4B917A /* BinauralModelTests.swift */,
 				53777219020A6ED4B6227EC2 /* ClockStateTests.swift */,
 				483C3AD40EF6C81CCFC50B95 /* CoreTests.swift */,
@@ -494,6 +499,7 @@
 			isa = PBXGroup;
 			children = (
 				1035841ACC4F2D1DC6D74A91 /* ArticleExtractor.swift */,
+				200C938E15034523126C2E9B /* AudiobookModel.swift */,
 				C7F775252FC095655EE129D8 /* EpubContainer.swift */,
 				F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */,
 				B75B8149833B9FFD79A46820 /* ReaderHighlights.swift */,
@@ -714,6 +720,7 @@
 				24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */,
 				D5C53EE55B0A32B20C285C92 /* ArticleExtractor.swift in Sources */,
 				58033FFEF60260FBB8E71E00 /* ArtworkView.swift in Sources */,
+				B733F817F5B3B9093CB866F2 /* AudiobookModel.swift in Sources */,
 				034B77ACC3835DB4B0D14E06 /* BinauralModel.swift in Sources */,
 				CFDD1A4C408D3DD5D81C6940 /* BinauralScreen.swift in Sources */,
 				82178975957CBC3C2277CBC0 /* CRTOverlay.swift in Sources */,
@@ -785,6 +792,7 @@
 			files = (
 				547D1A488A4F0E68D3C0267F /* AlarmReconcileTests.swift in Sources */,
 				D02C0198585EAED846BF5DBB /* ArticleExtractorTests.swift in Sources */,
+				8666FBF276B03771BDBF724E /* AudiobookModelTests.swift in Sources */,
 				6B80BBFAE72E9948F3B17307 /* BinauralModelTests.swift in Sources */,
 				4C705C26710B6749CAF056D5 /* ClockStateTests.swift in Sources */,
 				F92BF08BFBC6D8B5DF9C9EB5 /* CoreTests.swift in Sources */,

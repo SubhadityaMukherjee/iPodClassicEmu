@@ -171,7 +171,11 @@ final class StopwatchModel {
     }
 }
 
-/// Plays the ringer loop and shows the in-app overlay via AppModel.
+/// Shows the in-app ringer overlay via AppModel. The alarm SOUND is the
+/// system notification (Ringer & Alerts volume — immune to media mute);
+/// the AVAudioPlayer loop here is only a fallback for the
+/// notifications-denied case, because app-owned audio ALWAYS plays at
+/// media volume (no session category changes that on iOS).
 @Observable
 final class RingerManager {
     static let shared = RingerManager()
@@ -190,8 +194,11 @@ final class RingerManager {
         }
     }
 
-    /// Loud alarm loop through a .playback session (bypasses the mute switch).
+    /// Media-volume loop, ONLY when notifications are denied (no system
+    /// sound would exist at all). With notifications working, this is a
+    /// no-op — the notification already rang at ringer volume.
     func startSound() {
+        guard AlarmStore.shared.permissionDenied else { return }
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default, options: [.duckOthers])
         try? session.setActive(true)
@@ -205,10 +212,11 @@ final class RingerManager {
     func stop() {
         audioPlayer?.stop()
         audioPlayer = nil
-        AppModelRouter.shared.model?.ringer = nil
-        // Keep the session active (music playback + background audio rely
-        // on it); just drop the ringer's duck-others configuration.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        DispatchQueue.main.async {
+            AppModelRouter.shared.model?.ringer = nil
+        }
+        // The ringer no longer reconfigures the audio session (no ducking
+        // to undo); the session stays active for music/background audio.
         // Re-arm tomorrow's request after the ringer is dismissed.
         AlarmStore.shared.schedule()
     }

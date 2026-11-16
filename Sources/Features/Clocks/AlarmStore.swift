@@ -197,7 +197,8 @@ final class AlarmStore: ObservableObject {
         }
     }
 
-    // MARK: - In-app firing (keeps ringing even when locked or muted)
+    // MARK: - In-app firing (the Snooze/Stop overlay; the sound itself
+    // comes from the system notification at Ringer & Alerts volume)
 
     private var keepAlivePlayer: AVAudioPlayer?
     private var monitor: Timer?
@@ -205,8 +206,10 @@ final class AlarmStore: ObservableObject {
     private var lastFireDay: String?
 
     /// While backgrounded with an armed alarm, plays near-silent audio so
-    /// iOS keeps the process alive; a monitor then fires the ringer in-app
-    /// at the alarm time — full volume, even on the silent switch.
+    /// iOS keeps the process alive; a monitor then shows the ringer
+    /// overlay in-app at the alarm time (the sound comes from the system
+    /// notification, which rings at Ringer & Alerts volume regardless of
+    /// media volume).
     func startKeepAlive() {
         guard enabled, monitor == nil else { return }
         // Heal before the night matters: if a previous fire/dismiss cycle
@@ -252,24 +255,12 @@ final class AlarmStore: ObservableObject {
         let key = cal.startOfDay(for: Date()).timeIntervalSince1970.description
         guard lastFireDay != key else { return }
         lastFireDay = key
-        // The app handles today's ring; drop today's (duplicate) system
-        // notification — both pending AND already-delivered, or the banner
-        // would flash alongside the ringer overlay. WARNING: removing a
-        // REPEATING request kills every future occurrence too — this was
-        // the "alarm says on but never rings again" bug. Re-schedule as
-        // soon as the removal lands: the matching minute has already
-        // passed, so the next fire is tomorrow.
-        let ids = ["alarm.daily", "alarm.snooze"] + (1...7).map { "alarm.day.\($0)" }
-        let center = UNUserNotificationCenter.current()
-        center.removeDeliveredNotifications(withIdentifiers: ids)
-        center.removePendingNotificationRequests(withIdentifiers: ids)
-        // Removing a REPEATING request kills every future occurrence —
-        // re-schedule as soon as the removal lands (the matching minute
-        // has passed, so the next fire is tomorrow). Without this the
-        // alarm stays "on" but never rings again.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.schedule()
-        }
+        // The system notification IS the alarm sound (Ringer & Alerts
+        // volume — immune to media mute); leave it alone and show the
+        // in-app Snooze/Stop overlay on top. Leaving the repeating
+        // requests untouched also means no remove/re-schedule dance (the
+        // old path had to heal the "removed every future occurrence"
+        // invariant itself).
         stopKeepAlive()
         DispatchQueue.main.async {
             AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
@@ -312,9 +303,15 @@ final class AlarmNotificationsDelegate: NSObject, UNUserNotificationCenterDelega
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        if notification.request.content.categoryIdentifier == "ALARM" {
+        let category = notification.request.content.categoryIdentifier
+        if category == "ALARM" || category == "TIMER" {
             startRinger(for: notification)
-            completionHandler([])  // in-app overlay handles presentation
+            // The SYSTEM notification sound is the alarm: it plays at the
+            // Ringer & Alerts volume — the only iOS audio domain that
+            // still rings when media volume is muted. `.sound` without
+            // `.banner` avoids a duplicate banner over the in-app overlay
+            // (which provides Snooze/Stop).
+            completionHandler([.sound])
         } else {
             completionHandler([.banner, .sound])
         }
@@ -371,8 +368,11 @@ enum AlarmNotifications {
         ])
         center.delegate = delegate
         delegate.onStartRinger = { context in
-            // Routed to the live AppModel through the shared hook.
-            AppModelRouter.shared.model?.startRinger(context)
+            // Routed to the live AppModel through the shared hook; the
+            // delegate callback arrives off-main, the ringer is UI.
+            DispatchQueue.main.async {
+                AppModelRouter.shared.model?.startRinger(context)
+            }
         }
     }
 }
