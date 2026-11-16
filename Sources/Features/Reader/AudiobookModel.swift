@@ -2,6 +2,7 @@ import AVFoundation
 import Foundation
 import Observation
 import OSLog
+import UIKit
 
 /// One speakable unit: the text on a single page of a chapter, in reading
 /// order. The page index drives the real page turns, so audiobook playback
@@ -388,6 +389,12 @@ final class AudiobookModel {
     /// Single-entry buffer cache (current segment) + the in-flight
     /// prefetch. A page of audio is ~10 MB at 44.1 kHz float mono.
     private var cache: [String: AVAudioPCMBuffer] = [:]
+    /// Silent loop during synthesis windows: nothing is playing while a
+    /// page is being generated, and with the screen locked iOS suspends
+    /// the process — freezing MLX Metal work mid-generation (the QA run
+    /// stalled exactly here). Real page playback covers the gaps between
+    /// syntheses; this covers the syntheses themselves.
+    private let synthKeepAlive = SilentKeepAlive()
 
     convenience init() {
         self.init(engine: AudiobookAudioEngine(), synthesis: ReadAloudVoiceStore.shared)
@@ -461,6 +468,7 @@ final class AudiobookModel {
         loop?.cancel()
         engine.seekRequested = false
         engine.stopPlayback()
+        synthKeepAlive.stop()
         loop = nil
         provider = nil
         cache.removeAll()
@@ -607,6 +615,11 @@ final class AudiobookModel {
 
     private func bufferFor(_ segment: AudiobookSegment, language: String) async throws -> AVAudioPCMBuffer {
         if let cached = cache[segment.text] { return cached }
+        // Synthesis can take a while (first load, model warmup) and no
+        // audio is playing meanwhile — keep the process runnable so a
+        // locked screen can't freeze generation mid-flight.
+        synthKeepAlive.start()
+        defer { synthKeepAlive.stop() }
         let (samples, sampleRate) = try await synthesize(segment.text, language: language)
         let buffer = Self.makeBuffer(samples, sampleRate: sampleRate)
         cache.removeAll()
@@ -665,6 +678,14 @@ final class AudiobookModel {
         }
         do {
             stage("download-start")
+            // Keep the screen awake and the process runnable for the
+            // whole run: a locked phone suspends MLX Metal work and the
+            // download stalls silently.
+            UIApplication.shared.isIdleTimerDisabled = true
+            defer { UIApplication.shared.isIdleTimerDisabled = false }
+            let keepAlive = SilentKeepAlive()
+            keepAlive.start()
+            defer { keepAlive.stop() }
             let store = ReadAloudVoiceStore.shared
             _ = try await store.loadModelIfNeeded()
             stage("model-ready")
