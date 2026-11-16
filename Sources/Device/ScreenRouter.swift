@@ -51,6 +51,7 @@ struct ScreenRouter: View {
         case .settingsClickwheel: return "Clickwheel"
         case .settingsDisplay: return "Display"
         case .settingsPlayback: return "Playback"
+        case .settingsReadAloud: return "Read Aloud"
         case .settingsAbout: return "About"
         case .setup: return "Setup"
         case .tour: return "Welcome"
@@ -138,6 +139,7 @@ struct ScreenRouter: View {
         case .settingsClickwheel: ClickwheelSettingsScreen()
         case .settingsDisplay: DisplaySettingsScreen()
         case .settingsPlayback: PlaybackSettingsScreen()
+        case .settingsReadAloud: ReadAloudSettingsScreen()
         case .settingsAbout: AboutScreen()
         case .setup: SetupScreen()
         case .tour: TourScreen()

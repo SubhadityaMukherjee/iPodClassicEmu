@@ -375,7 +375,14 @@ final class AudiobookModel {
             currentVoice = Self.voices[wrapped] // didSet persists + invalidates
         }
     }
-    nonisolated static let voices: [String] = ReadAloudVoiceStore.voices.map(\.name)
+    /// Voices of the SELECTED engine (Qwen: Ryan/Aiden; Breeze: design
+    /// presets). The stored preference falls back to the first when the
+    /// engine changes and the old name doesn't exist.
+    nonisolated static var voices: [String] {
+        AppSettings.shared.readAloudEngine == "breeze"
+            ? ReadAloudVoiceStore.Engine.breeze.voices
+            : ReadAloudVoiceStore.Engine.qwen.voices
+    }
     nonisolated static var voiceCount: Int { voices.count }
     private var currentVoice: String {
         didSet { AppSettings.shared.audiobookVoice = currentVoice }
@@ -691,7 +698,8 @@ final class AudiobookModel {
             stage("model-ready")
             stage("synth-start")
             let t0 = Date()
-            let (samples, sampleRate) = try await store.synthesize(text: text, voiceName: currentVoice)
+            let (samples, sampleRate) = try await store.synthesize(
+                text: text, language: AudiobookLanguage.detect(text), voiceName: currentVoice)
             let duration = Double(samples.count) / Double(max(sampleRate, 1))
             let rtf = Date().timeIntervalSince(t0) / Double(max(duration, 0.001))
             stage("synth-done")

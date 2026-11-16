@@ -33,9 +33,10 @@ final class AppSettings: ObservableObject {
         static let songSort = "music.sort.songs"      // 0 title 1 artist 2 duration 3 recent
         static let albumSort = "music.sort.albums"    // 0 title 1 artist 2 recent
         static let noteFont = "notes.fontSize"        // points; note editor text
-        static let audiobookVoice = "audiobook.voice"     // Supertonic3 voice raw value
+        static let audiobookVoice = "audiobook.voice"     // engine-specific preset name
         static let audiobookSpeed = "audiobook.speed"     // index into AudiobookModel.speeds
         static let audiobookVolume = "audiobook.volume"   // index into AudiobookModel.volumes
+        static let readAloudEngine = "readaloud.engine"   // "qwen" | "breeze"
     }
 
     // MARK: Display
@@ -54,9 +55,14 @@ final class AppSettings: ObservableObject {
 
     // MARK: Audiobook (read aloud)
 
-    /// Read Aloud voice preset name ("Narrator", "Warm", …).
+    /// Read Aloud TTS engine ("qwen" default; "breeze" experimental).
+    var readAloudEngine: String {
+        get { d.string(forKey: K.readAloudEngine) ?? "qwen" }
+        set { objectWillChange.send(); store(newValue, K.readAloudEngine) }
+    }
+    /// Read Aloud voice preset name (engine-specific, e.g. "Ryan").
     var audiobookVoice: String {
-        get { d.string(forKey: K.audiobookVoice) ?? "Narrator" }
+        get { d.string(forKey: K.audiobookVoice) ?? "Ryan" }
         set { objectWillChange.send(); store(newValue, K.audiobookVoice) }
     }
     /// Playback speed; index into AudiobookModel.speeds.

@@ -21,6 +21,7 @@ struct SettingsScreen: View {
             MenuItem(id: "clickwheel", title: "Clickwheel"),
             MenuItem(id: "display", title: "Display"),
             MenuItem(id: "playback", title: "Playback"),
+            MenuItem(id: "readaloud", title: "Read Aloud"),
             MenuItem(id: "about", title: "About"),
             MenuItem(id: "redoSetup", title: "Run Setup Again", symbol: "arrow.counterclockwise", showsChevron: false),
         ]
@@ -59,6 +60,7 @@ struct SettingsScreen: View {
         case "clickwheel": model.push(.settingsClickwheel)
         case "display": model.push(.settingsDisplay)
         case "playback": model.push(.settingsPlayback)
+        case "readaloud": model.push(.settingsReadAloud)
         case "about": model.push(.settingsAbout)
         case "redoSetup":
             // Re-run the first-launch wizard (permissions, voice models,
@@ -257,5 +259,104 @@ struct AboutScreen: View {
 
     static var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+    }
+}
+
+/// Read Aloud engine management: choose the TTS engine, download its
+/// voice model on demand, and free disk by deleting a downloaded model.
+/// Only the SELECTED engine downloads — Breeze (~3 GB) is experimental
+/// and jetsams 8 GB iPhones; Qwen3 (~700 MB) is the default.
+struct ReadAloudSettingsScreen: View {
+    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var settings: AppSettings
+    @State private var selection = 0
+    @State private var toast = ""
+
+    private var store: ReadAloudVoiceStore { .shared }
+
+    private var items: [MenuItem] {
+        var rows: [MenuItem] = []
+        let engine = store.engine
+        rows.append(MenuItem(
+            id: "engine", title: "Engine",
+            detail: engine.title, showsChevron: false))
+        // Model row reflects the SELECTED engine's cache state.
+        let cached = ReadAloudVoiceStore.hasCachedModel(engine)
+        let detail: String
+        switch store.state {
+        case .downloading(let progress):
+            detail = progress.map { String(format: "Downloading… %d%%", Int($0 * 100)) } ?? "Downloading…"
+        case .loading: detail = "Loading…"
+        default:
+            detail = cached ? "Downloaded ✓" : "Not downloaded"
+        }
+        rows.append(MenuItem(id: "model", title: "Voice Model", detail: detail, showsChevron: false))
+        if cached {
+            rows.append(MenuItem(id: "delete", title: "Delete Model", detail: "Free Space", showsChevron: false))
+        }
+        if engine == .breeze {
+            rows.append(MenuItem(
+                id: "warning", title: "Experimental — may crash 8 GB devices", showsChevron: false))
+        }
+        return rows
+    }
+
+    var body: some View {
+        ZStack {
+            PaperBackground()
+            VStack(spacing: 0) {
+                MenuList(items: items, selection: selection)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 6)
+                if !toast.isEmpty {
+                    Text(toast)
+                        .font(Theme.font(11, .semibold))
+                        .foregroundStyle(Theme.inkDim)
+                        .padding(.top, 8)
+                }
+                Spacer()
+            }
+        }
+        .onWheel { handle($0) }
+    }
+
+    private func handle(_ event: ControlEvent) {
+        switch event {
+        case .tick(let d):
+            moveListSelection(&selection, count: items.count, delta: d, settings: settings)
+        case .select:
+            activate(items[min(selection, items.count - 1)].id)
+        case .menu:
+            model.pop()
+        case .menuHold:
+            model.popToRoot()
+        default:
+            break
+        }
+    }
+
+    private func activate(_ id: String) {
+        switch id {
+        case "engine":
+            let all = ReadAloudVoiceStore.Engine.allCases
+            let next = all[(all.firstIndex(of: store.engine)! + 1) % all.count]
+            store.engine = next
+        case "model":
+            if ReadAloudVoiceStore.hasCachedModel(store.engine) {
+                toast = "Already downloaded"
+            } else {
+                toast = "Download started"
+                Task { try? await store.loadModelIfNeeded() }
+            }
+        case "delete":
+            let engine = store.engine
+            ReadAloudVoiceStore.deleteModel(engine)
+            store.engine = engine // re-probe state for this engine
+            toast = engine == .breeze ? "Deleted ~3 GB" : "Deleted ~700 MB"
+        case "warning":
+            break
+        default:
+            break
+        }
     }
 }

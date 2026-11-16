@@ -107,12 +107,14 @@ English-only; the v3-coreml path mangles Dutch on iOS. Ultra decodes
 Dutch+English perfectly on the ANE. Hour-long memos are safe thanks to
 the SDK's disk-backed chunking (~1.2 MB constant memory).
 
-**TTS = Breeze TTS 2 (3B, 4-bit MLX).** Chosen for voice quality via
-natural-language voice design (the "Narrator/Warm/British/Crisp"
-presets are design instructions). Behind the
-`AudiobookSynthesizerType` seam, so the engine is a one-conformer swap:
-the previous Supertonic3 CoreML (~400 MB) remains on the
-`audiobook-mode` branch if Breeze proves too heavy. Kokoro is
+**TTS = Qwen3-TTS 0.6B (8-bit MLX), default; Breeze 3B kept as a WIP
+option.** Breeze (3B, voice-design presets) crashed the iPhone 16e at
+synthesis start — jetsam on an 8 GB device. Qwen3 Base is ~700 MB,
+multilingual (the reader's detected chapter language maps to Qwen's
+language parameter — Dutch/French/German chapters read natively), with
+preset voices Ryan/Aiden. Both engines sit behind the
+`AudiobookSynthesizerType` seam; the previous Supertonic3 CoreML
+(~400 MB) remains on the `audiobook-mode` branch. Kokoro is
 documented-unsafe on iOS 26.4+/27 (BNNS/MPSGraph process aborts) — do
 not ship.
 

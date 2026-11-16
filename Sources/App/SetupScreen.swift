@@ -131,17 +131,18 @@ struct SetupScreen: View {
         }
     }
 
-    /// Read Aloud voice (Breeze TTS 2 via MLX, ~3 GB): same shape as the
-    /// transcription-model page. Downloads run in the background — the
-    /// wizard can continue and the reader starts it on first use if
-    /// skipped.
+    /// Read Aloud voice (selected engine, default Qwen3 ~700 MB): same
+    /// shape as the transcription-model page. Downloads run in the
+    /// background — the wizard can continue and the reader starts it on
+    /// first use if skipped. Breeze (~3 GB, experimental) is opt-in from
+    /// Settings → Read Aloud — setup never downloads both.
     private var readingVoicePage: some View {
         VStack(spacing: 10) {
             Text("Reading Voice")
                 .font(Theme.font(17, .semibold))
                 .foregroundStyle(Theme.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if ReadAloudVoiceStore.hasCachedModel() {
+            if ReadAloudVoiceStore.hasCachedModel(ReadAloudVoiceStore.shared.engine) {
                 statusLine("Read Aloud voice ready ✓")
                 Text("Center: continue")
                     .font(Theme.font(11, .regular))
@@ -152,7 +153,7 @@ struct SetupScreen: View {
                     .font(Theme.font(11, .regular))
                     .foregroundStyle(Theme.inkDim)
             } else {
-                choiceRow("Download Now (~3 GB)", selected: ttsChoice == 0)
+                choiceRow(ReadAloudVoiceStore.shared.engine.downloadLabel, selected: ttsChoice == 0)
                 choiceRow("Not Now", selected: ttsChoice == 1)
                 Text("For Read Aloud in the Reader · Wheel: choose · Center: select")
                     .font(Theme.font(11, .regular))
@@ -311,12 +312,12 @@ struct SetupScreen: View {
         case .readingVoice:
             switch event {
             case .tick(let d):
-                if !ttsDownloadStarted, !ReadAloudVoiceStore.hasCachedModel() {
+                if !ttsDownloadStarted, !ReadAloudVoiceStore.hasCachedModel(ReadAloudVoiceStore.shared.engine) {
                     moveListSelection(&ttsChoice, count: 2, delta: d, settings: settings)
                     WheelFeedback.tick(dir: d)
                 }
             case .select:
-                if ttsDownloadStarted || ReadAloudVoiceStore.hasCachedModel() {
+                if ttsDownloadStarted || ReadAloudVoiceStore.hasCachedModel(ReadAloudVoiceStore.shared.engine) {
                     advance()
                 } else if ttsChoice == 0 {
                     ttsDownloadStarted = true
