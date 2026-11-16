@@ -5,17 +5,20 @@ import Photos
 import UserNotifications
 
 /// One-time first-run wizard: collects the app's permissions, offers the
-/// on-device transcription voice model download, and applies the default
-/// preferences (small font, vibration off, medium scanlines). Shown
-/// automatically on first launch; RESET_DEFAULTS skips it, SHOW_SETUP=1
-/// forces it (QA screenshots / UI tests).
+/// on-device model downloads (transcription ~600 MB, Read Aloud voice
+/// ~3 GB), and applies the factory preferences. Shown automatically on
+/// first launch (and again any time via Settings → Run Setup Again);
+/// RESET_DEFAULTS skips it, SHOW_SETUP=1 forces it (QA screenshots /
+/// UI tests).
 struct SetupScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
-    private enum Step { case welcome, permissions, voiceModel, preferences, done }
+    private enum Step { case welcome, permissions, voiceModel, readingVoice, preferences, done }
     @State private var step: Step = .welcome
     @State private var modelChoice = 0 // 0 = download now, 1 = not now
+    @State private var ttsChoice = 0   // reading voice: 0 = download now, 1 = not now
+    @State private var ttsDownloadStarted = false
 
     // nil = not asked yet
     @State private var music: Bool?
@@ -35,6 +38,7 @@ struct SetupScreen: View {
             case .welcome: welcomePage
             case .permissions: permissionsPage
             case .voiceModel: voiceModelPage
+            case .readingVoice: readingVoicePage
             case .preferences: preferencesPage
             case .done: donePage
             }
@@ -45,9 +49,13 @@ struct SetupScreen: View {
         .padding(.bottom, 8)
         .onWheel { handle($0) }
         .task {
-            // QA hook: jump straight to the voice-model page (screenshots).
-            if ProcessInfo.processInfo.environment["SETUP_PAGE"] == "voiceModel" {
-                step = .voiceModel
+            // QA hook: jump straight to a setup page (screenshots).
+            if let page = ProcessInfo.processInfo.environment["SETUP_PAGE"] {
+                switch page {
+                case "voiceModel": step = .voiceModel
+                case "readingVoice": step = .readingVoice
+                default: break
+                }
             }
         }
     }
@@ -123,6 +131,47 @@ struct SetupScreen: View {
         }
     }
 
+    /// Read Aloud voice (Breeze TTS 2 via MLX, ~3 GB): same shape as the
+    /// transcription-model page. Downloads run in the background — the
+    /// wizard can continue and the reader starts it on first use if
+    /// skipped.
+    private var readingVoicePage: some View {
+        VStack(spacing: 10) {
+            Text("Reading Voice")
+                .font(Theme.font(17, .semibold))
+                .foregroundStyle(Theme.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if ReadAloudVoiceStore.hasCachedModel() {
+                statusLine("Read Aloud voice ready ✓")
+                Text("Center: continue")
+                    .font(Theme.font(11, .regular))
+                    .foregroundStyle(Theme.inkDim)
+            } else if ttsDownloadStarted {
+                statusLine(ttsStatusText ?? "Downloading…")
+                Text("Downloads in the background · Center: continue")
+                    .font(Theme.font(11, .regular))
+                    .foregroundStyle(Theme.inkDim)
+            } else {
+                choiceRow("Download Now (~3 GB)", selected: ttsChoice == 0)
+                choiceRow("Not Now", selected: ttsChoice == 1)
+                Text("For Read Aloud in the Reader · Wheel: choose · Center: select")
+                    .font(Theme.font(11, .regular))
+                    .foregroundStyle(Theme.inkDim)
+            }
+        }
+    }
+
+    private var ttsStatusText: String? {
+        switch ReadAloudVoiceStore.shared.state {
+        case .notStarted: return nil
+        case .downloading(let progress):
+            return progress.map { String(format: "Downloading… %d%%", Int($0 * 100)) } ?? "Downloading…"
+        case .loading: return "Loading voice model…"
+        case .ready: return "Read Aloud voice ready ✓"
+        case .failed(let message): return "Failed: \(message)"
+        }
+    }
+
     private var preferencesPage: some View {
         VStack(spacing: 6) {
             Text("Preferences Set")
@@ -174,6 +223,7 @@ struct SetupScreen: View {
         case .welcome: return "Welcome"
         case .permissions: return "Permissions"
         case .voiceModel: return "Voice Model"
+        case .readingVoice: return "Reading Voice"
         case .preferences: return "Preferences"
         case .done: return "Done"
         }
@@ -258,6 +308,27 @@ struct SetupScreen: View {
             default:
                 break
             }
+        case .readingVoice:
+            switch event {
+            case .tick(let d):
+                if !ttsDownloadStarted, !ReadAloudVoiceStore.hasCachedModel() {
+                    moveListSelection(&ttsChoice, count: 2, delta: d, settings: settings)
+                    WheelFeedback.tick(dir: d)
+                }
+            case .select:
+                if ttsDownloadStarted || ReadAloudVoiceStore.hasCachedModel() {
+                    advance()
+                } else if ttsChoice == 0 {
+                    ttsDownloadStarted = true
+                    Task { try? await ReadAloudVoiceStore.shared.loadModelIfNeeded() }
+                } else {
+                    advance() // not now
+                }
+            case .menu:
+                advance()
+            default:
+                break
+            }
         case .preferences:
             if case .select = event { advance() }
             if case .menu = event { advance() }
@@ -274,7 +345,8 @@ struct SetupScreen: View {
         switch step {
         case .welcome: step = .permissions
         case .permissions: step = .voiceModel
-        case .voiceModel: step = .preferences
+        case .voiceModel: step = .readingVoice
+        case .readingVoice: step = .preferences
         case .preferences: step = .done
         case .done: model.completeSetup()
         }
