@@ -132,7 +132,12 @@ music; the camera screen claims the transport buttons while open.
 | Model | Purpose | Runtime | Size | Cache |
 | --- | --- | --- | --- | --- |
 | Parakeet Ultra (multilingual) | voice-memo transcription | CoreML (FluidAudio SPM) | ~600 MB | `Application Support/FluidAudio/Models/` |
-| Breeze TTS 2 (4-bit) | Read Aloud | MLX (mlx-audio-swift SPM) | ~3 GB | `Application Support/MLXAudio/` |
+| Qwen3-TTS 0.6B Base 8-bit | Read Aloud (**default engine**) | MLX (mlx-audio-swift SPM) | ~700 MB | `Application Support/MLXAudio/` |
+| Breeze TTS 2 4-bit | Read Aloud (WIP — jetsams 8 GB iPhones; opt-in in Settings) | MLX (mlx-audio-swift SPM) | ~3 GB | `Application Support/MLXAudio/` |
+
+Only the selected engine's model downloads (Setup and the reader both
+download whatever `Settings → Read Aloud → Engine` points at; per-engine
+delete frees the disk).
 
 Both caches are **explicit and under Application Support** — SDK defaults
 that point into `Library/Caches` (evictable) would silently force

@@ -100,6 +100,7 @@ enum Route: Hashable {
     case settingsClickwheel
     case settingsDisplay
     case settingsPlayback
+    case settingsReadAloud
     case settingsAbout
 
     // First-run
