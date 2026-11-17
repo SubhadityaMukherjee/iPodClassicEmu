@@ -5,12 +5,25 @@ import SwiftUI
 /// inside. Angle deltas drive scroll ticks; haptics + tick sounds fire per
 /// detent. Matches the classic wheel's gesture feel, including converting a
 /// button-press into a scroll when the finger rotates away.
+///
+/// Concept: SwiftUI views and state → docs/concepts/swiftui-views-and-state.md
 struct ClickWheelView: View {
     @Environment(AppModel.self) private var model
 
+    /// Mirror of the coordinator's active zone, updated via
+    /// `onZoneChange`. Currently write-only — the shipped face draws
+    /// no press highlight — but kept as the hookup for one.
     @State private var pressedZone: WheelZone?
+    /// One long-lived coordinator per view identity. `@State` on a
+    /// reference type keeps the same instance across re-renders
+    /// (SwiftUI recreates the struct, not its stored objects), so
+    /// touch state and timers survive.
     @State private var coordinator = WheelCoordinator()
 
+    /// Renders the square wheel face fitted to the available space,
+    /// attaches a zero-distance drag gesture (every touch, not just
+    /// movement), and on first appearance wires the coordinator's
+    /// outputs to `AppModel` and `pressedZone`.
     var body: some View {
         GeometryReader { geo in
             let d = min(geo.size.width, geo.size.height)
@@ -40,9 +53,15 @@ struct ClickWheelView: View {
 
 // MARK: - Wheel face drawing
 
+/// Pure drawing of the wheel — no gesture handling. Layers the face
+/// gradient, a recessed inset rim, the center button, the diagonal
+/// seams that mark the four button sectors, and the four button
+/// labels, all recolored for the user's theme (silver or black iPod).
 private struct WheelFace: View {
     @EnvironmentObject private var settings: AppSettings
 
+    /// Composes the face circle with its rim gradients, then the
+    /// center button, sector seams, and zone labels on top.
     var body: some View {
         let t = settings.theme
         ZStack {
@@ -122,6 +141,14 @@ private struct WheelFace: View {
         }
     }
 
+    /// Styles a label with the theme's label color and offsets it to
+    /// its zone's compass position.
+    ///
+    /// - Parameters:
+    ///   - zone: the button whose label this is; selects the offset.
+    ///   - content: the label content (text or SF Symbol images).
+    ///
+    /// Concept: Swift protocols and generics → docs/concepts/swift-protocols-and-generics.md
     @ViewBuilder
     private func zoneLabel<Content: View>(_ zone: WheelZone, @ViewBuilder content: () -> Content) -> some View {
         content()
@@ -129,6 +156,9 @@ private struct WheelFace: View {
             .offset(zoneOffset(zone))
     }
 
+    /// Fixed point-offsets placing each label at its compass spot
+    /// (MENU top, prev left, next right, play bottom); center/scroll
+    /// have no label.
     private func zoneOffset(_ zone: WheelZone) -> CGSize {
         switch zone {
         case .menu: return CGSize(width: 0, height: -96)
@@ -142,15 +172,27 @@ private struct WheelFace: View {
 
 // MARK: - Zones
 
+/// The regions of the wheel face: four compass-point button
+/// quadrants, the center button, and the diagonal scroll sectors
+/// between the buttons.
 enum WheelZone: Equatable {
     case menu, prev, next, play, center, scroll
 }
 
 /// State machine for one touch on the wheel. Reference type so its timers can
 /// fire directly; the view mirrors `pressedZone` for the press highlight.
+///
+/// Concept: Swift value and reference types → docs/concepts/swift-value-and-reference-types.md
 final class WheelCoordinator {
+    /// Forwards control events to `AppModel.handle`. Wired in the
+    /// view's `onAppear`; nil until then, and every touch handler
+    /// guards on it.
     var send: ((ControlEvent) -> Void)?
+    /// Notifies the view of zone changes so it can mirror
+    /// `pressedZone`.
     var onZoneChange: ((WheelZone?) -> Void)?
+    /// Zone under the current touch (nil between touches); changes
+    /// fan out through `onZoneChange`.
     private(set) var pressedZone: WheelZone? { didSet { onZoneChange?(pressedZone) } }
 
     /// Degrees of rotation per detent.
@@ -158,6 +200,8 @@ final class WheelCoordinator {
     /// Adaptive scroll: smoothed angular speed (°/s) of the current spin,
     /// and the time of the last move event feeding it.
     private var degreesPerSecond = 0.0
+    /// Timestamp of the last move event; feeds the speed estimate
+    /// and the 0.35 s spin-stopped reset.
     private var lastMoveAt = Date()
 
     /// Rows advanced per detent at a given spin speed — the real wheel's
@@ -174,24 +218,58 @@ final class WheelCoordinator {
         }
     }
 
+    /// What the touch is currently doing — chosen on the first move,
+    /// it decides how later moves and the lift are interpreted.
     private enum Mode {
         case scroll
         case button(WheelZone)
         case center
     }
 
+    /// Current mode; nil while no touch is active.
     private var mode: Mode?
+    /// Angle where the touch began; rotating > 28° away from a
+    /// button zone converts the press into a scroll.
     private var startAngle = 0.0
+    /// Angle of the previous move; scroll rotation is measured from
+    /// it.
     private var lastAngle = 0.0
+    /// Degrees rotated since the last emitted detent; each 15°
+    /// crossing fires ticks.
     private var accumulated = 0.0
+    /// When the touch began, for the < 0.45 s tap-vs-hold test.
+    /// Always a wall-clock `Date()` — see the NOTE in
+    /// `touchChanged(_:center:radius:)`.
     private var touchStart = Date()
+    /// Whether the 0.55 s hold already fired (its lift sends
+    /// `.holdEnded` instead of a tap).
     private var holdFired = false
+    /// A button press turned into a scroll mid-gesture, so the lift
+    /// must not emit a tap.
     private var convertedToScroll = false
+    /// One-shot 0.55 s timer that fires a hold event.
     private var holdTimer: DispatchSourceTimer?
+    /// 0.18 s repeating timer for hold-repeat events (prev/next
+    /// skipping).
     private var repeatTimer: DispatchSourceTimer?
 
     // MARK: Touch lifecycle
 
+    /// Feeds one drag-move event into the state machine.
+    ///
+    /// The touch point is converted to polar coordinates around the
+    /// wheel center: `atan2(dy, dx)` in degrees, where 0° is east
+    /// and angles grow clockwise (screen Y points down, so
+    /// increasing atan2 is clockwise on screen). The first move
+    /// classifies the touch; afterwards a scroll accumulates
+    /// rotation, and a finger rotating > 28° off a button converts
+    /// that press into a scroll — the real wheel's thumb-slide.
+    ///
+    /// - Parameters:
+    ///   - value: drag update; only `value.location` is used (never
+    ///     `value.time` — see the NOTE inline).
+    ///   - center: wheel center in view coordinates.
+    ///   - radius: wheel radius in points.
     func touchChanged(_ value: DragGesture.Value, center: CGPoint, radius: CGFloat) {
         guard let send else { return }
         let point = value.location
@@ -230,6 +308,17 @@ final class WheelCoordinator {
         }
     }
 
+    /// Classifies the lift and emits the matching event. A tap —
+    /// under 0.45 s, hold never fired, no press-to-scroll conversion
+    /// — fires the zone's button event; lifting after a hold sends
+    /// `.holdEnded`; a scroll lift sends nothing (ticks already fired
+    /// per detent).
+    ///
+    /// - Parameters:
+    ///   - value: unused — the signature mirrors `touchChanged` for
+    ///     uniform call sites.
+    ///   - center: unused (see `value`).
+    ///   - radius: unused (see `value`).
     func touchEnded(_ value: DragGesture.Value, center: CGPoint, radius: CGFloat) {
         guard let send else { return }
         let duration = Date().timeIntervalSince(touchStart)
@@ -263,6 +352,19 @@ final class WheelCoordinator {
 
     // MARK: Begin
 
+    /// Classifies where the touch landed and arms hold timers for
+    /// buttons: inside the center circle (36.5% of the wheel radius)
+    /// → center mode; on a button arc → that button (prev/next holds
+    /// repeat, menu/play don't); otherwise a diagonal scroll sector.
+    /// Speed starts at zero — every touch begins as a slow roll and
+    /// speeds up as it spins.
+    ///
+    /// - Parameters:
+    ///   - angle: touch angle in degrees (0° = east, clockwise
+    ///     positive).
+    ///   - r: touch distance from the wheel center.
+    ///   - radius: wheel radius in points.
+    ///   - time: wall-clock `Date()` of the touch start.
     private func beginTouch(angle: Double, r: Double, radius: CGFloat, at time: Date) {
         touchStart = time
         accumulated = 0
@@ -319,6 +421,21 @@ final class WheelCoordinator {
 
     // MARK: Scroll
 
+    /// Accumulates rotation since the last move and emits detent
+    /// ticks.
+    ///
+    /// Angular speed is smoothed with an EMA so a single fast event
+    /// can't jump the row multiplier, but deceleration sheds speed
+    /// quickly (the down-side averages toward the lower instantaneous
+    /// value) — a slow ramp-down made every flick overshoot its
+    /// target. A gap > 0.35 s means the spin stopped, so speed
+    /// resets. Every 15° of accumulated rotation emits
+    /// `rowsPerDetent(speed:)` ticks in the rotated direction: fast
+    /// spins advance several rows per detent.
+    ///
+    /// - Parameters:
+    ///   - angle: current touch angle in degrees.
+    ///   - send: event sink, already unwrapped by the caller.
     private func scrolled(to angle: Double, send: (ControlEvent) -> Void) {
         let now = Date()
         let d = angleDelta(from: lastAngle, to: angle)
@@ -351,6 +468,14 @@ final class WheelCoordinator {
         }
     }
 
+    /// Shortest signed rotation from `a` to `b`, wrapped into
+    /// (-180, 180] so dragging across the atan2 seam at ±180° reads
+    /// as a small step, not a full-circle jump.
+    ///
+    /// - Parameters:
+    ///   - a: starting angle in degrees.
+    ///   - b: ending angle in degrees.
+    /// - Returns: signed degrees to rotate from `a` to `b`.
     private func angleDelta(from a: Double, to b: Double) -> Double {
         var d = b - a
         while d > 180 { d -= 360 }
@@ -358,6 +483,11 @@ final class WheelCoordinator {
         return d
     }
 
+    /// Wraps any angle — possibly negative or over 360 — into 0..<360
+    /// for button-sector classification.
+    ///
+    /// - Parameter angle: angle in degrees.
+    /// - Returns: the equivalent angle in [0, 360).
     private static func normalize(_ angle: Double) -> Double {
         var a = angle.truncatingRemainder(dividingBy: 360)
         if a < 0 { a += 360 }
@@ -366,6 +496,19 @@ final class WheelCoordinator {
 
     // MARK: Holds
 
+    /// Arms the 0.55 s one-shot hold timer. When it fires, the hold
+    /// event is sent once and, if `repeated` is set, a 0.18 s
+    /// repeating timer re-sends it — how held prev/next keep
+    /// skipping. DispatchSourceTimers on the main queue are cheap
+    /// one-shots whose handlers can mutate this reference-type
+    /// coordinator directly.
+    ///
+    /// - Parameters:
+    ///   - fires: event sent when the hold threshold passes.
+    ///   - repeated: event re-sent every 0.18 s afterwards, or nil
+    ///     for a single-shot hold.
+    ///
+    /// Concept: GCD Dispatch Sources → docs/concepts/dispatch-queues.md
     private func scheduleHold(fires: ControlEvent, repeating repeated: ControlEvent?) {
         cancelHold()
         let timer = DispatchSource.makeTimerSource(queue: .main)
@@ -391,6 +534,8 @@ final class WheelCoordinator {
         holdTimer = timer
     }
 
+    /// Cancels the hold and repeat timers (on lift, conversion, or
+    /// reset).
     private func cancelHold() {
         holdTimer?.cancel()
         holdTimer = nil
@@ -398,6 +543,7 @@ final class WheelCoordinator {
         repeatTimer = nil
     }
 
+    /// Clears all per-touch state so the next touch starts clean.
     private func reset() {
         mode = nil
         holdFired = false
@@ -408,6 +554,9 @@ final class WheelCoordinator {
         cancelHold()
     }
 
+    /// Button-press haptic scaled by the Button Haptics setting
+    /// (0…2 mapped to 0…1). `ensureRunning` first — the system may
+    /// have stopped the engine since the last interaction.
     private func buttonHaptic() {
         WheelHaptics.shared.ensureRunning()
         WheelHaptics.shared.buttonPress(strength: Double(AppSettings.shared.buttonHaptics) / 2.0)
@@ -424,6 +573,15 @@ enum WheelFeedback {
     private static var lastPulseAt = Date.distantPast
     private static let minPulseGap = 0.02
 
+    /// Emits the per-detent haptic + tick sound, honoring the
+    /// haptics/tick-sound settings. Every scroll consumer (list
+    /// movement, text scrolling) calls this so feedback stays
+    /// consistent app-wide. Pulses denser than `minPulseGap` —
+    /// adaptive spins emit several ticks per detent — are suppressed
+    /// so the haptic engine isn't saturated.
+    ///
+    /// - Parameter dir: scroll direction (+1 or -1); the pulse itself
+    ///   is direction-independent — both directions tick alike.
     static func tick(dir: Int) {
         let s = AppSettings.shared
         let now = Date()
@@ -438,6 +596,9 @@ enum WheelFeedback {
         }
     }
 
+    /// Edge-bounce feedback: rubber-band sound + warning haptic,
+    /// only when the Rubber Band Tick setting is on. Never dense, so
+    /// it isn't throttled.
     static func rubberBand() {
         let s = AppSettings.shared
         if s.rubberBandTick {

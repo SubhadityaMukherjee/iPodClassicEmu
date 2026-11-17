@@ -27,6 +27,7 @@ every call site.
 | [swift-actors-and-isolation.md](swift-actors-and-isolation.md) | Actors, `@MainActor`, data races, isolation |
 | [swift-property-wrappers.md](swift-property-wrappers.md) | `@State`, `@Environment`, `@Published`, property wrappers generally |
 | [swift-protocols-and-generics.md](swift-protocols-and-generics.md) | Protocols, conformance, generics, `some`/`any` |
+| [dispatch-queues.md](dispatch-queues.md) | GCD queues, serial queues (`sessionQueue`), the main queue |
 
 ## UI & reactive
 
@@ -49,14 +50,14 @@ every call site.
 | Page | Concept |
 |---|---|
 | [corehaptics.md](corehaptics.md) | CoreHaptics vibration transients |
-| [audiotoolbox.md](audiotoolbox.md) | AudioServices system sounds |
 
 ## Audio
 
 | Page | Concept |
 |---|---|
 | [avfoundation-audio-session.md](avfoundation-audio-session.md) | `AVAudioSession` — the iOS audio-policy singleton |
-| [avfoundation-playback.md](avfoundation-playback.md) | `AVAudioPlayer`, `AVAudioEngine`, source nodes |
+| [audiotoolbox.md](audiotoolbox.md) | AudioServices system sounds |
+| [mpvolumeview.md](mpvolumeview.md) | The hidden-slider system-volume trick |
 
 ## Media libraries
 
