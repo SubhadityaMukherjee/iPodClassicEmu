@@ -5,8 +5,11 @@ import MusicKit
 struct SettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Menu row the wheel cursor is on; ticks move it through `items`.
     @State private var selection = 0
 
+    /// "(Connected) / (Not Set) / (Denied)" status suffix for the Apple
+    /// Music row, derived from the current MusicKit authorization state.
     private var appleMusicDetail: String {
         switch model.music.status {
         case .authorized: return "(Connected)"
@@ -15,6 +18,8 @@ struct SettingsScreen: View {
         }
     }
 
+    /// Settings rows; the Apple Music row's subtitle shows live auth
+    /// status, the rest push sub-pages (or re-run setup).
     private var items: [MenuItem] {
         [
             MenuItem(id: "music", title: "Apple Music", detail: appleMusicDetail, showsChevron: false),
@@ -27,12 +32,15 @@ struct SettingsScreen: View {
         ]
     }
 
+    /// Settings menu list; MusicKit status refreshes on appear.
     var body: some View {
         MenuList(items: items, selection: selection)
             .onWheel { handle($0) }
             .onAppear { model.music.refreshStatus() }
     }
 
+    /// Wheel input: ticks move the selection, center activates the
+    /// highlighted row, MENU pops.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -46,6 +54,9 @@ struct SettingsScreen: View {
         }
     }
 
+    /// Acts on the highlighted row: requests MusicKit access when not yet
+    /// authorized (loading the library on success), pushes the sub-pages,
+    /// or re-runs the first-launch setup wizard.
     private func activateCurrent() {
         switch items[min(selection, items.count - 1)].id {
         case "music":
@@ -76,15 +87,35 @@ struct SettingsScreen: View {
 struct ValueSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Row the wheel cursor is on.
     @State private var selection = 0
 
+    /// One settings row: a title plus a live value string, and either a
+    /// cycle action (center cycles the value) or a route to push.
+    ///
+    /// Concept: value/cycle closures → docs/concepts/swift-closures.md
     struct Row {
+        /// Stable row identity.
         let id: String
+        /// Left-hand label.
         let title: String
+        /// Called on every render to produce the current value text — a
+        /// closure (not a snapshot `String`) so a cycled value shows its
+        /// new text on the very next render without manual refresh.
         let value: () -> String
+        /// Center-press action that advances the value; nil when the row
+        /// is a link (`route`) instead.
         let cycle: (() -> Void)?
+        /// Sub-page pushed on center press, for rows that are links.
         let route: Route?
 
+        /// Creates a row; exactly one of `cycle` and `route` should be
+        /// non-nil so center-press has one unambiguous meaning.
+        /// - Parameter id: stable row identity.
+        /// - Parameter title: left-hand label.
+        /// - Parameter value: called each render for the current value text.
+        /// - Parameter cycle: action advancing the value on center press.
+        /// - Parameter route: page to push on center instead of cycling.
         init(id: String, title: String, value: @escaping () -> String, cycle: (() -> Void)? = nil, route: Route? = nil) {
             self.id = id
             self.title = title
@@ -94,9 +125,14 @@ struct ValueSettingsScreen: View {
         }
     }
 
+    /// Page title. Not rendered by this view itself — the LCD title bar
+    /// comes from ScreenRouter's route mapping — it documents the page at
+    /// the construction site.
     let title: String
+    /// The page's rows, in display order.
     let rows: [Row]
 
+    /// Value-cycling menu list; row ids embed the live value so cycled text refreshes.
     var body: some View {
         MenuList(
             // Key each row by its current value so a cycled value rebuilds
@@ -107,6 +143,10 @@ struct ValueSettingsScreen: View {
         .onWheel { handle($0) }
     }
 
+    /// Wheel input. Ticks always move between rows — values change only
+    /// on center (the classic iPod feel: the wheel never edits, it
+    /// navigates); center cycles the row's value with a haptic or pushes
+    /// its route; MENU pops.
     private func handle(_ event: ControlEvent) {
         let row = rows[min(selection, rows.count - 1)]
         switch event {
@@ -133,9 +173,13 @@ struct ClickwheelSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    /// Display strings for the four scrolling-haptics strengths.
     private static let scrollLabels = ["Off", "Light", "Medium", "Strong"]
+    /// Display strings for the three button-haptics strengths.
     private static let buttonLabels = ["Light", "Medium", "Heavy"]
 
+    /// Clickwheel rows (haptics toggles and tick flavors) on the generic
+    /// value-cycling page.
     var body: some View {
         ValueSettingsScreen(
             title: "Clickwheel",
@@ -168,11 +212,18 @@ struct DisplaySettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    /// Display strings for the four scanline intensities.
     private static let scanLabels = ["Off", "Subtle", "Medium", "Strong"]
+    /// (label, seconds) pairs for the idle-dim delay; the row finds its
+    /// current label by matching the seconds value.
     private static let dimLabels: [(String, Int)] = [("Off", 0), ("15 sec", 15), ("30 sec", 30), ("1 min", 60), ("5 min", 300)]
+    /// Shared font-size labels (small/medium/large).
     private static let fontLabels = AppSettings.fontLabels
+    /// Theme names, indexed by the 0/1 theme setting.
     private static let themeLabels = Theme.themeNames
 
+    /// Display rows (theme, CRT/scanlines, dim delay, font size) on the
+    /// generic value-cycling page.
     var body: some View {
         ValueSettingsScreen(
             title: "Display",
@@ -203,8 +254,11 @@ struct PlaybackSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    /// Display strings for the Off/All/One repeat modes.
     private static let repeatLabels = ["Off", "All", "One"]
 
+    /// Playback rows (shuffle, repeat, volume step) on the generic
+    /// value-cycling page.
     var body: some View {
         ValueSettingsScreen(
             title: "Playback",
@@ -228,6 +282,7 @@ struct PlaybackSettingsScreen: View {
 struct AboutScreen: View {
     @Environment(AppModel.self) private var model
 
+    /// Centered app icon, name, version, and tagline.
     var body: some View {
         VStack(spacing: 10) {
             Spacer()
@@ -248,6 +303,7 @@ struct AboutScreen: View {
         .onWheel { handle($0) }
     }
 
+    /// MENU pops; nothing else responds — there is nothing to select here.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .menu:
@@ -257,6 +313,8 @@ struct AboutScreen: View {
         }
     }
 
+    /// Marketing version from the bundle's Info dictionary ("0.1.0" when
+    /// missing, e.g. in some test contexts).
     static var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
     }
@@ -264,16 +322,26 @@ struct AboutScreen: View {
 
 /// Read Aloud engine management: choose the TTS engine, download its
 /// voice model on demand, and free disk by deleting a downloaded model.
-/// Only the SELECTED engine downloads — Breeze (~3 GB) is experimental
-/// and jetsams 8 GB iPhones; Qwen3 (~700 MB) is the default.
+/// Only the SELECTED engine downloads — Supertonic3 (~400 MB) is the
+/// default (device-verified); the MLX engines Qwen3 (~700 MB) and
+/// Breeze (~3 GB) are WIP — they load but die at synthesis start on
+/// current devices/iOS, kept selectable for future OSes.
 struct ReadAloudSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Menu row the wheel cursor is on.
     @State private var selection = 0
+    /// Short confirmation line under the list ("Download started",
+    /// "Deleted"…); empty string hides it.
     @State private var toast = ""
 
+    /// The shared read-aloud engine/voice-model store this page manages.
     private var store: ReadAloudVoiceStore { .shared }
 
+    /// Rows: Engine (current selection), Voice Model (live download
+    /// progress or cached state for the SELECTED engine only), a Delete
+    /// Model row that appears only when a download exists, and an
+    /// experimental warning row for engines flagged as such.
     private var items: [MenuItem] {
         var rows: [MenuItem] = []
         let engine = store.engine
@@ -301,6 +369,7 @@ struct ReadAloudSettingsScreen: View {
         return rows
     }
 
+    /// Paper-backed settings list with a transient toast line beneath.
     var body: some View {
         ZStack {
             PaperBackground()
@@ -320,6 +389,8 @@ struct ReadAloudSettingsScreen: View {
         .onWheel { handle($0) }
     }
 
+    /// Wheel input: ticks move the selection, center activates the row,
+    /// MENU pops, MENU-hold pops straight to the home screen.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -335,6 +406,10 @@ struct ReadAloudSettingsScreen: View {
         }
     }
 
+    /// Row actions: cycle the engine; start the voice-model download (a
+    /// no-op toast when already cached); or delete the cached model —
+    /// re-assigning `store.engine` afterwards re-probes its cache state
+    /// so the row labels update. The warning row does nothing.
     private func activate(_ id: String) {
         switch id {
         case "engine":

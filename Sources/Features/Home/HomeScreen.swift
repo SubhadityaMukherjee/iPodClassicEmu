@@ -6,8 +6,16 @@ import Photos
 struct HomeScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Menu row the wheel cursor is on; ticks move it through `items`.
     @State private var selection = 0
 
+    /// Rows shown in the menu: the fixed feature list, then — only when
+    /// some recent activity exists — a "Recents" band plus one jump-back
+    /// row per recorded type (Book, Binaural, Playlist, Album, Recording,
+    /// Timer/Stopwatch). Rebuilt from `model.recents` on every read, so a
+    /// freshly recorded activity appears as soon as the view re-renders;
+    /// the clock row's subtitle re-derives the timer duration from
+    /// `model.timer`, the same values the timer screen's Start row uses.
     private var items: [MenuItem] {
         var list: [MenuItem] = [
             MenuItem(id: "music", title: "Music"),
@@ -53,6 +61,7 @@ struct HomeScreen: View {
         return list
     }
 
+    /// Classic split layout: menu rows on the left, preview pane for the highlighted row on the right.
     var body: some View {
         SplitMenuLayout(items: items, selection: selection) {
             preview
@@ -60,6 +69,10 @@ struct HomeScreen: View {
         .onWheel { handle($0) }
     }
 
+    /// Wheel input for the root screen: ticks move the selection (honoring
+    /// the Infinite Tick / Rubber Band settings via `moveListSelection`),
+    /// center activates. MENU deliberately does nothing — this is the root,
+    /// matching a real iPod.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -74,6 +87,12 @@ struct HomeScreen: View {
         }
     }
 
+    /// Activates the highlighted row. Feature rows push their route;
+    /// "Shuffle All" shuffle-plays the library; Recents rows jump straight
+    /// back into the recorded activity (resume the book/binaural preset,
+    /// shuffle-play the playlist/album — falling back to its detail page
+    /// if it vanished from the library — start a fresh recording, or run
+    /// the timer/stopwatch).
     private func select() {
         switch items[selection].id {
         case "music": model.push(.music)
@@ -156,6 +175,9 @@ struct HomeScreen: View {
 
     // MARK: Preview pane
 
+    /// Right-hand pane for the highlighted row: real content where the
+    /// app has it (first album artwork, latest photo thumbnail, Now
+    /// Playing artwork, live clock) and a dimmed SF Symbol glyph otherwise.
     @ViewBuilder
     private var preview: some View {
         switch items[selection].id {
@@ -214,6 +236,8 @@ struct HomeScreen: View {
         }
     }
 
+    /// Large dimmed SF Symbol filling the preview pane when a row has no
+    /// richer content to show.
     private func glyph(_ symbol: String) -> some View {
         Image(systemName: symbol)
             .font(Theme.font(40))
@@ -223,9 +247,13 @@ struct HomeScreen: View {
 }
 
 /// Analog clock drawn live for the Clocks preview.
+///
+/// Concept: Timer.publish → docs/concepts/combine.md
 struct LiveClockPreview: View {
+    /// Current time; a once-a-second Combine timer keeps the hands moving.
     @State private var now = Date()
 
+    /// Re-renders the clock face whenever `now` ticks.
     var body: some View {
         ClockFace(date: now, accent: Color(red: 0.22, green: 0.42, blue: 0.85))
             .padding(14)

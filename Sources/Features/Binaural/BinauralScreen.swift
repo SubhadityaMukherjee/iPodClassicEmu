@@ -8,8 +8,13 @@ import MediaPlayer
 struct BinauralScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Menu row the wheel cursor is on; ticks move it through `items`.
     @State private var selection = 0
 
+    /// Rows in order: an Off/Stop action row, one row per preset (the
+    /// active one shows its live elapsed time and a waveform symbol
+    /// instead of the preset's subtitle), then a Volume row whose subtitle
+    /// is the current volume step.
     private var items: [MenuItem] {
         var rows = [
             MenuItem(id: "stop", title: model.binaural.isPlaying ? "Stop" : "Off",
@@ -30,6 +35,7 @@ struct BinauralScreen: View {
         return rows
     }
 
+    /// Two-line preset menu; the `task` block runs the QA launch hooks.
     var body: some View {
         ZStack {
             MenuList(items: items, selection: selection, style: .twoLine)
@@ -62,6 +68,10 @@ struct BinauralScreen: View {
         }
     }
 
+    /// Wheel input: ticks move the selection; center stops the session,
+    /// cycles the volume, or toggles a preset — starting one pauses music
+    /// first, since two beat sources don't mix; MENU pops (playback keeps
+    /// running — like leaving music playing on a real iPod).
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):

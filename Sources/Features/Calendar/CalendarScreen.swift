@@ -8,13 +8,25 @@ struct CalendarScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    /// The day under the cursor (starts at today). Drives everything at
+    /// once: the highlighted month, the ringed/selected day cell, and the
+    /// event strip below the grid.
     @State private var selected = Date()
+    /// Events on `selected` (read-only), soonest first; reloaded whenever
+    /// the selected day changes (see the `.task(id:)` in `body`).
     @State private var events: [EKEvent] = []
+    /// True when EventKit access was refused; the strip shows a hint
+    /// instead of events.
     @State private var accessDenied = false
 
+    /// EventKit database handle; access is requested on each day-load.
     private let store = EKEventStore()
+    /// The user's calendar, captured once; every date computation in this
+    /// screen goes through it so locale (first weekday, month boundaries)
+    /// is honored consistently.
     private let cal = Calendar.current
 
+    /// Month header, weekday labels, day grid, and the event strip.
     var body: some View {
         VStack(spacing: 4) {
             header
@@ -30,6 +42,8 @@ struct CalendarScreen: View {
 
     // MARK: Pieces
 
+    /// Month title flanked by prev/next-month chevron buttons; the arrows
+    /// keep the day-of-month when the target month has one.
     private var header: some View {
         HStack {
             Button {
@@ -54,12 +68,14 @@ struct CalendarScreen: View {
         .foregroundStyle(Theme.ink)
     }
 
+    /// "November 2026"-style title for the selected month.
     private var monthTitle: String {
         let f = DateFormatter()
         f.dateFormat = "MMMM yyyy"
         return f.string(from: selected)
     }
 
+    /// S M T W T F S column labels above the grid.
     private var weekdayRow: some View {
         HStack(spacing: 0) {
             ForEach(["S", "M", "T", "W", "T", "F", "S"].indices, id: \.self) { i in
@@ -71,6 +87,8 @@ struct CalendarScreen: View {
         }
     }
 
+    /// The month rendered as week rows of day cells; blank cells pad the
+    /// partial first and last weeks so day numbers stay date-aligned.
     private var monthGrid: some View {
         let days = gridDays(for: selected)
         return VStack(spacing: 2) {
@@ -89,6 +107,8 @@ struct CalendarScreen: View {
         }
     }
 
+    /// One day number: gradient highlight when selected, blue ring when
+    /// it is today, and a tap target shaped to the whole cell.
     private func dayCell(_ day: Date) -> some View {
         let num = cal.component(.day, from: day)
         let isSelected = cal.isDate(day, inSameDayAs: selected)
@@ -110,6 +130,9 @@ struct CalendarScreen: View {
             .contentShape(Rectangle())
     }
 
+    /// Up to three events for the selected day plus an "+N more" overflow
+    /// line, each event prefixed by a dot in its calendar's color. Shows
+    /// the access-denied hint or "No events" when appropriate.
     @ViewBuilder
     private var eventStrip: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -143,6 +166,7 @@ struct CalendarScreen: View {
         .padding(.top, 2)
     }
 
+    /// "9:30  Title" label for one event ("all-day" has no time).
     private func eventText(_ e: EKEvent) -> String {
         let time = e.isAllDay ? "all-day" : TimeFormat.clock(e.startDate)
         return "\(time)  \(e.title ?? "")"
@@ -151,6 +175,12 @@ struct CalendarScreen: View {
     // MARK: Data
 
     /// Dates laid out in a 7-column grid; nil = leading/trailing blank cell.
+    ///
+    /// The leading blank count is the first weekday's offset from the
+    /// calendar's `firstWeekday` (locale-dependent, e.g. Sunday vs Monday
+    /// starts), wrapped mod 7 so it works for any locale; trailing nils
+    /// complete the final week, keeping the cell count a multiple of 7 so
+    /// the grid renders as clean week rows.
     private func gridDays(for date: Date) -> [Date?] {
         guard let interval = cal.dateInterval(of: .month, for: date) else { return [] }
         let firstWeekday = cal.component(.weekday, from: interval.start)
@@ -164,6 +194,13 @@ struct CalendarScreen: View {
         return cells
     }
 
+    /// Loads the events for the selected day. Full access is requested on
+    /// every load — once granted the request resolves immediately without
+    /// a prompt, and a later revocation shows up as the denied hint
+    /// instead of a stale list. Events come from a synchronous EventKit
+    /// query on a one-day predicate, sorted by start time.
+    ///
+    /// Concept: EventKit → docs/concepts/eventkit.md
     private func loadEvents() async {
         let start = cal.startOfDay(for: selected)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return }
@@ -176,6 +213,9 @@ struct CalendarScreen: View {
 
     // MARK: Input
 
+    /// Wheel input: each tick moves the selection one day — crossing a
+    /// month boundary shifts the whole grid too, since `selected` drives
+    /// both; MENU pops back.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):

@@ -6,8 +6,10 @@ import MusicKit
 struct ExtrasScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Menu row the wheel cursor is on; ticks move it through `items`.
     @State private var selection = 0
 
+    /// Fixed Extras menu rows: Clocks, Calendar, Binaural, Flashlight.
     private var items: [MenuItem] {
         [
             MenuItem(id: "clocks", title: "Clocks"),
@@ -17,11 +19,14 @@ struct ExtrasScreen: View {
         ]
     }
 
+    /// Simple scrolling menu list wired to the wheel.
     var body: some View {
         MenuList(items: items, selection: selection)
             .onWheel { handle($0) }
     }
 
+    /// Wheel input: ticks move the selection, center opens the row's
+    /// screen, MENU pops back to the parent menu.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -47,9 +52,14 @@ struct FlashlightScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    /// Whether the torch is lit; mirrors the hardware state only after a
+    /// successful configuration, so it drops back to false on devices with
+    /// no torch (e.g. the simulator).
     @State private var on = false
+    /// Torch brightness, 0.1–1.0; the wheel steps it in 5% increments.
     @State private var level: Double = 1.0
 
+    /// Toggle button over a level bar and a hint line.
     var body: some View {
         VStack(spacing: 10) {
             Button {
@@ -84,6 +94,13 @@ struct FlashlightScreen: View {
         .onDisappear { setTorch(false) }
     }
 
+    /// Lights or extinguishes the torch at the current level. Hardware
+    /// torch changes must be bracketed by `lockForConfiguration()` /
+    /// `unlockForConfiguration()`; a failure (no torch, lock denied)
+    /// simply leaves the screen "off". A button haptic confirms each
+    /// successful toggle.
+    ///
+    /// Concept: AVCaptureDevice → docs/concepts/avfoundation-camera.md
     private func setTorch(_ wantOn: Bool) {
         guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else {
             on = false
@@ -106,6 +123,7 @@ struct FlashlightScreen: View {
         }
     }
 
+    /// Applies `level` to an already-lit torch without touching on/off.
     private func updateLevel() {
         guard on, let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
         do {
@@ -115,6 +133,9 @@ struct FlashlightScreen: View {
         } catch {}
     }
 
+    /// Wheel input: ticks step the brightness (with tick feedback and a
+    /// 0.1 floor); center toggles; MENU turns the torch off before popping
+    /// so it can never be left burning behind the screen.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -136,12 +157,21 @@ struct FlashlightScreen: View {
 struct MusicSearchScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Current search text; every keystroke re-derives `results` live.
     @State private var query = ""
+    /// Result row the wheel cursor is on (kept in range by `onChange`).
     @State private var selection = 0
+    /// Whether the center-hold options panel is up.
     @State private var holdOpen = false
+    /// Row highlighted inside the hold panel.
     @State private var holdSelection = 0
+    /// Keyboard focus for the search field. Tracked separately so MENU can
+    /// dismiss the keyboard first and only pop the screen on a second press.
+    ///
+    /// Concept: @FocusState → docs/concepts/swiftui-views-and-state.md
     @FocusState private var focused: Bool
 
+    /// Options offered when center-holding a result row.
     private var holdItems: [MenuItem] {
         [
             MenuItem(id: "artist", title: "Go to Artist"),
@@ -149,6 +179,8 @@ struct MusicSearchScreen: View {
         ]
     }
 
+    /// The highlighted result the hold panel acts on (nil when the result
+    /// list is empty).
     private var holdSong: Song? {
         results.indices.contains(selection) ? results[selection] : nil
     }
@@ -176,6 +208,7 @@ struct MusicSearchScreen: View {
         return titleStart + titleContains + artistMatch + albumMatch
     }
 
+    /// Search field on top, live result list beneath, hold panel overlaid.
     var body: some View {
         ZStack {
             VStack(spacing: 4) {
@@ -247,6 +280,7 @@ struct MusicSearchScreen: View {
         .onDisappear { focused = false }
     }
 
+    /// Modal panel listing `holdItems` for the held song.
     private var holdPanel: some View {
         ModalPanel(title: holdSong?.title ?? "Search Result", onClose: { closeHold() }) {
             MenuList(items: holdItems, selection: holdSelection, compact: true)
@@ -254,6 +288,7 @@ struct MusicSearchScreen: View {
         }
     }
 
+    /// Dismisses the hold panel with the standard quick fade.
     private func closeHold() {
         withAnimation(.easeIn(duration: 0.15)) { holdOpen = false }
     }
@@ -272,6 +307,7 @@ struct MusicSearchScreen: View {
         }
     }
 
+    /// Album page for the held song; the panel closes either way.
     private func goToAlbum() {
         guard let song = holdSong, let album = model.music.album(forSong: song) else {
             closeHold()
@@ -281,6 +317,11 @@ struct MusicSearchScreen: View {
         model.push(.albumDetail(album.id.rawValue))
     }
 
+    /// Wheel input. Ticks drive whichever list is frontmost (hold panel or
+    /// results); center plays the highlighted result from the main list or
+    /// activates the panel row; center-hold opens the panel (dismissing
+    /// the keyboard so it is visible); MENU closes panel, then keyboard,
+    /// then pops the screen.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):

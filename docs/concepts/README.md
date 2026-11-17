@@ -67,6 +67,9 @@ every call site.
 |---|---|
 | [musickit.md](musickit.md) | MusicKit, `ApplicationMusicPlayer`, queue semantics |
 | [photokit.md](photokit.md) | PHPhotoLibrary image loading & caching |
+| [avfoundation-camera.md](avfoundation-camera.md) | AVCaptureSession pipeline, session queue, delegates, torch |
+| [eventkit.md](eventkit.md) | EventKit calendar access & queries |
+| [remote-commands.md](remote-commands.md) | MPRemoteCommandCenter / Now Playing info |
 
 > Pages are added batch-by-batch as documented code reaches them; the list
 > above grows over time. When you add a page, add it to this index.

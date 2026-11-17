@@ -56,3 +56,10 @@ one-liner.
 
 [swiftui-views-and-state.md](swiftui-views-and-state.md) — the other half
 of the input story (state changes re-render; events drive logic).
+
+## Aside: `Timer.publish` — a Combine-native timer
+
+Combine also offers `Timer.publish(every: 1, on: .main, in: .common)`
+as a publisher that emits periodic dates — used by the home screen's
+live clock, where `.onReceive(publisher)` re-renders the time text each
+second without owning a `Timer` object or invalidating it manually.
