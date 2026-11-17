@@ -107,16 +107,15 @@ English-only; the v3-coreml path mangles Dutch on iOS. Ultra decodes
 Dutch+English perfectly on the ANE. Hour-long memos are safe thanks to
 the SDK's disk-backed chunking (~1.2 MB constant memory).
 
-**TTS = Qwen3-TTS 0.6B (8-bit MLX), default; Breeze 3B kept as a WIP
-option.** Breeze (3B, voice-design presets) crashed the iPhone 16e at
-synthesis start — jetsam on an 8 GB device. Qwen3 Base is ~700 MB,
-multilingual (the reader's detected chapter language maps to Qwen's
-language parameter — Dutch/French/German chapters read natively), with
-preset voices Ryan/Aiden. Both engines sit behind the
-`AudiobookSynthesizerType` seam; the previous Supertonic3 CoreML
-(~400 MB) remains on the `audiobook-mode` branch. Kokoro is
-documented-unsafe on iOS 26.4+/27 (BNNS/MPSGraph process aborts) — do
-not ship.
+**TTS = Supertonic3 CoreML (default); both MLX engines are WIP.** The
+MLX path (Qwen3 0.6B and Breeze 3B alike) loads its model fine but the
+process is SIGKILLed at synthesis start on the iPhone 16e / iOS 27.3 —
+model size is irrelevant (0.6B died like 3B), pointing at the MLX
+Metal compute path on this OS, not memory (mlx-swift issues #407/#458
+document the abort class). Supertonic3 (~400 MB, RTF ~0.30, 44.1 kHz,
+verified by listening on this exact phone) is the default again, and
+it also runs in the simulator (cpuOnly). Kokoro remains
+document-unsafe on iOS 26.4+/27 — do not ship.
 
 **Explicit model caches under Application Support.** SDK defaults that
 live in `Library/Caches` are evictable; a silently evicted 3 GB model

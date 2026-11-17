@@ -95,8 +95,14 @@ final class AlarmReconcileTests: XCTestCase {
     }
 
     /// And the enabled path still schedules — the gate must not have
-    /// broken the normal arm flow.
+    /// broken the normal arm flow. Needs notification authorization
+    /// (a fresh/rebooted sim resets it for the app host — the alarm
+    /// E2E covers this path with the prompt granted).
     func testInstallRequestSchedulesWhileEnabled() async throws {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        guard settings.authorizationStatus == .authorized else {
+            throw XCTSkip("needs notification authorization (re-grant after a sim reboot: xcrun simctl privacy booted grant notifications com.ipodclassic.app)")
+        }
         let store = AlarmStore.shared
         store.enabled = true
         store.installRequest()

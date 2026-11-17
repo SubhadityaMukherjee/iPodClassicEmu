@@ -272,10 +272,37 @@ final class AudiobookModelTests: XCTestCase {
         XCTAssertEqual(engine.outputVolume, 0.5, accuracy: 0.001)
     }
 
+    // MARK: Sentence chunking (long-page synthesis)
+
+    func testSentenceChunksShortTextStaysWhole() {
+        let text = "One two three. Four five six."
+        XCTAssertEqual(AudiobookModel.sentenceChunks(text), [text])
+    }
+
+    func testSentenceChunksSplitsLongTextOnSentenceBoundariesOnly() {
+        let sentence = "The quick brown fox jumps over the lazy dog. "
+        let text = String(repeating: sentence, count: 20) // ~900 chars
+        let chunks = AudiobookModel.sentenceChunks(text, limit: 200)
+        XCTAssertGreaterThan(chunks.count, 1)
+        // Reassembly is lossless — no dropped sentences.
+        XCTAssertEqual(chunks.joined(), text)
+        // Every break is at a sentence boundary (the separator space
+        // rides at the head of the next chunk).
+        for chunk in chunks.dropFirst() {
+            XCTAssertTrue(chunk.hasPrefix(" The quick"), "chunk started mid-sentence: \(chunk.prefix(30))")
+        }
+    }
+
+    func testSentenceChunksOversizedSingleSentenceStaysIntact() {
+        // One unbreakable sentence longer than the limit: keep it whole
+        // rather than splitting mid-word.
+        let text = String(repeating: "word ", count: 200)
+        XCTAssertEqual(AudiobookModel.sentenceChunks(text, limit: 100), [text])
+    }
+
     // MARK: Language heuristic
 
-    func testLanguageDetection() {
-        let english = "The quick brown fox jumps over the lazy dog and then rests with his friends in the shade of the old tree."
+    func testLanguageDetection() {        let english = "The quick brown fox jumps over the lazy dog and then rests with his friends in the shade of the old tree."
         let dutch = "De hond rent door het park en de kinderen spelen met de bal in het groene gras voor het huis van hun oma."
         let german = "Der Hund läuft durch den Park und die Kinder spielen mit dem Ball auf dem grünen Rasen vor dem Haus."
         XCTAssertEqual(AudiobookLanguage.detect(english), "en")
