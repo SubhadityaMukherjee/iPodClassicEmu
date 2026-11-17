@@ -10,13 +10,23 @@ import os
 @MainActor
 @Observable
 final class MusicService {
+    /// Current MusicKit authorization status (drives the Connect prompt).
+    ///
+    /// Concept: MusicKit → docs/concepts/musickit.md
     private(set) var status: MusicAuthorization.Status = MusicAuthorization.currentStatus
+    /// Cached library albums, published once per completed load.
     private(set) var albums: [Album] = []
+    /// Cached library artists, published once per completed load.
     private(set) var artists: [Artist] = []
+    /// Cached library songs, published once per completed load.
     private(set) var songs: [Song] = []
+    /// Cached library playlists, published once per completed load.
     private(set) var playlists: [Playlist] = []
+    /// True once a load has completed (including the QA seed path).
     private(set) var loaded = false
+    /// True while a library load is in flight; guards re-entry.
     private(set) var loading = false
+    /// When the cache was last filled; drives `isStale`.
     private var lastLoaded: Date?
 
     /// Constructible anywhere (AppModel builds it in its own init); every
@@ -27,6 +37,9 @@ final class MusicService {
     /// in memory for days) — new songs/albums wouldn't appear otherwise.
     private static let staleAfter: TimeInterval = 120
 
+    /// True when nothing is cached yet or the cache is older than
+    /// `staleAfter` — iOS keeps the app resident for days, so an
+    /// unrefreshed cache would hide newly added music.
     var isStale: Bool {
         guard loaded, let lastLoaded else { return true }
         return Date().timeIntervalSince(lastLoaded) > Self.staleAfter
@@ -38,12 +51,18 @@ final class MusicService {
         await loadLibrary()
     }
 
+    /// Convenience: MusicKit access has been granted.
     var isAuthorized: Bool { status == .authorized }
 
+    /// Re-reads the authorization status so screens pick up changes made
+    /// in Settings while the app runs.
     func refreshStatus() {
         status = MusicAuthorization.currentStatus
     }
 
+    /// Runs the MusicKit permission prompt and loads the library on grant.
+    ///
+    /// Concept: MusicKit → docs/concepts/musickit.md
     func requestAccess() async {
         status = await MusicAuthorization.request()
         if isAuthorized { await loadLibrary() }
@@ -108,6 +127,7 @@ final class MusicService {
         (try? await MusicLibraryRequest<T>().response().items.compactMap { $0 }) ?? []
     }
 
+    /// Albums by artist name, then title (localized, case-insensitive).
     private nonisolated static func sortAlbums(_ items: [Album]) -> [Album] {
         items.sorted { a, b in
             if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
@@ -117,10 +137,12 @@ final class MusicService {
         }
     }
 
+    /// Artists by name (localized, case-insensitive).
     private nonisolated static func sortArtists(_ items: [Artist]) -> [Artist] {
         items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// Songs by artist, then album title, then track number — library order.
     private nonisolated static func sortSongs(_ items: [Song]) -> [Song] {
         items.sorted { a, b in
             if a.artistName.localizedCaseInsensitiveCompare(b.artistName) != .orderedSame {
@@ -133,6 +155,7 @@ final class MusicService {
         }
     }
 
+    /// Playlists by name (localized, case-insensitive).
     private nonisolated static func sortPlaylists(_ items: [Playlist]) -> [Playlist] {
         items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
@@ -161,12 +184,18 @@ final class MusicService {
 
     // MARK: Lookups (used by ScreenRouter for titles)
 
+    /// Album by raw ID, or nil when it isn't (or no longer is) cached.
     func album(_ id: String) -> Album? { albums.first { $0.id.rawValue == id } }
+    /// Artist by raw ID, or nil when it isn't (or no longer is) cached.
     func artist(_ id: String) -> Artist? { artists.first { $0.id.rawValue == id } }
+    /// Playlist by raw ID, or nil when it isn't (or no longer is) cached.
     func playlist(_ id: String) -> Playlist? { playlists.first { $0.id.rawValue == id } }
 
+    /// Album title for the title bar, "Album" when the lookup misses.
     func albumTitle(_ id: String) -> String { album(id)?.title ?? "Album" }
+    /// Artist name for the title bar, "Artist" when the lookup misses.
     func artistName(_ id: String) -> String { artist(id)?.name ?? "Artist" }
+    /// Playlist name for the title bar, "Playlist" when the lookup misses.
     func playlistName(_ id: String) -> String { playlist(id)?.name ?? "Playlist" }
 
     /// Best-effort album lookup for a song (songs don't carry album ids; we
@@ -182,15 +211,25 @@ final class MusicService {
     // are keyed by the library generation (bumped on every reload) plus
     // their sort option, so a refresh always rebuilds.
 
+    /// Library generation; bumped on every reload so stale caches rebuild.
     private var generation = 0
+    /// Album ID → its ordered tracks (see `tracks(forAlbum:)`).
     private var albumTracksCache: [String: [Song]] = [:]
+    /// Memoized Songs rows, valid for one (generation, sort) pair.
     private var songsMenuCache: (generation: Int, sort: Int, items: [MenuItem])?
+    /// Memoized Albums rows, valid for one (generation, sort) pair.
     private var albumsMenuCache: (generation: Int, sort: Int, items: [MenuItem])?
+    /// Memoized Artists rows, valid for one generation.
     private var artistsMenuCache: (generation: Int, items: [MenuItem])?
+    /// Memoized Playlists rows, valid for one generation.
     private var playlistsMenuCache: (generation: Int, items: [MenuItem])?
+    /// Memoized Genres rows, valid for one generation.
     private var genresMenuCache: (generation: Int, items: [MenuItem])?
+    /// Memoized Recently Added rows, valid for one generation.
     private var recentMenuCache: (generation: Int, items: [MenuItem])?
 
+    /// Invalidates every menu cache by bumping `generation`; runs after
+    /// each successful library load so menus rebuild with fresh data.
     func clearMenuCaches() {
         generation += 1
         albumTracksCache = [:]
@@ -208,6 +247,9 @@ final class MusicService {
     /// tiebreaker (Swift's sort is not stable).
     func songsSorted(by sort: Int) -> [Song] {
         let list = songs
+        /// Sort by `key` (case-insensitive), breaking ties by song id so
+        /// identical keys keep one deterministic order (Swift's `sorted`
+        /// is not stable).
         func stable(_ key: (Song) -> String) -> [Song] {
             list.sorted { a, b in
                 let ka = key(a).lowercased(), kb = key(b).lowercased()
@@ -226,6 +268,8 @@ final class MusicService {
     /// Albums sorted by 0 Title / 1 Artist / 2 Recently Added.
     func albumsSorted(by sort: Int) -> [Album] {
         let list = albums
+        /// Sort by `key` (case-insensitive), ties broken by album id —
+        /// the album twin of the song `stable` above.
         func stable(_ key: (Album) -> String) -> [Album] {
             list.sorted { a, b in
                 let ka = key(a).lowercased(), kb = key(b).lowercased()
@@ -240,6 +284,9 @@ final class MusicService {
         }
     }
 
+    /// Songs menu rows for a sort, memoized per (generation, sort).
+    /// - Parameter sort: 0 Title / 1 Artist / 2 Duration / 3 Recently Added.
+    /// - Returns: Rows in sorted order, artist as subtitle.
     func songsMenuItems(sort: Int) -> [MenuItem] {
         if let c = songsMenuCache, c.generation == generation, c.sort == sort { return c.items }
         let items = songsSorted(by: sort).map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName, showsChevron: false) }
@@ -247,6 +294,9 @@ final class MusicService {
         return items
     }
 
+    /// Albums menu rows for a sort, memoized per (generation, sort).
+    /// - Parameter sort: 0 Title / 1 Artist / 2 Recently Added.
+    /// - Returns: Rows in sorted order, artist as subtitle.
     func albumsMenuItems(sort: Int) -> [MenuItem] {
         if let c = albumsMenuCache, c.generation == generation, c.sort == sort { return c.items }
         let items = albumsSorted(by: sort).map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
@@ -254,6 +304,8 @@ final class MusicService {
         return items
     }
 
+    /// Artists menu rows, memoized per generation.
+    /// - Returns: Rows in name order.
     func artistsMenuItems() -> [MenuItem] {
         if let c = artistsMenuCache, c.generation == generation { return c.items }
         let items = artists
@@ -263,6 +315,8 @@ final class MusicService {
         return items
     }
 
+    /// Playlist menu rows, memoized per generation.
+    /// - Returns: Rows in name order.
     func playlistsMenuItems() -> [MenuItem] {
         if let c = playlistsMenuCache, c.generation == generation { return c.items }
         let items = playlists
@@ -272,6 +326,8 @@ final class MusicService {
         return items
     }
 
+    /// Genre menu rows, memoized per generation.
+    /// - Returns: Rows in alphabetical order.
     func genresMenuItems() -> [MenuItem] {
         if let c = genresMenuCache, c.generation == generation { return c.items }
         let items = genres
@@ -281,6 +337,8 @@ final class MusicService {
         return items
     }
 
+    /// Recently Added album rows, memoized per generation.
+    /// - Returns: Rows newest-first.
     func recentMenuItems() -> [MenuItem] {
         if let c = recentMenuCache, c.generation == generation { return c.items }
         let items = recentlyAdded.map { MenuItem(id: $0.id.rawValue, title: $0.title, subtitle: $0.artistName) }
@@ -290,10 +348,13 @@ final class MusicService {
 
     // MARK: Collections
 
+    /// The artist's albums from the cached library (case-insensitive
+    /// artist-credit match).
     func albums(byArtist artist: Artist) -> [Album] {
         albums.filter { $0.artistName.caseInsensitiveCompare(artist.name) == .orderedSame }
     }
 
+    /// Albums tagged with `genre`, artist-sorted.
     func albums(inGenre genre: String) -> [Album] {
         albums.filter { $0.genreNames.contains(genre) }
             .sorted { $0.artistName.localizedCaseInsensitiveCompare($1.artistName) == .orderedAscending }
@@ -302,10 +363,9 @@ final class MusicService {
     /// Every song for one artist page's Play All / Shuffle All: songs
     /// credited to the artist plus the songs of their albums (guest
     /// features whose credit string differs), deduped by ID. When the
-    /// in-memory cache can't answer it falls back to a filtered library
-    /// request — the cached `songs` array fills LAST during loadLibrary,
-    /// so a page opened mid-load (or right after launch) would otherwise
-    /// silently no-op instead of playing.
+    /// in-memory cache can't answer — e.g. the page opens before
+    /// `loadLibrary` has published the songs — it falls back to a filtered
+    /// library request, so a mid-load Play All never silently no-ops.
     func songs(forArtist artist: Artist) async -> [Song] {
         var list = songs.filter { $0.artistName.caseInsensitiveCompare(artist.name) == .orderedSame }
         var seen = Set(list.map { $0.id.rawValue })
@@ -329,8 +389,8 @@ final class MusicService {
 
     /// Songs behind a genre page's Play All / Shuffle All: the cached
     /// songs of every album in the genre, deduped by ID; albums the cache
-    /// can't answer yet fall back to per-album track fetches (the cached
-    /// `songs` array fills LAST during loadLibrary).
+    /// can't answer yet (library still loading) fall back to per-album
+    /// track fetches.
     func tracks(forGenre genre: String) async -> [Song] {
         var list: [Song] = []
         var seen = Set<String>()
@@ -356,6 +416,7 @@ final class MusicService {
         return ids.compactMap { byID[$0] }
     }
 
+    /// Distinct genre names across all cached albums, alphabetized.
     var genres: [String] {
         var seen = Set<String>()
         var out: [String] = []
@@ -368,6 +429,8 @@ final class MusicService {
         return out.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
+    /// All albums newest-first by libraryAddedDate (artist name as the
+    /// tiebreaker) — the Recents list's source.
     var recentlyAdded: [Album] {
         albums.sorted { a, b in
             let ad = a.libraryAddedDate ?? .distantPast
@@ -396,6 +459,12 @@ final class MusicService {
             .sorted { ($0.trackNumber ?? 0) < ($1.trackNumber ?? 0) }
     }
 
+    /// Playlist tracks in order. A playlist's `.tracks` only materializes
+    /// on a detailed fetch, so we hydrate the cached object first and fall
+    /// back to re-fetching the playlist by ID.
+    /// - Parameter playlist: The playlist to expand.
+    /// - Returns: Its songs in playlist order (empty when both fetches
+    ///   fail).
     func tracks(forPlaylist playlist: Playlist) async -> [Song] {
         if let detailed = try? await playlist.with([.tracks]) {
             let list = Self.songs(from: detailed.tracks)

@@ -8,22 +8,30 @@ struct CoverFlowScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    /// Highlighted album (the center cover).
     @State private var index = 0
+    /// True while the center cover shows its track-list back.
     @State private var flipped = false
+    /// Highlighted track on the flipped back.
     @State private var overlaySelection = 0
+    /// Tracks listed on the flipped back, loaded at flip time.
     @State private var overlayTracks: [Song] = []
 
     // Cover Flow runs in its own alphabetical-by-album order (the classic
     // flip-through-the-crate feel), independent of the Music menu's
     // album sort setting.
+    /// Every album, in the flow's own order (see the note above).
     private var albums: [Album] {
         model.music.albums.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
+    /// The album at `index`, nil when the library is empty.
     private var currentAlbum: Album? {
         albums.indices.contains(index) ? albums[index] : nil
     }
 
+    /// Alphabet bar over the 3D flow over the caption; consumes a pending
+    /// launch album on appear.
     var body: some View {
         VStack(spacing: 0) {
             AlphabetBar(albums: albums, index: index)
@@ -42,6 +50,10 @@ struct CoverFlowScreen: View {
 
     // MARK: Pieces
 
+    /// The 3D carousel. Only covers within ±4 of the center are built —
+    /// one 3D-transformed view per album brought large libraries to a
+    /// crawl — with neighbors stepping 0.42×width to either side of the
+    /// centered cover, everything clipped to the flow area.
     private var flowArea: some View {
         GeometryReader { geo in
             let w = geo.size.width
@@ -77,6 +89,7 @@ struct CoverFlowScreen: View {
         }
     }
 
+    /// Artist (dimmed) and album title under the flow.
     private var caption: some View {
         VStack(spacing: 1) {
             Text(currentAlbum?.artistName ?? "")
@@ -95,6 +108,8 @@ struct CoverFlowScreen: View {
 
     // MARK: Flip
 
+    /// Loads the album's tracks (cache first, library fetch on miss) and
+    /// flips the center cover to its track-list back.
     private func flip() async {
         guard let album = currentAlbum else { return }
         overlayTracks = model.music.cachedTracks(forAlbum: album)
@@ -105,12 +120,16 @@ struct CoverFlowScreen: View {
         withAnimation(.easeInOut(duration: 0.45)) { flipped = true }
     }
 
+    /// Flips back to the cover front.
     private func unflip() {
         withAnimation(.easeInOut(duration: 0.4)) { flipped = false }
     }
 
     // MARK: Input
 
+    /// Wheel input: ticks browse albums (tracks when flipped); center
+    /// flips the cover or plays the highlighted track; MENU unflips
+    /// before popping.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -147,10 +166,14 @@ struct CoverFlowScreen: View {
 private struct FlippableCover: View {
     let album: Album
     let size: CGFloat
+    /// True while the back (track list) faces the user.
     let flipped: Bool
+    /// Tracks printed on the back (loaded by the parent at flip time).
     let tracks: [Song]
+    /// Highlighted back row, driven by the parent's wheel handling.
     let trackSelection: Int
 
+    /// Front and back cross-faded inside one 180° y-axis rotation.
     var body: some View {
         ZStack {
             front
@@ -166,6 +189,7 @@ private struct FlippableCover: View {
         .shadow(color: .black.opacity(0.25), radius: 5, y: 3)
     }
 
+    /// Cover art with a fading floor reflection beneath it.
     private var front: some View {
         VStack(spacing: 2) {
             ArtworkView(artwork: album.artwork, width: size, height: size, placeholderSymbol: "square.stack")
@@ -226,8 +250,12 @@ private struct FlippableCover: View {
 private struct FlowCover: View {
     let album: Album
     let size: CGFloat
+    /// Signed position relative to the center cover (negative = left).
     let offset: Double
 
+    /// One side cover: scaled down 14% per step of distance (capped at 3)
+    /// and rotated ±38° toward center, like covers fanned in a crate, with
+    /// the same floor reflection as the center cover.
     var body: some View {
         let isCenter = offset == 0
         let side = offset > 0 ? 1 : -1
@@ -274,11 +302,15 @@ private struct FlowCover: View {
 
 /// A–Z# letter strip highlighting the current album's first letter.
 private struct AlphabetBar: View {
+    /// The flow's albums, in flow order.
     let albums: [Album]
+    /// Index of the current (highlighted) album.
     let index: Int
 
+    /// "A"–"Z" plus "#" for non-letter initials.
     private static let letters: [String] = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init) + ["#"]
 
+    /// Evenly-spaced letters; the current one inverted in a highlight chip.
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Self.letters, id: \.self) { letter in
@@ -301,6 +333,8 @@ private struct AlphabetBar: View {
         .padding(.vertical, 2)
     }
 
+    /// The current album's first letter, uppercased — "#" when it isn't a
+    /// plain A–Z initial.
     private var currentLetter: String {
         guard albums.indices.contains(index) else { return "A" }
         let title = albums[index].title

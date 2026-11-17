@@ -8,18 +8,30 @@ import AVKit
 struct NowPlayingScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// True while the volume bar temporarily replaces the progress bar.
     @State private var volumeFlash = false
+    /// True while the Song Options modal panel is up.
     @State private var menuOpen = false
+    /// Highlighted row in the main options list.
     @State private var menuSelection = 0
+    /// True while the Add-to-Playlist sub-panel is showing.
     @State private var playlistMode = false
+    /// Highlighted row in the playlist picker.
     @State private var playlistSelection = 0
+    /// True while the Up Next sub-panel is showing.
     @State private var queueMode = false
+    /// Highlighted row in the Up Next list.
     @State private var queueSelection = 0
+    /// True while the AirPlay route-picker sub-panel is showing.
     @State private var airplayMode = false
+    /// Transient confirmation message at the bottom.
     @State private var toast = ""
 
+    /// The app's player model (from AppModel).
     private var player: PlayerModel { model.player }
+    /// The track now playing, nil when the queue is empty.
     private var song: Song? { player.currentSong }
+    /// Playlists offered by Add to Playlist.
     private var playlists: [Playlist] { model.music.playlists }
 
     /// QA screenshot support (FAKE_LIBRARY): a convincing static preview
@@ -28,11 +40,14 @@ struct NowPlayingScreen: View {
         song == nil && ProcessInfo.processInfo.environment["FAKE_LIBRARY"] == "1"
             ? QASeed.previewSong : nil
     }
+    /// QA screenshot values for time/duration/playing (FAKE_LIBRARY only).
     private var qaPlayback: (time: Double, duration: Double, playing: Bool)? {
         song == nil && ProcessInfo.processInfo.environment["FAKE_LIBRARY"] == "1"
             ? (QASeed.previewTime, QASeed.previewDuration, true) : nil
     }
 
+    /// Info row and bottom bar, with the options panel and toast layered
+    /// above.
     var body: some View {
         ZStack {
             VStack(spacing: 6) {
@@ -147,6 +162,8 @@ struct NowPlayingScreen: View {
         }
     }
 
+    /// One cover face: the real artwork, or the QA gradient cover when
+    /// faking.
     @ViewBuilder
     private var artworkFace: some View {
         if let aw = song?.artwork {
@@ -167,6 +184,7 @@ struct NowPlayingScreen: View {
         }
     }
 
+    /// Real artwork at cover scale, corner-clipped with a hairline border.
     private func cover(for aw: Artwork) -> some View {
         ArtworkView(artwork: aw, width: 300, height: 300)
             .frame(width: 132, height: 132)
@@ -174,6 +192,7 @@ struct NowPlayingScreen: View {
             .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.35), lineWidth: 0.8))
     }
 
+    /// Progress bar normally; the volume bar for ~1.4 s after a wheel tick.
     @ViewBuilder
     private var bottomBar: some View {
         if volumeFlash {
@@ -186,6 +205,9 @@ struct NowPlayingScreen: View {
         }
     }
 
+    /// Elapsed / remaining times over the classic blue progress capsule;
+    /// QA (FAKE_LIBRARY) substitutes preview values so screenshots show a
+    /// believable mid-track state.
     private var progressBar: some View {
         GeometryReader { geo in
             let qa = qaPlayback
@@ -222,6 +244,8 @@ struct NowPlayingScreen: View {
         .frame(height: 38)
     }
 
+    /// Speaker icon + percent over a volume capsule (same visual language
+    /// as the progress bar).
     private var volumeBar: some View {
         GeometryReader { geo in
             VStack(spacing: 3) {
@@ -254,6 +278,7 @@ struct NowPlayingScreen: View {
 
     // MARK: Song options
 
+    /// Song Options rows; the Up Next title carries the live queue count.
     private var optionItems: [MenuItem] {
         [
             MenuItem(id: "playlist", title: "Add to Playlist"),
@@ -264,12 +289,17 @@ struct NowPlayingScreen: View {
         ]
     }
 
+    /// Up Next rows, "Playing" as the subtitle of the current entry.
     private var upNextItems: [MenuItem] {
         player.upNext.map {
             MenuItem(id: $0.id, title: $0.title, subtitle: $0.isCurrent ? "Playing" : $0.artist, showsChevron: false)
         }
     }
 
+    /// The modal panel; its content follows the active sub-mode (playlist
+    /// picker, Up Next list, AirPlay picker, or the main options list).
+    /// Sub-modes swap inside one panel rather than pushing routes so MENU
+    /// always returns to Now Playing in a single step.
     private var optionsPanel: some View {
         ModalPanel(title: panelTitle, onClose: { closeMenu() }) {
             if playlistMode {
@@ -299,6 +329,7 @@ struct NowPlayingScreen: View {
         }
     }
 
+    /// Panel header matching the active sub-mode.
     private var panelTitle: String {
         playlistMode ? "Add to Playlist"
             : queueMode ? "Up Next"
@@ -306,6 +337,7 @@ struct NowPlayingScreen: View {
             : "Song Options"
     }
 
+    /// Closes the panel and resets every sub-mode.
     private func closeMenu() {
         withAnimation(.easeIn(duration: 0.15)) {
             menuOpen = false
@@ -315,11 +347,13 @@ struct NowPlayingScreen: View {
         }
     }
 
+    /// Opens the Add-to-Playlist sub-panel at the top row.
     private func showPlaylistPicker() {
         playlistSelection = 0
         withAnimation(.easeOut(duration: 0.18)) { playlistMode = true }
     }
 
+    /// Shows a transient toast, auto-hiding after 1.6 s.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
@@ -327,6 +361,9 @@ struct NowPlayingScreen: View {
         }
     }
 
+    /// Adds the current song to a MusicKit playlist through MusicLibrary,
+    /// toasting either outcome and closing the panel.
+    /// - Parameter playlist: The target playlist.
     private func addToPlaylist(_ playlist: Playlist) async {
         guard let song else { return }
         do {
@@ -338,6 +375,8 @@ struct NowPlayingScreen: View {
         closeMenu()
     }
 
+    /// Closes the panel and pushes the current song's album page; toasts
+    /// when no album matches.
     private func goToAlbum() async {
         guard let song, let album = model.music.album(forSong: song) else {
             toast = "Album not found"
@@ -348,6 +387,8 @@ struct NowPlayingScreen: View {
         model.push(.albumDetail(album.id.rawValue))
     }
 
+    /// Closes the panel and pushes the song's artist page — exact
+    /// case-insensitive name match first, then a substring match.
     private func goToArtist() async {
         guard let song else { return }
         let name = song.artistName
@@ -363,6 +404,11 @@ struct NowPlayingScreen: View {
 
     // MARK: Input
 
+    /// Wheel input. With the panel open, ticks and center route to the
+    /// active sub-mode's list (AirPlay has no rows); closed, ticks nudge
+    /// volume and flash the volume bar, and center toggles play/pause.
+    /// Center-hold opens Song Options; MENU closes the panel before
+    /// popping the screen.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -439,6 +485,11 @@ struct NowPlayingScreen: View {
 /// literal tap on its internal button; there's no programmatic API, so
 /// we send the button's own touch action shortly after it mounts.
 struct AirPlayPicker: UIViewRepresentable {
+    /// Creates the picker and, 0.45 s after mount, synthesizes a tap on
+    /// its internal UIButton to open the route list — AVRoutePickerView
+    /// has no programmatic open API and the wheel-only UI can't tap it.
+    ///
+    /// Concept: UIViewRepresentable → docs/concepts/uiviewrepresentable.md
     func makeUIView(context: Context) -> AVRoutePickerView {
         let v = AVRoutePickerView(frame: CGRect(x: 0, y: 0, width: 220, height: 60))
         v.prioritizesVideoDevices = false
@@ -451,10 +502,15 @@ struct AirPlayPicker: UIViewRepresentable {
         return v
     }
 
+    /// No-op; the picker is autonomous once created.
     func updateUIView(_ v: AVRoutePickerView, context: Context) {}
 }
 
+/// Depth-first subview search (finds AVRoutePickerView's inner button).
 extension UIView {
+    /// First descendant view of the given class, searching depth-first.
+    /// - Parameter type: The view class to find.
+    /// - Returns: The first matching descendant, or nil.
     func firstSubview<T: UIView>(ofType type: T.Type) -> T? {
         if let found = subviews.compactMap({ $0 as? T }).first { return found }
         for s in subviews { if let f = s.firstSubview(ofType: type) { return f } }
@@ -470,11 +526,17 @@ struct MarqueeText: View {
     let font: Font
     let color: Color
 
+    /// Measured width of one text copy (overflow test + loop distance).
     @State private var textWidth: CGFloat = 0
+    /// True while the scroll animation is running.
     @State private var scrolling = false
+    /// Current horizontal offset of the two-copy loop.
     @State private var offset: CGFloat = 0
+    /// Gap between the two copies in the loop, in points.
     private let gap: CGFloat = 30
 
+    /// Static single-line text when it fits; a clipped two-copy scrolling
+    /// loop when it overflows.
     var body: some View {
         GeometryReader { geo in
             let overflows = textWidth > geo.size.width + 1
@@ -513,6 +575,7 @@ struct MarqueeText: View {
         .frame(height: 22)
     }
 
+    /// One fixed-size copy of the text (measured for width, reused twice).
     private var tickerText: some View {
         Text(text)
             .font(font)
@@ -521,6 +584,11 @@ struct MarqueeText: View {
             .fixedSize()
     }
 
+    /// Starts the loop when the text overflows: two copies spaced `gap`
+    /// apart, animated left by exactly one copy + gap per cycle at a
+    /// classic ~32 pt/s, so the wrap-around is seamless. No-op while
+    /// already scrolling or when the text fits.
+    /// - Parameter overflows: Whether the text is wider than the frame.
     private func restartIfNeeded(overflows: Bool) {
         guard overflows, textWidth > 0, !scrolling else { return }
         scrolling = true
@@ -532,6 +600,7 @@ struct MarqueeText: View {
         }
     }
 
+    /// Resets the animation state (view gone or text now fits).
     private func stop() {
         scrolling = false
         offset = 0

@@ -6,8 +6,10 @@ import MusicKit
 struct MusicMenuScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Highlighted menu row.
     @State private var selection = 0
 
+    /// The fixed Music menu rows; row ids are matched in `select()`.
     private var items: [MenuItem] {
         [
             MenuItem(id: "search", title: "Search", symbol: "magnifyingglass", showsChevron: false, isActionRow: true),
@@ -22,6 +24,8 @@ struct MusicMenuScreen: View {
         ]
     }
 
+    /// Split menu with the artwork preview pane; loads (or refreshes) the
+    /// library on appear.
     var body: some View {
         SplitMenuLayout(items: items, selection: selection) {
             preview
@@ -38,6 +42,7 @@ struct MusicMenuScreen: View {
         }
     }
 
+    /// Wheel input: ticks move the selection, center activates, MENU pops.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -51,6 +56,7 @@ struct MusicMenuScreen: View {
         }
     }
 
+    /// Pushes the route matching the highlighted row.
     private func select() {
         switch items[selection].id {
         case "coverflow": model.push(.coverFlow)
@@ -66,6 +72,10 @@ struct MusicMenuScreen: View {
         }
     }
 
+    /// Right-hand pane: artwork previewing the highlighted section — the
+    /// first playlist's, artist's, album's, genre's, or recently added
+    /// cover, or the now-playing track's artwork. Anything missing falls
+    /// back to a dimmed symbol so the pane never renders blank.
     @ViewBuilder
     private var preview: some View {
         if !model.music.isAuthorized {
@@ -121,6 +131,8 @@ struct MusicMenuScreen: View {
         }
     }
 
+    /// One piece of artwork at pane scale, or the music-note fallback when
+    /// the artwork is nil.
     @ViewBuilder
     private func artworkPreview(_ artwork: Artwork?) -> some View {
         if let artwork {
@@ -131,6 +143,7 @@ struct MusicMenuScreen: View {
         }
     }
 
+    /// Dimmed, centered SF Symbol used when a section has nothing to show.
     private func fallback(_ symbol: String) -> some View {
         Image(systemName: symbol)
             .font(Theme.font(34))
@@ -144,6 +157,7 @@ struct PromptPane: View {
     let symbol: String
     let text: String
 
+    /// Symbol over a short message, centered in the preview pane.
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: symbol)
@@ -181,9 +195,12 @@ final class SongHoldState {
         case qaTitle(String)
     }
 
+    /// The song (or QA title) whose options are showing; nil = closed.
     private(set) var pending: Pending?
+    /// Highlighted row of the three-row panel.
     private(set) var selection = 0
 
+    /// True while the Song Options panel is up.
     var isShowing: Bool { pending != nil }
 
     /// Consumes wheel events while the panel is up; returns false when
@@ -221,6 +238,7 @@ final class SongHoldState {
         return true
     }
 
+    /// Opens the panel for a real song, resetting the selection.
     func begin(_ song: Song) {
         pending = .song(song)
         selection = 0
@@ -233,6 +251,7 @@ final class SongHoldState {
         selection = 0
     }
 
+    /// The modal "Song Options" panel: Play Next / Add to Queue / Cancel.
     var panel: some View {
         ModalPanel(title: "Song Options", onClose: { self.pending = nil }) {
             VStack(spacing: 0) {
@@ -248,38 +267,56 @@ final class SongHoldState {
     }
 }
 
+/// One library section as a wheel-driven list: Play All / Shuffle All
+/// (plus Sort By where sortable) header rows above the entries,
+/// letter-snap fast scrolling on big lists, and hold-center queue options
+/// on song rows via the shared `SongHoldState`.
 struct MusicListScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Which library section this instance shows.
     let kind: MusicListKind
 
+    /// Highlighted row, headers included.
     @State private var selection = 0
+    /// Transient confirmation message ("Playing Next", …).
     @State private var toast = ""
+    /// Hold-center song options (shared panel + input handler).
     @State private var hold = SongHoldState()
     // Letter snapping: a fast spin (≥5 net ticks inside 0.4 s) jumps the
     // selection to the next letter group instead of crawling row by row,
     // with the classic big-letter overlay while it's active.
+    /// Net wheel ticks in the current burst — the letter-snap detector.
     @State private var tickBurst = 0
+    /// Timestamp of the most recent tick (defines the 0.4 s burst window).
     @State private var lastTickAt = Date.distantPast
+    /// The big letter shown while snapping; nil while hidden.
     @State private var letterOverlay: String?
+    /// Cancelable delayed hide of the letter overlay (replaced per snap).
     @State private var letterHideWork: DispatchWorkItem?
 
+    /// Labels the Songs Sort By header cycles through.
     private static let songSortLabels = ["Title", "Artist", "Duration", "Recently Added"]
+    /// Labels the Albums Sort By header cycles through.
     private static let albumSortLabels = ["Title", "Artist", "Recently Added"]
 
     // MARK: Entries (sorted) — cached in MusicService; see songsMenuItems.
 
+    /// Songs in the active sort (Songs list only; other kinds don't sort).
     private var sortedSongs: [Song] {
         guard kind == .songs else { return model.music.songs }
         return model.music.songsSorted(by: settings.songSort)
     }
 
+    /// Albums for this list: recently-added order for Recents, the active
+    /// sort for Albums.
     private var sortedAlbums: [Album] {
         let list = kind == .recent ? model.music.recentlyAdded : model.music.albums
         guard kind == .albums else { return list }
         return model.music.albumsSorted(by: settings.albumSort)
     }
 
+    /// The list's rows, served from the matching MusicService menu cache.
     private var entryItems: [MenuItem] {
         switch kind {
         case .artists:
@@ -302,6 +339,8 @@ struct MusicListScreen: View {
 
     // MARK: Headers
 
+    /// Full-width action rows: Play All, Shuffle All, plus Sort By for the
+    /// sortable kinds.
     private var headerItems: [MenuItem] {
         var h = [
             MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
@@ -313,6 +352,7 @@ struct MusicListScreen: View {
         return h
     }
 
+    /// Sort option labels for sortable kinds; nil when the kind can't sort.
     private var sortLabels: [String]? {
         switch kind {
         case .songs: return Self.songSortLabels
@@ -321,10 +361,14 @@ struct MusicListScreen: View {
         }
     }
 
+    /// Current sort as an index into `sortLabels` (from settings).
     private var sortIndex: Int {
         kind == .songs ? settings.songSort : settings.albumSort
     }
 
+    /// Header + entry rows in one array — the list's row source.
+    ///
+    /// Concept: SwiftUI views & state → docs/concepts/swiftui-views-and-state.md
     private var allItems: [MenuItem] {
         // Read `loaded` so the list re-renders when the async library load
         // completes (the QA seed path touches no observable otherwise).
@@ -332,6 +376,7 @@ struct MusicListScreen: View {
         return headerItems + entryItems
     }
 
+    /// The list with overlays layered above: snap letter, toast, hold panel.
     var body: some View {
         ZStack {
             MenuList(
@@ -371,6 +416,8 @@ struct MusicListScreen: View {
         }
     }
 
+    /// Letter snapping only on the big alphabetical lists (songs, albums,
+    /// artists).
     private var letterSnapEnabled: Bool {
         kind == .songs || kind == .albums || kind == .artists
     }
@@ -400,7 +447,9 @@ struct MusicListScreen: View {
     /// `titles[index]`'s, scanning in `dir`; nil at the edge.
     nonisolated static func letterSnapTarget(titles: [String], from index: Int, dir: Int) -> Int? {
         guard titles.indices.contains(index) else { return nil }
-        func key(_ s: String) -> String { s.first.map { String($0).uppercased() } ?? "#" }
+        /// First-letter grouping key for the list's letter index: the
+    /// uppercased first character, or "#" when the title is empty.
+    func key(_ s: String) -> String { s.first.map { String($0).uppercased() } ?? "#" }
         let current = key(titles[index])
         var i = index
         while true {
@@ -411,6 +460,7 @@ struct MusicListScreen: View {
         }
     }
 
+    /// Shows a transient toast, auto-hiding after 1.6 s.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
@@ -418,6 +468,8 @@ struct MusicListScreen: View {
         }
     }
 
+    /// Row style per section: artwork thumbnails for albums/recent,
+    /// two-line (title + artist) for songs.
     private var listStyle: MenuRowStyle {
         switch kind {
         case .albums, .recent: return .thumbnail
@@ -426,6 +478,12 @@ struct MusicListScreen: View {
         }
     }
 
+    /// Wheel input for the list.
+    ///
+    /// The hold panel consumes events first while open. Ticks letter-snap
+    /// on a fast burst, otherwise move row by row; center activates the
+    /// highlighted header/entry; center-hold on a song row opens the
+    /// queue-options panel; MENU pops.
     private func handle(_ event: ControlEvent) {
         if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
@@ -480,6 +538,8 @@ struct MusicListScreen: View {
         }
     }
 
+    /// Runs a header action: Play All / Shuffle All play `allSongs` and
+    /// push Now Playing; Sort By cycles the setting with a light haptic.
     private func activateHeader(_ id: String) {
         switch id {
         case "hdr.play":
@@ -502,6 +562,8 @@ struct MusicListScreen: View {
         }
     }
 
+    /// Activates the highlighted entry: pushes the matching detail screen,
+    /// or (Songs) plays from that track and pushes Now Playing.
     private func selectEntry(at idx: Int) {
         guard idx >= 0 else { return }
         switch kind {
@@ -538,7 +600,9 @@ struct MusicListScreen: View {
 struct ArtistDetailScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Raw MusicKit ID of the artist this page shows.
     let artistID: String
+    /// Highlighted row (headers included).
     @State private var selection = 0
     /// Songs behind Play All / Shuffle All, loaded async — the cached
     /// library songs fill LAST during loadLibrary, so deriving them
@@ -546,11 +610,14 @@ struct ArtistDetailScreen: View {
     /// nothing) when the page opened mid-load.
     @State private var songs: [Song] = []
 
+    /// The cached Artist for `artistID`, nil if it's gone from the library.
     private var artist: Artist? { model.music.artist(artistID) }
+    /// This artist's albums from the cache.
     private var albums: [Album] {
         guard let artist else { return [] }
         return model.music.albums(byArtist: artist)
     }
+    /// Play All / Shuffle All / Search action rows.
     private var headerItems: [MenuItem] {
         [
             MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
@@ -558,8 +625,10 @@ struct ArtistDetailScreen: View {
             MenuItem(id: "hdr.search", title: "Search", symbol: "magnifyingglass"),
         ]
     }
+    /// Headers + albums (the selection's clamp bound).
     private var totalRows: Int { headerItems.count + albums.count }
 
+    /// Thumbnail album list with headers; loads the Play All songs async.
     var body: some View {
         MenuList(
             items: headerItems + albums.map { al in MenuItem(id: al.id.rawValue, title: al.title, subtitle: "\(al.trackCount) Songs") },
@@ -574,6 +643,8 @@ struct ArtistDetailScreen: View {
         }
     }
 
+    /// Wheel input: rows 0–1 play all / shuffle the songs, row 2 opens
+    /// Search, an album opens its page; MENU pops.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -608,10 +679,17 @@ struct ArtistDetailScreen: View {
 struct ArtistSearchScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Raw MusicKit ID of the artist whose songs are searched.
     let artistID: String
 
+    /// Live query text from the touch keyboard.
     @State private var query = ""
+    /// Highlighted result row.
     @State private var selection = 0
+    /// Keyboard focus; while focused, MENU dismisses the keyboard instead
+    /// of popping the screen.
+    ///
+    /// Concept: property wrappers → docs/concepts/swift-property-wrappers.md
     @FocusState private var focused: Bool
     /// The artist's songs, loaded async — deriving them from the cache
     /// synchronously no-ops when the page opens mid-library-load (see
@@ -638,6 +716,8 @@ struct ArtistSearchScreen: View {
         return titleStart + titleContains + albumMatch
     }
 
+    /// Search field above the ranked results; focus is delayed until the
+    /// push transition settles.
     var body: some View {
         VStack(spacing: 4) {
             HStack(spacing: 5) {
@@ -706,6 +786,8 @@ struct ArtistSearchScreen: View {
         .onDisappear { focused = false }
     }
 
+    /// Wheel input: ticks move through the results (only with a query),
+    /// center plays from the selection, MENU unfocuses before popping.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -732,13 +814,17 @@ struct ArtistSearchScreen: View {
 struct GenreAlbumsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Genre name this page lists albums for.
     let genre: String
+    /// Highlighted row (headers included).
     @State private var selection = 0
     /// Songs behind Play All / Shuffle All, loaded async (see
     /// ArtistDetailScreen — sync cache derivation no-op'd mid-load).
     @State private var songs: [Song] = []
 
+    /// Albums tagged with this genre, artist-sorted.
     private var albums: [Album] { model.music.albums(inGenre: genre) }
+    /// Play All / Shuffle All action rows.
     private var headerItems: [MenuItem] {
         [
             MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
@@ -746,6 +832,8 @@ struct GenreAlbumsScreen: View {
         ]
     }
 
+    /// Thumbnail album list with Play/Shuffle headers; loads the genre's
+    /// songs async.
     var body: some View {
         MenuList(
             items: headerItems + albums.map { al in MenuItem(id: al.id.rawValue, title: al.title, subtitle: al.artistName) },
@@ -759,6 +847,8 @@ struct GenreAlbumsScreen: View {
         }
     }
 
+    /// Wheel input: the headers play/shuffle the genre, an album opens its
+    /// page; MENU pops.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -791,15 +881,23 @@ struct GenreAlbumsScreen: View {
 struct AlbumDetailScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Raw MusicKit ID of the album this page shows.
     let albumID: String
 
+    /// Highlighted row (headers included).
     @State private var selection = 0
+    /// The album's tracks, loaded async on appear.
     @State private var tracks: [Song] = []
+    /// Transient confirmation message.
     @State private var toast = ""
+    /// Hold-center track options (shared panel).
     @State private var hold = SongHoldState()
 
+    /// The cached Album for `albumID`, nil if it's gone from the library.
     private var album: Album? { model.music.album(albumID) }
 
+    /// Classic album page: action headers above the thumbnail track list,
+    /// with toast and hold panel layered above.
     var body: some View {
         ZStack {
             // Shared MenuList (mixed action-row/track heights) so the rows
@@ -835,6 +933,7 @@ struct AlbumDetailScreen: View {
         }
     }
 
+    /// Shows a transient toast, auto-hiding after 1.6 s.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
@@ -842,6 +941,7 @@ struct AlbumDetailScreen: View {
         }
     }
 
+    /// View in Cover Flow / Play All / Shuffle Songs action rows.
     private var headerItems: [MenuItem] {
         [
             MenuItem(id: "header.coverflow", title: "View in Cover Flow", symbol: "rectangle.stack", showsChevron: false, isActionRow: true),
@@ -850,14 +950,20 @@ struct AlbumDetailScreen: View {
         ]
     }
 
+    /// Track rows; ids are "track.<songID>" so the thumbnail closure can
+    /// give tracks (and only tracks) the album art.
     private var trackItems: [MenuItem] {
         tracks.enumerated().map { i, s in
             MenuItem(id: "track.\(s.id.rawValue)", title: s.title, subtitle: s.artistName, showsChevron: false)
         }
     }
 
+    /// Headers + tracks (the selection's clamp bound).
     private var totalRows: Int { headerItems.count + tracks.count }
 
+    /// Wheel input: the hold panel consumes events first; ticks move;
+    /// center activates; center-hold on a track opens queue options;
+    /// MENU pops.
     private func handle(_ event: ControlEvent) {
         if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
@@ -879,6 +985,10 @@ struct AlbumDetailScreen: View {
         }
     }
 
+    /// Center press: row 0 hands the album to Cover Flow, rows 1–2 play or
+    /// shuffle the tracks (guarded until they load — playing the whole
+    /// library instead was a bug, not a fallback), a track row plays from
+    /// that track.
     private func activateCurrent() {
         guard let album else { return }
         switch selection {
@@ -910,23 +1020,34 @@ struct AlbumDetailScreen: View {
 struct PlaylistDetailScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Raw MusicKit ID of the playlist this page shows.
     let playlistID: String
 
+    /// Highlighted row (headers included).
     @State private var selection = 0
+    /// The playlist's tracks, loaded async on appear.
     @State private var tracks: [Song] = []
+    /// Transient confirmation message.
     @State private var toast = ""
+    /// Hold-center track options (shared panel).
     @State private var hold = SongHoldState()
 
+    /// The cached Playlist for `playlistID`, nil if it's gone from the
+    /// library.
     private var playlist: Playlist? { model.music.playlist(playlistID) }
 
+    /// Play All / Shuffle All action rows.
     private var headerItems: [MenuItem] {
         [
             MenuItem(id: "hdr.play", title: "Play All", symbol: "play.fill", showsChevron: false, isActionRow: true),
             MenuItem(id: "hdr.shuffle", title: "Shuffle All", symbol: "shuffle", showsChevron: false, isActionRow: true),
         ]
     }
+    /// Headers + tracks (the selection's clamp bound).
     private var totalRows: Int { headerItems.count + tracks.count }
 
+    /// Playlist track list with Play/Shuffle headers; toast and hold panel
+    /// layered above.
     var body: some View {
         ZStack {
             MenuList(
@@ -956,6 +1077,7 @@ struct PlaylistDetailScreen: View {
         }
     }
 
+    /// Shows a transient toast, auto-hiding after 1.6 s.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
@@ -963,6 +1085,9 @@ struct PlaylistDetailScreen: View {
         }
     }
 
+    /// Wheel input: the hold panel consumes events first; headers play or
+    /// shuffle, a track plays from itself; center-hold opens queue
+    /// options; MENU pops.
     private func handle(_ event: ControlEvent) {
         if hold.handle(event, player: model.player, toast: showToast) { return }
         switch event {
@@ -1001,6 +1126,9 @@ struct PlaylistDetailScreen: View {
 
 /// Handoff for "View in Cover Flow": which album the flow should land on.
 final class CoverFlowLaunch {
+    /// Process-wide handoff point.
     static let shared = CoverFlowLaunch()
+    /// Album ID Cover Flow should land on; consumed (set to nil) on the
+    /// flow's first appear.
     var pendingAlbumID: String?
 }

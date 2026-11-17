@@ -34,6 +34,7 @@ every call site.
 | Page | Concept |
 |---|---|
 | [swiftui-views-and-state.md](swiftui-views-and-state.md) | SwiftUI views, `body`, `@Observable`/`ObservableObject`, view identity & lifecycle |
+| [uiviewrepresentable.md](uiviewrepresentable.md) | Embedding UIKit views (AirPlay picker, MPVolumeView) in SwiftUI |
 | [combine.md](combine.md) | Combine publishers/subscribers (`PassthroughSubject`, `onReceive`) |
 
 ## System services & persistence
@@ -56,6 +57,7 @@ every call site.
 | Page | Concept |
 |---|---|
 | [avfoundation-audio-session.md](avfoundation-audio-session.md) | `AVAudioSession` — the iOS audio-policy singleton |
+| [avfoundation-playback.md](avfoundation-playback.md) | `AVAudioPlayer` (play-a-sound) vs `AVAudioSourceNode` (real-time synthesis) |
 | [audiotoolbox.md](audiotoolbox.md) | AudioServices system sounds |
 | [mpvolumeview.md](mpvolumeview.md) | The hidden-slider system-volume trick |
 

@@ -10,24 +10,42 @@ import MusicKit
 /// background — keeps the UI in sync.
 @Observable
 final class PlayerModel {
+    /// The system application music player: plays in-process and owns the
+    /// real queue (including MusicKit's shuffle order). Background audio
+    /// works because the app activates one AVAudioSession (.playback) at
+    /// launch and never deactivates it.
     private let player = ApplicationMusicPlayer.shared
 
+    /// The queue as our bookkeeping knows it; the real queue lives in
+    /// `player.queue` and `syncFromPlayer()` keeps the two aligned.
     private(set) var queue: [Song] = []
+    /// Index into `queue` of the entry believed current.
     private(set) var queueIndex = 0
+    /// Mirrors the player's playback status (polled, written only on change).
     private(set) var isPlaying = false
+    /// Playback position in the current track, in seconds.
     private(set) var playbackTime: Double = 0
+    /// App-audible volume 0–1, applied through MediaVolumeController.
     private(set) var volume: Double = 0.5
 
+    /// The queue entry at `queueIndex`, or nil when no queue is loaded.
     var currentSong: Song? {
         queue.indices.contains(queueIndex) ? queue[queueIndex] : nil
     }
 
+    /// Current track's duration; `Song.duration` is optional in MusicKit,
+    /// so a missing value reads as 0.
     var duration: Double { currentSong?.duration ?? 0 }
 
+    /// The 0.5 s state-poll timer (see `startTimer()` for why polling).
     private var timer: Timer?
+    /// Poll tick counter; throttles session saves to ~every 2 s.
     private var ticks = 0
+    /// Memoized `upNext` rows, keyed by entry count + current entry ID.
     private var upNextCache: (key: String, items: [UpNextItem]) = ("", [])
 
+    /// Seeds `volume` from the real system volume so the first wheel nudge
+    /// moves it relatively instead of snapping it to the stored default.
     init() {
         // Start from the real system volume so the wheel doesn't snap it.
         let sys = MediaVolumeController.shared.systemVolume
@@ -36,6 +54,13 @@ final class PlayerModel {
 
     // MARK: Queue
 
+    /// Replaces the queue and starts playing at `index`.
+    ///
+    /// Local bookkeeping is set eagerly so the UI shows the track at once;
+    /// the player calls are async and run in a detached Task.
+    /// - Parameters:
+    ///   - songs: Songs to queue, in play order.
+    ///   - index: Index of the track to start from (clamped to bounds).
     func play(_ songs: [Song], startingAt index: Int = 0) {
         guard !songs.isEmpty else { return }
         queue = songs
@@ -63,6 +88,7 @@ final class PlayerModel {
         player.state.shuffleMode = s.shuffle ? .songs : .off
     }
 
+    /// Shuffles `songs` and plays from the shuffled first track.
     func shufflePlay(_ songs: [Song]) {
         let shuffled = songs.shuffled()
         play(shuffled, startingAt: 0)
@@ -164,6 +190,7 @@ final class PlayerModel {
 
     // MARK: Transport
 
+    /// Toggles playback, updating `isPlaying` after the async player call.
     func togglePlayPause() {
         if isPlaying {
             Task {
@@ -179,6 +206,8 @@ final class PlayerModel {
         startTimer()
     }
 
+    /// Skips to the next queue entry; at the queue end the call throws and
+    /// nothing happens (harmless by design). UI sync comes from the poll.
     func next() {
         // skipToNextEntry is the proven transport path (it advanced audio
         // reliably); the polling tick syncs the UI via title matching.
@@ -186,6 +215,8 @@ final class PlayerModel {
         Task { try? await player.skipToNextEntry() }
     }
 
+    /// Classic iPod rule: past 3 s into the track, "previous" restarts it;
+    /// earlier, it skips to the previous track.
     func previous() {
         if playbackTime > 3 {
             scrub(to: 0)
@@ -194,17 +225,28 @@ final class PlayerModel {
         Task { try? await player.skipToPreviousEntry() }
     }
 
+    /// Seeks within the current track, clamped to its duration, and mirrors
+    /// the position into the polled bookkeeping.
+    /// - Parameter time: Target position in seconds.
     func scrub(to time: Double) {
         let t = min(max(0, time), duration)
         player.playbackTime = t
         playbackTime = t
     }
 
+    /// Sets the volume (clamped to 0–1). ApplicationMusicPlayer has no
+    /// volume of its own, so this goes through MediaVolumeController's
+    /// hidden MPVolumeView slider.
+    ///
+    /// Concept: MPVolumeView → docs/concepts/mpvolumeview.md
+    /// - Parameter v: Target volume.
     func setVolume(_ v: Double) {
         volume = min(1, max(0, v))
         MediaVolumeController.shared.setVolume(Float(volume))
     }
 
+    /// Nudges the volume by `delta` — what a wheel tick translates to.
+    /// - Parameter delta: Signed change; the result is clamped.
     func bumpVolume(_ delta: Double) {
         setVolume(volume + delta)
     }
@@ -241,6 +283,15 @@ final class PlayerModel {
 
     // MARK: State polling
 
+    /// Starts the single 0.5 s poll timer (idempotent; runs forever once
+    /// started).
+    ///
+    /// MusicKit's queue posts events before its state settles (entry IDs
+    /// churn, `item` can be nil), so — per project convention — we poll
+    /// `player.state` and `player.queue.currentEntry` instead of trusting
+    /// events. Each tick also syncs auto-advances (works while
+    /// backgrounded) and saves the session every 4th tick (~2 s) while
+    /// playing.
     private func startTimer() {
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
