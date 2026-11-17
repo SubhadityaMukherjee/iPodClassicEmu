@@ -7,6 +7,12 @@ import UIKit
 struct ScreenRouter: View {
     @Environment(AppModel.self) private var model
 
+    /// Maps the top of the navigation stack to the title-bar string.
+    /// Detail routes (album, artist, book…) resolve their names through the
+    /// model's stores.
+    ///
+    /// - Parameter model: App model supplying names for detail routes.
+    /// - Returns: The title for the current screen (empty stack → "iPod").
     static func title(for model: AppModel) -> String {
         switch model.stack.last {
         case .home: return "iPod"
@@ -59,6 +65,9 @@ struct ScreenRouter: View {
         }
     }
 
+    /// Layers every route in the stack (not just the top) so deeper screens
+    /// stay alive and keep their state through pops; only the topmost layer
+    /// accepts wheel input and hit-testing.
     var body: some View {
         ZStack {
             ForEach(Array(model.stack.enumerated()), id: \.element) { index, route in
@@ -87,6 +96,11 @@ struct ScreenRouter: View {
                 removal: .move(edge: .trailing).combined(with: .opacity))
     }
 
+    /// Instantiates the view for a route — the single Route → screen
+    /// registry; adding a screen means adding a case plus a line here.
+    ///
+    /// - Parameter route: Route to render.
+    /// - Returns: The screen for that route.
     @ViewBuilder
     private func screen(for route: Route) -> some View {
         switch route {
@@ -150,8 +164,12 @@ struct ScreenRouter: View {
 /// The video-iPod flip: rotate around the Y axis while fading, used for
 /// Now Playing push/pop.
 private struct Flip: ViewModifier {
+    /// Y-axis rotation in degrees applied to the content.
     let angle: Double
+    /// Opacity paired with that rotation step.
     let fade: Double
+    /// Applies the flip: fade plus a 3D Y-axis rotation with a slightly
+    /// compressed perspective for the video-iPod feel.
     func body(content: Content) -> some View {
         content
             .opacity(fade)
@@ -159,7 +177,11 @@ private struct Flip: ViewModifier {
     }
 }
 
+/// UIKit battery bridge for the title-bar battery icon.
 extension AppModel {
+    /// Battery charge as 0…1. UIDevice reports −1 when monitoring is off or
+    /// on the simulator, which maps to a full 1.0 so the icon always shows
+    /// something sane.
     var batteryLevel: Double {
         let l = UIDevice.current.batteryLevel
         return l >= 0 ? Double(l) : 1.0

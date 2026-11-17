@@ -3,7 +3,9 @@ import MusicKit
 
 /// One row in an iPod-style menu.
 struct MenuItem: Identifiable, Equatable {
+    /// Stable row identity for ForEach/diffing (route name or row key).
     let id: String
+    /// Row title text.
     let title: String
     /// Second line (e.g. artist under a song title).
     var subtitle: String? = nil
@@ -11,10 +13,21 @@ struct MenuItem: Identifiable, Equatable {
     var detail: String? = nil
     /// Trailing SF Symbol replacing the chevron (Shuffle, Cover Flow…).
     var symbol: String? = nil
+    /// Whether to draw the trailing ">" chevron (off for leaf/value rows).
     var showsChevron: Bool = true
     /// Action rows (Play All, Shuffle All, Sort By) sit on a grey band.
     var isActionRow: Bool = false
 
+    /// Memberwise initializer with iPod defaults (chevron shown, plain row).
+    ///
+    /// - Parameters:
+    ///   - id: Stable row identity.
+    ///   - title: Row title text.
+    ///   - subtitle: Optional second line under the title.
+    ///   - detail: Optional right-aligned value text ("On", "Medium", …).
+    ///   - symbol: Optional trailing SF Symbol replacing the chevron.
+    ///   - showsChevron: Whether the ">" chevron is drawn.
+    ///   - isActionRow: Whether the row sits on a grey action band.
     init(id: String, title: String, subtitle: String? = nil, detail: String? = nil, symbol: String? = nil, showsChevron: Bool = true, isActionRow: Bool = false) {
         self.id = id
         self.title = title
@@ -25,6 +38,12 @@ struct MenuItem: Identifiable, Equatable {
         self.isActionRow = isActionRow
     }
 
+    /// Compares every field, not just `id`, so a row whose detail/symbol text
+    /// changed counts as different and re-renders.
+    ///
+    /// - Parameters:
+    ///   - lhs: Left row.
+    ///   - rhs: Right row.
     static func == (lhs: MenuItem, rhs: MenuItem) -> Bool {
         lhs.id == rhs.id && lhs.title == rhs.title && lhs.subtitle == rhs.subtitle
             && lhs.detail == rhs.detail && lhs.symbol == rhs.symbol && lhs.showsChevron == rhs.showsChevron
@@ -63,15 +82,24 @@ func moveListSelection(_ selection: inout Int, count: Int, delta: Int, settings:
 /// and right-aligned detail values. Rows keep the selection pinned near the
 /// middle once the list scrolls, like the original.
 struct MenuList: View {
+    /// Rows to display.
     let items: [MenuItem]
+    /// Index of the highlighted row.
     let selection: Int
+    /// Tighter row spacing for embedded lists (split layouts).
     var compact = false
+    /// Message shown when there are no items.
     var emptyText = "No Items"
+    /// Show 1-based row numbers (Cover Flow track list).
     var numbered = false
+    /// Row layout style.
     var style: MenuRowStyle = .normal
 
     @EnvironmentObject private var settings: AppSettings
 
+    /// Renders only the visible window of rows inside a ScrollView — whole
+    /// rows only, stepping one row at a time as the selection moves, like
+    /// the classic iPod.
     var body: some View {
         GeometryReader { geo in
             let m = settings.fontMultiplier
@@ -121,6 +149,7 @@ struct MenuList: View {
         }
     }
 
+    /// Optional artwork lookup for thumbnail-style rows (album art, photos).
     var thumbProvider: ((MenuItem) -> Artwork?)? = nil
 
     /// Row height for a specific item (action rows stay single-line bands).
@@ -135,6 +164,7 @@ struct MenuList: View {
         }
     }
 
+    /// The tallest unscaled row height for the current style.
     private var styleMaxRowHeight: CGFloat {
         switch style {
         case .normal: return 33
@@ -158,12 +188,18 @@ struct MenuList: View {
         return max(1, n)
     }
 
+    /// First row index of the visible window; steps as the selection moves
+    /// so the highlighted row stays on screen. Persisting across ticks is
+    /// what makes the list scroll one row per tick instead of re-centering.
+    ///
+    /// Concept: swiftui-views-and-state → docs/concepts/swiftui-views-and-state.md
     @State private var windowIndex = 0
 }
 
 /// Grey band behind action rows (Play All / Shuffle All / Sort By), like the
 /// original iPod's album action strip.
 struct ActionBand: View {
+    /// Renders the grey gradient band with top/bottom hairlines.
     var body: some View {
         LinearGradient(
             colors: [Color(white: 0.85), Color(white: 0.79)],
@@ -181,15 +217,24 @@ struct ActionBand: View {
 
 /// A single menu row.
 struct MenuRow: View {
+    /// Row content.
     let item: MenuItem
+    /// Whether this is the highlighted (blue) row.
     let selected: Bool
+    /// Tighter spacing variant.
     var compact = false
+    /// 1-based row number to show, if any.
     var index: Int? = nil
+    /// Row layout style.
     var style: MenuRowStyle = .normal
+    /// Artwork for thumbnail-style rows.
     var thumb: Artwork? = nil
 
     @EnvironmentObject private var settings: AppSettings
 
+    /// Renders one row: optional number/thumbnail, title (+subtitle), and
+    /// trailing detail/symbol/chevron; the selected row sits on the blue
+    /// selection gradient.
     var body: some View {
         let m = settings.fontMultiplier
         let effectiveStyle: MenuRowStyle = item.isActionRow ? .normal : style
@@ -253,6 +298,8 @@ struct MenuRow: View {
         .contentShape(Rectangle())
     }
 
+    /// The 34×34 artwork square, or a grey fallback with a note glyph when
+    /// the row has no artwork.
     @ViewBuilder
     private var thumbnail: some View {
         if let thumb {
@@ -271,12 +318,18 @@ struct MenuRow: View {
 
 /// Left menu column + right preview pane, like the Music menu screens.
 struct SplitMenuLayout<Preview: View>: View {
+    /// Left-column menu rows.
     let items: [MenuItem]
+    /// Highlighted row index in the left column.
     let selection: Int
+    /// Right-pane contents for the current selection.
     @ViewBuilder var preview: () -> Preview
 
     @EnvironmentObject private var settings: AppSettings
 
+    /// Renders the compact menu on the left (52% width) and the preview pane
+    /// on the right, separated by a divider with a drop shadow cast onto the
+    /// pane.
     var body: some View {
         GeometryReader { geo in
             let menuW = geo.size.width * 0.52
@@ -314,10 +367,15 @@ struct SplitMenuLayout<Preview: View>: View {
 
 /// iPod-style modal panel (Camera Options, confirmations…).
 struct ModalPanel<Content: View>: View {
+    /// Panel heading.
     let title: String
+    /// Called when the ✕ button is tapped.
     var onClose: () -> Void
+    /// Panel body rendered below the title bar.
     @ViewBuilder var content: () -> Content
 
+    /// Renders the panel: title bar with a close button over the content,
+    /// on paper with a stroke and shadow.
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -349,8 +407,11 @@ struct ModalPanel<Content: View>: View {
 
 /// Overlay container for modal panels inside the screen.
 struct ModalHost<Panel: View>: View {
+    /// The panel to present.
     @ViewBuilder var panel: () -> Panel
 
+    /// Hosts a modal panel over a scrim, with a combined opacity/scale
+    /// transition for show/hide.
     var body: some View {
         ZStack {
             Color.black.opacity(0.30)
@@ -365,8 +426,11 @@ struct ModalHost<Panel: View>: View {
 /// Small capsule toast pinned near the bottom of the screen ("Added to
 /// Queue", errors). Show it with a transition, clear the text after a beat.
 struct ToastCapsule: View {
+    /// Message to show.
     let text: String
 
+    /// Renders the capsule pinned near the bottom of the screen; hit-testing
+    /// is disabled so it never blocks the content behind it.
     var body: some View {
         VStack {
             Spacer()

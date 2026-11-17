@@ -3,9 +3,15 @@ import MediaPlayer
 
 /// The whole device: black body, LCD screen block, hold switch, click wheel.
 struct DeviceView: View {
+    /// App model: hold state, ringer, idle tracking, control bus.
     @Environment(AppModel.self) private var model
+    /// User preferences (device theme, dim timing).
     @EnvironmentObject private var settings: AppSettings
 
+    /// Lays out the device from top to bottom — hold switch, recessed LCD
+    /// block, floating click wheel — inside a GeometryReader so every
+    /// proportion derives from the body size. Also hosts the dim/hold/ringer
+    /// LCD overlays, the full-black sleep overlay, and the 2 s idle heartbeat.
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
@@ -85,6 +91,13 @@ struct DeviceView: View {
         }
     }
 
+    /// True when the idle dim should cover the LCD. Reading `clockTick`
+    /// first is deliberate: SwiftUI only re-renders when `body` reads
+    /// observable state, and the heartbeat timer writes `clockTick` so this
+    /// check re-evaluates every 2 s. Playing audio or a ringing alarm keeps
+    /// the backlight on, like a classic iPod.
+    ///
+    /// Concept: swiftui-views-and-state → docs/concepts/swiftui-views-and-state.md
     private var isDimmed: Bool {
         // Reading the heartbeat (not just writing it) is what invalidates
         // the view — SwiftUI ignores writes to state body never reads.
@@ -95,6 +108,9 @@ struct DeviceView: View {
         return model.idleSeconds > after && model.ringer == nil && !model.audiobook.isActive
     }
 
+    /// The idle-dim cover: 62% black over the LCD only (never the wheel or
+    /// body — those are hardware). Tapping anywhere counts as activity and
+    /// wakes the screen.
     private var dimOverlay: some View {
         Color.black.opacity(0.62)
             .contentShape(Rectangle())
@@ -103,6 +119,7 @@ struct DeviceView: View {
             .animation(.easeIn(duration: 0.3), value: isDimmed)
     }
 
+    /// Full-black screen-asleep cover; a tap wakes the screen.
     private var sleepOverlay: some View {
         Color.black
             .ignoresSafeArea()
@@ -116,8 +133,11 @@ struct DeviceView: View {
 /// Hold screen: display fades to near-black with the playing album art as a
 /// big centered square (or a lock when nothing is playing).
 struct HoldScreenOverlay: View {
+    /// App model: hold flag and the now-playing song.
     @Environment(AppModel.self) private var model
 
+    /// Fades the LCD to near-black and centers the playing album art (dimmed
+    /// to match), or a lock glyph when nothing is playing.
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -142,9 +162,13 @@ struct HoldScreenOverlay: View {
 
 /// Small padlock switch at the top of the body (the Hold switch).
 struct HoldSwitchView: View {
+    /// App model: the hold flag this switch toggles.
     @Environment(AppModel.self) private var model
+    /// User preferences (theme picks the switch's metal colors).
     @EnvironmentObject private var settings: AppSettings
 
+    /// Renders the small padlock switch right-aligned at the top of the
+    /// body; tapping toggles Hold with a button haptic.
     var body: some View {
         let silver = settings.theme == 1
         HStack {

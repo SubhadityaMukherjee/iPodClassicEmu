@@ -11,10 +11,14 @@ import UserNotifications
 /// RESET_DEFAULTS skips it, SHOW_SETUP=1 forces it (QA screenshots /
 /// UI tests).
 struct SetupScreen: View {
+    /// App-wide model (navigation, services); `completeSetup()` finishes the wizard.
     @Environment(AppModel.self) private var model
+    /// User preferences — applied (written) by the preferences step.
     @EnvironmentObject private var settings: AppSettings
 
+    /// The wizard's pages, in the order they are shown.
     private enum Step { case welcome, permissions, voiceModel, readingVoice, preferences, done }
+    /// The wizard page currently on screen.
     @State private var step: Step = .welcome
     @State private var modelChoice = 0 // 0 = download now, 1 = not now
     @State private var ttsChoice = 0   // reading voice: 0 = download now, 1 = not now
@@ -26,11 +30,16 @@ struct SetupScreen: View {
     @State private var camera: Bool?
     @State private var mic: Bool?
     @State private var notifications: Bool?
+    /// True while the permission prompts are being shown (guards against re-entry).
     @State private var requesting = false
+    /// True once the transcription-model download has been kicked off.
     @State private var downloadStarted = false
 
+    /// Shared on-device transcription manager (model download + progress state).
     private let transcription = TranscriptionManager.shared
 
+    /// Renders the current step's page between spacers with a footer naming
+    /// the step, and routes all wheel input to `handle(_:)`.
     var body: some View {
         VStack(spacing: 10) {
             Spacer(minLength: 8)
@@ -62,6 +71,7 @@ struct SetupScreen: View {
 
     // MARK: Pages
 
+    /// Greeting page: note glyph, "Welcome", and a set-the-expectations line.
     private var welcomePage: some View {
         VStack(spacing: 14) {
             Image(systemName: "music.note")
@@ -77,6 +87,10 @@ struct SetupScreen: View {
         }
     }
 
+    /// One permissions row: service name on the left, status glyph on the right.
+    ///
+    /// - Parameter name: Service display name (e.g. "Music Library").
+    /// - Parameter granted: `nil` = not asked yet, `true`/`false` = granted/denied.
     private func permissionRow(_ name: String, _ granted: Bool?) -> some View {
         HStack {
             Text(name).font(Theme.font(15, .medium)).foregroundStyle(Theme.ink)
@@ -88,6 +102,8 @@ struct SetupScreen: View {
         .padding(.vertical, 5)
     }
 
+    /// Permissions page: one row per service plus a hint line — center runs
+    /// `requestAll()`, MENU skips (anything skipped can be granted later in-app).
     private var permissionsPage: some View {
         VStack(spacing: 6) {
             Text("Permissions")
@@ -105,6 +121,9 @@ struct SetupScreen: View {
         }
     }
 
+    /// Voice-model page: Download Now / Not Now choices for the ~600 MB
+    /// transcription model, or live download progress once started (the
+    /// download continues in the background; center moves on).
     private var voiceModelPage: some View {
         VStack(spacing: 10) {
             Text("Voice Model")
@@ -162,6 +181,7 @@ struct SetupScreen: View {
         }
     }
 
+    /// Human-readable Read Aloud voice state, or nil before anything has started.
     private var ttsStatusText: String? {
         switch ReadAloudVoiceStore.shared.state {
         case .notStarted: return nil
@@ -173,6 +193,9 @@ struct SetupScreen: View {
         }
     }
 
+    /// Preferences page: lists the factory defaults and applies them in a
+    /// `.task` when the page appears — so an existing install re-running
+    /// setup also picks them up.
     private var preferencesPage: some View {
         VStack(spacing: 6) {
             Text("Preferences Set")
@@ -199,6 +222,8 @@ struct SetupScreen: View {
         }
     }
 
+    /// Final page: checkmark and "Center: start" — center calls
+    /// `model.completeSetup()`.
     private var donePage: some View {
         VStack(spacing: 14) {
             Image(systemName: "checkmark.circle")
@@ -213,12 +238,14 @@ struct SetupScreen: View {
         }
     }
 
+    /// Footer strip naming the current step.
     private var footer: some View {
         Text("Setup · \(stepName)")
             .font(Theme.font(10, .medium))
             .foregroundStyle(Theme.inkDim)
     }
 
+    /// Display name of the current step for the footer.
     private var stepName: String {
         switch step {
         case .welcome: return "Welcome"
@@ -232,6 +259,11 @@ struct SetupScreen: View {
 
     // MARK: Rows
 
+    /// A selectable option row; the chosen option sits on the blue selection
+    /// gradient like a selected menu row.
+    ///
+    /// - Parameter text: Option label.
+    /// - Parameter selected: Whether this option is the currently highlighted choice.
     private func choiceRow(_ text: String, selected: Bool) -> some View {
         Text(text)
             .font(Theme.font(15, .semibold))
@@ -242,6 +274,9 @@ struct SetupScreen: View {
             .background(RoundedRectangle(cornerRadius: 4).fill(selected ? AnyShapeStyle(SelectionGradient()) : AnyShapeStyle(Color.clear)))
     }
 
+    /// A plain left-aligned status line.
+    ///
+    /// - Parameter text: Text to show.
     private func statusLine(_ text: String) -> some View {
         Text(text)
             .font(Theme.font(15, .medium))
@@ -250,6 +285,10 @@ struct SetupScreen: View {
             .padding(.vertical, 4)
     }
 
+    /// Maps a tri-state permission answer to a status glyph.
+    ///
+    /// - Parameter granted: `nil` = not asked yet, `true`/`false` = granted/denied.
+    /// - Returns: "✓", "✗", or "—".
     private func statusGlyph(_ granted: Bool?) -> String {
         switch granted {
         case .some(true): return "✓"
@@ -258,6 +297,8 @@ struct SetupScreen: View {
         }
     }
 
+    /// Human-readable transcription-model download state, or nil before
+    /// anything has started.
     private var modelStatusText: String? {
         switch transcription.downloadState {
         case .notStarted: return nil
@@ -270,6 +311,11 @@ struct SetupScreen: View {
 
     // MARK: Input
 
+    /// Wheel/button input for the whole wizard: center advances or triggers
+    /// the current page's action (download / request permissions), MENU skips
+    /// ahead, ticks move the download choices.
+    ///
+    /// - Parameter event: Control event from the click wheel.
     private func handle(_ event: ControlEvent) {
         switch step {
         case .welcome:
@@ -338,10 +384,12 @@ struct SetupScreen: View {
         }
     }
 
+    /// True once every permission prompt has been shown (every state non-nil).
     private var allAsked: Bool {
         music != nil && photos != nil && camera != nil && mic != nil && notifications != nil
     }
 
+    /// Moves to the next step; called again on the last step it finishes setup.
     private func advance() {
         switch step {
         case .welcome: step = .permissions
@@ -355,6 +403,8 @@ struct SetupScreen: View {
 
     // MARK: Permission requests
 
+    /// Runs every permission prompt in sequence, recording each tri-state
+    /// result so the rows update as the answers come in.
     private func requestAll() async {
         requesting = true
         music = await requestMusic()
@@ -365,12 +415,24 @@ struct SetupScreen: View {
         requesting = false
     }
 
+    /// Requests MusicKit library access, skipping the system prompt when
+    /// access is already granted.
+    ///
+    /// - Returns: Whether music access is authorized.
+    ///
+    /// Concept: MusicKit
     private func requestMusic() async -> Bool {
         if MusicAuthorization.currentStatus == .authorized { return true }
         let status = await MusicAuthorization.request()
         return status == .authorized
     }
 
+    /// Requests read/write photo-library access, counting `.limited`
+    /// (selected-photos-only) as granted.
+    ///
+    /// - Returns: Whether photo access is authorized or limited.
+    ///
+    /// Concept: Photos
     private func requestPhotos() async -> Bool {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         if status == .authorized || status == .limited { return true }
@@ -378,11 +440,21 @@ struct SetupScreen: View {
         return new == .authorized || new == .limited
     }
 
+    /// Requests camera access, skipping the system prompt when already granted.
+    ///
+    /// - Returns: Whether video access is authorized.
     private func requestCamera() async -> Bool {
         if AVCaptureDevice.authorizationStatus(for: .video) == .authorized { return true }
         return await AVCaptureDevice.requestAccess(for: .video)
     }
 
+    /// Requests microphone permission, bridging the older callback-based
+    /// AVFoundation API into async/await with a checked continuation.
+    ///
+    /// - Returns: Whether recording permission is granted.
+    ///
+    /// Concept: swift-closures → docs/concepts/swift-closures.md
+    /// Concept: swift-async-await → docs/concepts/swift-async-await.md
     private func requestMic() async -> Bool {
         if AVAudioApplication.shared.recordPermission == .granted { return true }
         return await withCheckedContinuation { continuation in
@@ -392,6 +464,12 @@ struct SetupScreen: View {
         }
     }
 
+    /// Requests notification (alert + sound) authorization, treating
+    /// provisional/ephemeral statuses as granted and a failed request as denied.
+    ///
+    /// - Returns: Whether notifications may be shown.
+    ///
+    /// Concept: UserNotifications
     private func requestNotifications() async -> Bool {
         let center = UNUserNotificationCenter.current()
         let current = await center.notificationSettings()

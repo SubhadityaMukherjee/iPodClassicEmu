@@ -3,6 +3,8 @@ import SwiftUI
 /// The LCD screen: title bar on top, routed content below, CRT effect over
 /// everything, all inside a thin dark bezel.
 struct ScreenView: View {
+    /// Renders the LCD contents: title bar on top, routed screen below, CRT
+    /// effect and bezel overlays on top of both.
     var body: some View {
         VStack(spacing: 0) {
             TitleBarView()
@@ -41,10 +43,15 @@ struct ScreenView: View {
 /// Title bar: screen title, clock, battery (and a tiny play glyph while
 /// music is playing) — brushed metal like the original.
 struct TitleBarView: View {
+    /// App model: hold flag, player state, battery.
     @Environment(AppModel.self) private var model
+    /// Alarm store — shows the bell glyph while the alarm is armed.
     @ObservedObject private var alarm = AlarmStore.shared
+    /// Current time, re-read every second by the timer below.
     @State private var now = Date()
 
+    /// Renders the brushed-metal bar: screen title, hold lock, clock, play
+    /// glyph, alarm bell, and battery. The 1 s timer drives the clock.
     var body: some View {
         HStack(spacing: 0) {
             Text(title)
@@ -107,11 +114,14 @@ struct TitleBarView: View {
         }
     }
 
+    /// The title-bar string for the current top of the navigation stack.
     private var title: String { ScreenRouter.title(for: model) }
 }
 
 /// Equilateral play triangle for the title bar.
 struct PlayTriangle: View {
+    /// Draws the triangle in a Canvas — a crisp two-path fill at a fixed
+    /// 9×10 frame, cheaper and sharper than scaling an SF Symbol.
     var body: some View {
         Canvas { ctx, size in
             var path = Path()
@@ -128,8 +138,12 @@ struct PlayTriangle: View {
 /// Blue-fill battery, classic style (bolt overlay while charging).
 struct BatteryIcon: View {
     let level: Double  // 0…1; < 0 = unknown
+    /// Show the charging bolt overlay.
     var charging = false
 
+    /// Renders the classic outline battery: a blue/green fill proportional
+    /// to `level` (green when charging, red at ≤ 20%), a nub cap, and a
+    /// bolt while charging.
     var body: some View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 1.5)

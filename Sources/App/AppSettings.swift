@@ -2,15 +2,30 @@ import Foundation
 import SwiftUI
 
 /// All user preferences, UserDefaults-backed. Rendered under Settings.
+///
+/// ObservableObject (not the newer @Observable macro) on purpose: these
+/// are computed properties over UserDefaults, which macro-based tracking
+/// cannot observe — so every setter fires `objectWillChange.send()` by
+/// hand and views subscribe with `@EnvironmentObject`.
+///
+/// Concept: userdefaults → docs/concepts/userdefaults.md
 final class AppSettings: ObservableObject {
+    /// App-wide singleton so every screen reads and writes the same store.
     static let shared = AppSettings()
 
+    /// Standard user defaults, kept as a one-letter shorthand below.
     private let d = UserDefaults.standard
 
+    /// Reads a Bool, returning `def` when the key is unset (first launch).
     private func bool(_ key: String, _ def: Bool) -> Bool { d.object(forKey: key) as? Bool ?? def }
+    /// Reads an Int, returning `def` when the key is unset (first launch).
     private func int(_ key: String, _ def: Int) -> Int { d.object(forKey: key) as? Int ?? def }
+    /// Writes the value under its key.
     private func store(_ v: Any, _ key: String) { d.set(v, forKey: key) }
 
+    /// UserDefaults key strings gathered as constants — one namespace,
+    /// no typo'd magic strings at call sites; the trailing comments
+    /// document each value's encoding.
     private enum K {
         static let crt = "display.crt"
         static let scanlines = "display.scanlines"
@@ -41,6 +56,7 @@ final class AppSettings: ObservableObject {
 
     // MARK: Display
 
+    /// CRT screen glow effect on/off.
     var crtEnabled: Bool {
         get { bool(K.crt, true) } set { objectWillChange.send(); store(newValue, K.crt) }
     }
@@ -79,15 +95,19 @@ final class AppSettings: ObservableObject {
 
     // MARK: Clickwheel
 
+    /// Master switch for wheel haptics.
     var hapticsEnabled: Bool {
         get { bool(K.haptics, true) } set { objectWillChange.send(); store(newValue, K.haptics) }
     }
+    /// Scroll-tick haptic strength: 0 off, 1 light, 2 medium, 3 strong.
     var scrollingHaptics: Int {
         get { int(K.scrollHaptics, 3) } set { objectWillChange.send(); store(newValue, K.scrollHaptics) }
     }
+    /// Button-press haptic strength: 0 light, 1 medium, 2 heavy.
     var buttonHaptics: Int {
         get { int(K.buttonHaptics, 2) } set { objectWillChange.send(); store(newValue, K.buttonHaptics) }
     }
+    /// Audible click on each wheel detent.
     var tickSounds: Bool {
         get { bool(K.tickSounds, false) } set { objectWillChange.send(); store(newValue, K.tickSounds) }
     }
@@ -100,12 +120,14 @@ final class AppSettings: ObservableObject {
     var rubberBandTick: Bool {
         get { bool(K.rubberBand, true) } set { objectWillChange.send(); store(newValue, K.rubberBand) }
     }
+    /// Use the softer tick sound variant while scrolling (vs. the regular tick).
     var softTick: Bool {
         get { int(K.tickType, 0) == 1 } set { objectWillChange.send(); store(newValue ? 1 : 0, K.tickType) }
     }
 
     // MARK: Playback
 
+    /// Shuffle the playback queue.
     var shuffle: Bool {
         get { bool(K.shuffle, false) } set { objectWillChange.send(); store(newValue, K.shuffle) }
     }
@@ -124,13 +146,16 @@ final class AppSettings: ObservableObject {
     var cameraFlash: Int {
         get { int(K.cameraFlash, 2) } set { objectWillChange.send(); store(newValue, K.cameraFlash) }
     }
+    /// Selected capture aspect ratio; index into `aspectRatios`.
     var cameraAspectIndex: Int {
         get { int(K.cameraAspect, 0) } set { objectWillChange.send(); store(newValue, K.cameraAspect) }
     }
+    /// True when the front lens is selected (persisted as the Int 0/1).
     var cameraFront: Bool {
         get { int(K.cameraLens, 0) == 1 } set { objectWillChange.send(); store(newValue ? 1 : 0, K.cameraLens) }
     }
 
+    /// Capture aspect choices, display label paired with width/height.
     static let aspectRatios: [(label: String, value: CGFloat)] = [
         ("1:1", 1), ("4:3", 4.0 / 3.0), ("16:9", 16.0 / 9.0),
     ]
@@ -141,8 +166,12 @@ final class AppSettings: ObservableObject {
     var fontScale: Int {
         get { int(K.fontScale, 0) } set { objectWillChange.send(); store(min(2, max(0, newValue)), K.fontScale) }
     }
+    /// Display names for the three text sizes.
     static let fontLabels = ["Small", "Standard", "Large"]
+    /// Scale multipliers matching `fontLabels` by index.
     static let fontScales: [CGFloat] = [0.85, 1.0, 1.18]
+    /// Ready-to-use text scale factor for the current `fontScale`
+    /// (index clamped into range).
     var fontMultiplier: CGFloat {
         Self.fontScales[min(max(0, fontScale), Self.fontScales.count - 1)]
     }

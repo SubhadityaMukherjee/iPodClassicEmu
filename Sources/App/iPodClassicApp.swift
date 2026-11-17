@@ -3,11 +3,32 @@ import UIKit
 import UserNotifications
 import AVFoundation
 
+/// App entry point (`@main`). `init` runs the one-time bootstrap — audio
+/// session, QA reset hooks, caches, terminate observer — and `body` hosts
+/// the full-device UI and reacts to scene lifecycle.
+///
+/// Concept: swiftui-views-and-state → docs/concepts/swiftui-views-and-state.md
 @main
 struct iPodClassicApp: App {
+    /// Root model, built once in `init` and owned for the app's whole
+    /// lifetime. `@State` at App level is SwiftUI's owner-storage: the
+    /// value exists before the first `body` evaluation and is never
+    /// recreated across re-renders.
+    ///
+    /// Concept: swift-property-wrappers → docs/concepts/swift-property-wrappers.md
     @State private var model: AppModel
+    /// System lifecycle signal (.active/.inactive/.background), observed
+    /// to save state on background and heal alarms on foreground.
     @Environment(\.scenePhase) private var scenePhase
 
+    /// One-shot bootstrap, ordered deliberately: the audio session must be
+    /// active before any model reads volume, and RESET_DEFAULTS must clear
+    /// storage before the model singletons are built (they would otherwise
+    /// capture the stale values). Also sizes the shared URLCache for
+    /// artwork, registers a terminate-time session save, and enables
+    /// battery monitoring for the status-bar icon.
+    ///
+    /// Concept: AVAudioSession
     init() {
         // ApplicationMusicPlayer runs in-process and needs an active
         // .playback audio session or playback dies when the app
@@ -53,6 +74,10 @@ struct iPodClassicApp: App {
         UIDevice.current.isBatteryMonitoringEnabled = true
     }
 
+    /// The single window: the full-device iPod UI plus scene-phase
+    /// handling — persist the playback session and start the alarm
+    /// keep-alive on background; stop keep-alive, reconcile alarms, mark
+    /// activity, and refresh the music library on foreground.
     var body: some Scene {
         WindowGroup {
             DeviceView()

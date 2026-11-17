@@ -5,6 +5,9 @@ import SwiftUI
 struct CRTOverlay: View {
     @EnvironmentObject private var settings: AppSettings
 
+    /// Renders the effect stack — scanlines, vignette, faint bloom — only
+    /// when the CRT setting is on; hit-testing is disabled so it never
+    /// intercepts screen taps.
     var body: some View {
         if settings.crtEnabled {
             ZStack {
@@ -16,6 +19,8 @@ struct CRTOverlay: View {
         }
     }
 
+    /// Maps the Display setting's scanline-intensity level to the scanline
+    /// opacity (0 = invisible).
     private var levelOpacity: Double {
         switch settings.scanlineIntensity {
         case 0: return 0
@@ -26,9 +31,14 @@ struct CRTOverlay: View {
     }
 }
 
+/// The scanline layer: 1-pt dark lines every 3 pt, every third line at
+/// full strength and the rest fainter, drawn in a Canvas so hundreds of
+/// lines cost one draw pass instead of hundreds of views.
 private struct Scanlines: View {
+    /// Base darkness of each line.
     let opacity: Double
 
+    /// Paints the repeating horizontal lines across the full size.
     var body: some View {
         Canvas { ctx, size in
             guard opacity > 0 else { return }
@@ -45,7 +55,10 @@ private struct Scanlines: View {
     }
 }
 
+/// The vignette layer: a radial gradient that darkens the LCD's corners
+/// slightly, like a photographed tube.
 private struct Vignette: View {
+    /// Renders the radial corner darkening.
     var body: some View {
         RadialGradient(
             colors: [.black.opacity(0), .black.opacity(0), .black.opacity(0.075)],

@@ -1,5 +1,10 @@
 import Foundation
 
+/// Stateless time formatters shared by every screen. A case-less enum used
+/// as a namespace — the Swift idiom for grouping pure functions that carry
+/// no instance state (the enum can never be instantiated).
+///
+/// Concept: foundation → docs/concepts/foundation.md
 enum TimeFormat {
     /// "14:04" style clock for the title bar, following the user's locale.
     static func clock(_ date: Date = Date()) -> String {
@@ -30,6 +35,8 @@ enum TimeFormat {
         return String(format: "%02d:%02d.%02d", m, s, cs)
     }
 
+    /// Song/track length: "3:25" under an hour, zero-padded "01:02:41"
+    /// style above it so durations align in list rows.
     static func duration(_ t: TimeInterval) -> String {
         let total = Int(t.rounded())
         if total >= 3600 { return hms(TimeInterval(total)) }

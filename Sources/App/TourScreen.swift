@@ -4,15 +4,19 @@ import SwiftUI
 /// major features, shown before the setup wizard. Center (or swipe left)
 /// advances, MENU skips, wheel ticks page back/forward.
 struct TourScreen: View {
+    /// App model; `completeTour()` dismisses the tour.
     @Environment(AppModel.self) private var model
+    /// User preferences from the environment.
     @EnvironmentObject private var settings: AppSettings
 
+    /// One tour page: an SF Symbol, a headline, and one line of body copy.
     private struct Page {
         let symbol: String
         let headline: String
         let body: String
     }
 
+    /// The tour pages in display order.
     private let pages: [Page] = [
         Page(symbol: "music.note",
              headline: "The iPod, rebuilt",
@@ -34,8 +38,11 @@ struct TourScreen: View {
              body: "Spin to scroll, flick for speed. Hold center for options; MENU goes back."),
     ]
 
+    /// Index into `pages` of the page currently shown.
     @State private var page = 0
 
+    /// Renders the current page (icon, headline, body) with page dots and a
+    /// context-sensitive hint line; a drag gesture swipes between pages.
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
@@ -92,6 +99,7 @@ struct TourScreen: View {
 
     // MARK: Navigation
 
+    /// Advances one page with a tick pulse; on the last page, finishes the tour.
     private func next() {
         if page < pages.count - 1 {
             withAnimation(.easeOut(duration: 0.2)) { page += 1 }
@@ -101,18 +109,24 @@ struct TourScreen: View {
         }
     }
 
+    /// Goes back one page; a no-op on the first page.
     private func back() {
         guard page > 0 else { return }
         withAnimation(.easeOut(duration: 0.2)) { page -= 1 }
         WheelFeedback.tick(dir: -1)
     }
 
+    /// Confirms the tour with a button haptic and tells the model it's done.
     private func finish() {
         WheelHaptics.shared.ensureRunning()
         WheelHaptics.shared.buttonPress(strength: 0.8)
         model.completeTour()
     }
 
+    /// Wheel input: ticks page forward/back, center advances (finishing on
+    /// the last page), MENU skips the whole tour.
+    ///
+    /// - Parameter event: Control event from the click wheel.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
