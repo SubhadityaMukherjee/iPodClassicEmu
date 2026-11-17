@@ -21,3 +21,6 @@ Package.resolved
 
 # tool scratch state
 .cortexkit/
+
+# MkDocs build output
+/site/

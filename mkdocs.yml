@@ -1,0 +1,80 @@
+site_name: iPodClassic
+site_description: A native iOS iPod Classic emulator — contributor and concept documentation.
+site_url: https://subhadityamukherjee.github.io/iPodClassicEmu/
+repo_url: https://github.com/SubhadityaMukherjee/iPodClassicEmu
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/weather-night, name: Switch to dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/weather-sunny, name: Switch to light mode}
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Home: README.md
+  - Product page: overview.html
+  - Guides:
+      - AGENTS.md — contributor cheat-sheet: AGENTS.md
+      - ARCHITECTURE.md: ARCHITECTURE.md
+      - DESIGN-DECISIONS.md: DESIGN-DECISIONS.md
+      - ADDING-FEATURES.md: ADDING-FEATURES.md
+      - TESTING.md: TESTING.md
+  - Concepts:
+      - Index: concepts/README.md
+      - Swift language:
+          - Optionals: concepts/swift-optionals.md
+          - Closures: concepts/swift-closures.md
+          - Value & reference types: concepts/swift-value-and-reference-types.md
+          - Error handling: concepts/swift-error-handling.md
+          - Async/await & Task: concepts/swift-async-await.md
+          - Actors & isolation: concepts/swift-actors-and-isolation.md
+          - Property wrappers: concepts/swift-property-wrappers.md
+          - Protocols & generics: concepts/swift-protocols-and-generics.md
+      - UI & reactive:
+          - SwiftUI views & state: concepts/swiftui-views-and-state.md
+          - UIKit bridging (UIViewRepresentable): concepts/uiviewrepresentable.md
+          - Combine: concepts/combine.md
+      - System services & persistence:
+          - Foundation essentials: concepts/foundation.md
+          - FileManager & sandbox: concepts/filemanager-and-sandbox.md
+          - UserDefaults: concepts/userdefaults.md
+          - NSCache: concepts/nscache.md
+          - UserNotifications (alarms): concepts/usernotifications.md
+          - Live Activities: concepts/activitykit-live-activities.md
+      - Input & hardware:
+          - Dispatch queues (session queues): concepts/dispatch-queues.md
+          - CoreHaptics: concepts/corehaptics.md
+      - Audio:
+          - AVAudioSession: concepts/avfoundation-audio-session.md
+          - AVAudioPlayer & AVAudioSourceNode: concepts/avfoundation-playback.md
+          - AudioToolbox system sounds: concepts/audiotoolbox.md
+          - MPVolumeView: concepts/mpvolumeview.md
+      - Media & hardware:
+          - MusicKit: concepts/musickit.md
+          - PhotoKit: concepts/photokit.md
+          - AVCapture camera: concepts/avfoundation-camera.md
+          - EventKit: concepts/eventkit.md
+          - Remote commands: concepts/remote-commands.md
+          - App Intents: concepts/app-intents.md
+      - Documents & rendering:
+          - EPUB & ZIP: concepts/epub-and-zip.md
+          - WKWebView: concepts/webkit-wkwebview.md
+          - PDFKit: concepts/pdfkit.md
+          - On-device ML: concepts/on-device-ml.md

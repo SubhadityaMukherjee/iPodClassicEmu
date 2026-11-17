@@ -7,10 +7,12 @@ behind the choices.
 
 | Doc | What's in it |
 | --- | --- |
+| [Concepts](concepts/) | Every Swift/iOS concept the codebase relies on, explained once for a newcomer — the `Concept:` links in docstrings point here |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How the app is put together: layers, input flow, navigation, state, audio, on-device models |
 | [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) | The "why" behind the non-obvious choices (polled engines, queue sync by title, ghost-alarm invariant, …) |
 | [ADDING-FEATURES.md](ADDING-FEATURES.md) | Step-by-step recipe for adding a screen/feature, with the gotchas checklist |
 | [TESTING.md](TESTING.md) | Test suites, QA launch-environment hooks, and the device verification workflow |
+| [Product page](overview.html) | The public-facing feature tour |
 
 ## Orientation in one paragraph
 
@@ -20,7 +22,7 @@ tick sounds), an LCD with subtle CRT scanlines, and the classic
 blue-selection-bar menus. Everything runs on-device — music via
 MusicKit/ApplicationMusicPlayer, photos via PhotoKit, camera via
 AVFoundation, voice-memo transcription via a local CoreML Parakeet model,
-and Read Aloud via Breeze TTS 2 on MLX. There is no server.
+and Read Aloud via Supertonic3 CoreML (MLX engines WIP). There is no server.
 
 ## The golden rules
 
