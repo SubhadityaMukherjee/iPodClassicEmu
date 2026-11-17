@@ -14,6 +14,7 @@ final class AudiobookModelTests: XCTestCase {
     /// tell buffers apart.
     private final class MockSynth: AudiobookSynthesizerType {
         private(set) var synthesized: [String] = []
+        var isReady: Bool { true }
         func ensureReady() async throws {}
         func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int) {
             synthesized.append(text)

@@ -296,6 +296,10 @@ enum AudiobookLanguage {
 protocol AudiobookSynthesizerType: AnyObject {
     /// Download + load the pipeline once (idempotent).
     func ensureReady() async throws
+    /// True when the engine is loaded (a cached install reports this
+    /// from its disk probe) — lets callers label "Preparing" instead of
+    /// "Downloading" for warm starts.
+    var isReady: Bool { get }
     func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int)
 }
 
@@ -704,23 +708,24 @@ final class AudiobookModel {
 
     private func synthesize(_ text: String, language: String) async throws -> (samples: [Float], sampleRate: Int) {
         if !pipelineReady {
-            state = .downloading
-            LiveActivityManager.shared.downloadStarted()
-            Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("downloading pipeline")
+            // A cached engine must not show a bogus "Downloading" label
+            // (and a download Live Activity) on every launch — the store
+            // probes disk at init and reports readiness through the
+            // seam. Only a genuinely uncached load is a download, and
+            // the store mirrors THAT to the Live Activity itself.
+            state = synthesis.isReady ? .loading : .downloading
         }
         do {
             try await synthesis.ensureReady()
         } catch {
             Logger(subsystem: "com.ipodclassic.app", category: "tts")
-                .notice("download failed: \(error.localizedDescription, privacy: .public)")
-            LiveActivityManager.shared.downloadFinished(success: false)
-            state = .failed("Download failed")
+                .notice("engine prep failed: \(error.localizedDescription, privacy: .public)")
+            state = .failed(error.localizedDescription.isEmpty ? "Engine failed to load" : error.localizedDescription)
             throw error
         }
         if !pipelineReady {
             pipelineReady = true
-            state = .loading
-            LiveActivityManager.shared.downloadFinished(success: true)
+            if state == .loading || state == .downloading { state = .playing }
         }
         return try await synthesis.synthesize(text, language: language, voiceName: currentVoice)
     }
