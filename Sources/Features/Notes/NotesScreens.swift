@@ -7,8 +7,13 @@ struct NotesListScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
+    /// Current toast message; an empty string means no toast is showing.
     @State private var toast = ""
 
+    /// The menu list, with toast and hold-panel layered over it while
+    /// either is active.
+    ///
+    /// Concept: SwiftUI body → docs/concepts/swiftui-views-and-state.md
     var body: some View {
         ZStack {
             MenuList(
@@ -38,6 +43,11 @@ struct NotesListScreen: View {
         }
     }
 
+    /// Rows shown in the menu list: a fixed "New Note" row, one row per
+    /// note (preview subtitle, friendly date), and — only while the
+    /// trash holds something — a "Trash" row with a count. The sentinel
+    /// ids "__new__"/"__trash__" mark the action rows apart from note
+    /// filenames, which are themselves row ids.
     private var listItems: [MenuItem] {
         var items = [MenuItem(id: "__new__", title: "New Note", symbol: "plus.square", showsChevron: false)]
         items.append(contentsOf: model.notes.notes.map { note in
@@ -49,6 +59,15 @@ struct NotesListScreen: View {
         return items
     }
 
+    /// Wheel/button routing for the notes list.
+    ///
+    /// Two modes. While the hold panel is open, ticks move its three-row
+    /// selection and center runs the highlighted action; MENU closes it.
+    /// Otherwise: ticks move the list selection, center activates the
+    /// selected row (create + open the editor, open the Trash, or open
+    /// the note), hold-center opens Note Options for real notes, and
+    /// MENU pops the screen. Panel deletes skip a confirm step — they
+    /// land in the recoverable Trash, and the toast says so.
     private func handle(_ event: ControlEvent) {
         if holdItem != nil {
             switch event {
@@ -102,6 +121,7 @@ struct NotesListScreen: View {
         }
     }
 
+    /// Shows `text` in a toast capsule, fading back out ~1.4 s later.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
@@ -109,10 +129,15 @@ struct NotesListScreen: View {
         }
     }
 
+    /// Filename of the note whose Note Options panel is open; nil = closed.
     @State private var holdItem: String?
+    /// Selected row (0–2) inside the open hold panel.
     @State private var holdSelection = 0
+    /// When non-nil, the share sheet presents this text (note name + body).
     @State private var shareText: String?
 
+    /// Note Options panel: Share / Delete / Cancel. Wheel selection and
+    /// touch taps drive the same rows, so the panel works both ways.
     private var holdPanel: some View {
         ModalPanel(title: "Note Options", onClose: { holdItem = nil }) {
             VStack(spacing: 0) {
@@ -150,30 +175,61 @@ struct NotesListScreen: View {
 struct NoteEditorScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// The note this editor edits: filename without extension.
     let fileName: String
 
+    /// The note's text, bound to the TextEditor; changes after the
+    /// initial load trigger the debounced save.
+    ///
+    /// Concept: @State → docs/concepts/swift-property-wrappers.md
     @State private var text = ""
+    /// Set once the onAppear load has populated `text`; the autosave
+    /// `onChange` ignores changes until then, so the initial load (and
+    /// QA seeding) can't be mistaken for user edits.
     @State private var loaded = false
+    /// Cached backing UITextView of the SwiftUI TextEditor. SwiftUI may
+    /// recreate that view (keyboard/background transitions), leaving
+    /// this reference detached — always go through `resolveTextView()`,
+    /// which re-validates it.
     @State private var textView: UITextView?
+    /// View planted inside the editor's hierarchy by `TextViewProbe`;
+    /// the re-walk root when the cached text view has gone stale.
     @State private var probeAnchor: UIView?
+    /// Whether the keyboard is up. Set from UIKit's will-show/will-hide
+    /// notifications and cleared directly when a hold panel takes over
+    /// the screen; gates the Done capsule and center-tap dismiss.
+    ///
+    /// Concept: NotificationCenter publisher → docs/concepts/combine.md
     @State private var keyboardVisible = false
+    /// Last wheel-driven scroll offset; only the NOTES_QA readout shows
+    /// it, letting UI tests assert the wheel really scrolled.
     @State private var lastScrollY: CGFloat = 0
     /// Hold-center options panel (font size / share).
     @State private var optionsOpen = false
+    /// Selected row (0–2) in the Note Options panel.
     @State private var optionsSelection = 0
     /// Live font-size adjust mode inside the panel: the wheel edits the
     /// size with an instant preview; center saves, MENU cancels.
     @State private var sizingMode = false
+    /// The wheel-edited size while sizing mode is on (clamped 11–24),
+    /// previewed live in the editor.
     @State private var sizingDraft = 14
+    /// Size captured when sizing mode opened; MENU (cancel) restores it.
     @State private var sizingBefore = 14
 
+    /// Points the note scrolls per wheel tick (roughly one text line).
     private let scrollStep: CGFloat = 26
 
+    /// True only for the QA note under NOTES_QA=1 — gates the seeded
+    /// 60-line text and the y= readout that UI tests assert against.
     private var qaEnabled: Bool {
         fileName == QASeed.qaNoteName
             && ProcessInfo.processInfo.environment["NOTES_QA"] == "1"
     }
 
+    /// The text editor on the paper LCD background, with the
+    /// keyboard-gated Done capsule, QA readout, options panel and share
+    /// sheet layered on top.
     var body: some View {
         TextEditor(text: $text)
             .font(Theme.font(CGFloat(sizingMode ? sizingDraft : settings.noteFontSize)))
@@ -261,6 +317,8 @@ struct NoteEditorScreen: View {
             }
     }
 
+    /// Bottom capsule shown while the keyboard is up; tapping it ends
+    /// editing, same as pressing center on the wheel.
     private var doneButton: some View {
         Button {
             resolveTextView()?.resignFirstResponder()
@@ -280,6 +338,23 @@ struct NoteEditorScreen: View {
         .padding(.bottom, 8)
     }
 
+    /// Wheel/button routing for the editor, innermost mode first:
+    ///
+    /// - Font Size adjust: the wheel nudges the size live (11–24),
+    ///   center commits it to `settings.noteFontSize` (persisted in
+    ///   UserDefaults as notes.fontSize), MENU reverts to the captured
+    ///   pre-adjust value.
+    /// - Note Options panel: the wheel picks Font Size / Share / Cancel,
+    ///   center activates the row, MENU closes.
+    /// - Plain editor: the wheel scrolls the text (`scrollBy`), center
+    ///   or Done drops the keyboard, MENU writes and pops (menuHold
+    ///   pops to root), hold-center dismisses the keyboard and opens
+    ///   the options panel.
+    ///
+    /// The wheel never edits text — typing is touch-only, keeping the
+    /// click wheel a navigation control like a real iPod.
+    ///
+    /// Concept: UserDefaults → docs/concepts/userdefaults.md
     private func handle(_ event: ControlEvent) {
         // Typing happens by touch; the wheel scrolls, center/Done dismiss
         // the keyboard, MENU steps out of the editor. Hold center opens
@@ -347,11 +422,16 @@ struct NoteEditorScreen: View {
         }
     }
 
+    /// Exits sizing mode and closes the panel — the single exit path so
+    /// every close (center, MENU, the X) also leaves Font Size adjusting.
     private func closeOptions() {
         sizingMode = false
         withAnimation(.easeOut(duration: 0.18)) { optionsOpen = false }
     }
 
+    /// The hold-center panel, retitled "Font Size — Wheel to Adjust"
+    /// while sizing mode is live; the Font Size row's detail tracks the
+    /// draft value, so the panel itself doubles as the size preview.
     private var editorOptionsPanel: some View {
         ModalPanel(title: sizingMode ? "Font Size — Wheel to Adjust" : "Note Options",
                    onClose: {
@@ -410,6 +490,7 @@ struct NoteEditorScreen: View {
         lastScrollY = target
     }
 
+    /// When non-nil, the share sheet presents this text (name + body).
     @State private var shareText: String?
 }
 
@@ -429,8 +510,22 @@ func clampedScrollOffset(current: CGFloat, delta: CGFloat, contentHeight: CGFloa
 /// transitions or backgrounding, which silently kills wheel scrolling).
 /// Shared by the notes editor and the transcript screen.
 struct TextViewProbe: UIViewRepresentable {
+    /// Called one run-loop tick after the anchor view is mounted, with
+    /// the view to keep as a re-walk root.
+    ///
+    /// Concept: closure → docs/concepts/swift-closures.md
     let onAnchor: (UIView) -> Void
 
+    /// Creates a plain, non-interactive view so the probe never steals
+    /// touches from the text editor it sits inside.
+    ///
+    /// The callback is deferred via DispatchQueue.main.async because
+    /// makeUIView runs before SwiftUI has mounted the returned view into
+    /// the hierarchy — by the next tick the view has a superview, which
+    /// `resolveTextView()`'s upward walk depends on.
+    ///
+    /// Concept: UIViewRepresentable lifecycle → docs/concepts/uiviewrepresentable.md
+    /// Concept: DispatchQueue.main.async → docs/concepts/dispatch-queues.md
     func makeUIView(context: Context) -> UIView {
         let v = UIView()
         v.isUserInteractionEnabled = false
@@ -440,6 +535,8 @@ struct TextViewProbe: UIViewRepresentable {
         return v
     }
 
+    /// No-op: the probe is a one-shot anchor, not a live two-way bridge,
+    /// so there is no SwiftUI state to push into the UIView.
     func updateUIView(_ v: UIView, context: Context) {}
 }
 
@@ -449,9 +546,13 @@ struct NoteTrashScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
+    /// Trashed note (filename) whose Delete Forever panel is open; nil = closed.
     @State private var holdItem: String?
+    /// Panel row: 0 = Delete Forever, 1 = Cancel.
     @State private var holdSelection = 0
 
+    /// The trashed-notes list, with the Delete Forever panel layered
+    /// over it while active.
     var body: some View {
         ZStack {
             MenuList(
@@ -469,12 +570,15 @@ struct NoteTrashScreen: View {
         .onAppear { model.notes.loadTrash() }
     }
 
+    /// Rows for trashed notes — same shape as the notes list, but with
+    /// no action rows; center restores directly.
     private var trashItems: [MenuItem] {
         model.notes.trash.map { note in
             MenuItem(id: note.id, title: note.name, subtitle: note.preview.isEmpty ? nil : note.preview, detail: TimeFormat.friendly(note.date), showsChevron: false)
         }
     }
 
+    /// Delete Forever / Cancel panel for the held note.
     private var panel: some View {
         ModalPanel(title: "Trashed Note", onClose: { holdItem = nil }) {
             VStack(spacing: 0) {
@@ -495,6 +599,12 @@ struct NoteTrashScreen: View {
         }
     }
 
+    /// Wheel/button routing: center restores the selected note (with a
+    /// light confirm haptic), hold-center opens Delete Forever. The
+    /// empty-trash guards are load-bearing — this screen stays up after
+    /// the last note is restored, and subscripting an empty array would
+    /// trap. While the panel is open, any tick simply toggles between
+    /// its two rows.
     private func handle(_ event: ControlEvent) {
         if holdItem != nil {
             switch event {
