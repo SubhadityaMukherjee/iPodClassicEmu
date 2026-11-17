@@ -441,6 +441,8 @@ final class SupertonicSynthesis {
 
 /// Adapter to the audiobook seam so tests keep their mock.
 extension ReadAloudVoiceStore: AudiobookSynthesizerType {
+    var isReady: Bool { state == .ready }
+
     func ensureReady() async throws {
         try await prepare()
     }
