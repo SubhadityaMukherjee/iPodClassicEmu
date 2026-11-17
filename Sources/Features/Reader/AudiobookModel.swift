@@ -539,6 +539,11 @@ final class AudiobookModel {
                     let seconds = Double(buffer.frameLength) / buffer.format.sampleRate
                     segmentNote = "playing \(Int(seconds))s"
                     writeStatus()
+                    // A seek flag raised by our own programmatic page turn
+                    // (or a stale delayed readerMoved from the wheel path)
+                    // must not cut the page we are ABOUT to play — clear
+                    // it on the same tick the audio starts.
+                    engine.seekRequested = false
                     guard engine.start(buffer) else {
                         // Playback failed to start — stop with the reason
                         // visible (the engine note stays in the status).
@@ -564,7 +569,7 @@ final class AudiobookModel {
                             rendered = max(rendered, engine.playbackSeconds)
                         } else {
                             idle += 1
-                            if idle >= 4 { break } // ~2 s past the end = page done
+                            if idle >= 2 { break } // ~1 s past the end = page done
                         }
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
@@ -612,15 +617,62 @@ final class AudiobookModel {
         if state == .playing || state == .paused { state = .idle }
     }
 
-    /// Begin synthesizing the next segment in the background so the gap
-    /// between pages stays small.
+    /// Begin synthesizing the next pages in the background so the gap
+    /// between pages stays small. Two ahead: synthesis is slower than
+    /// playback (RTF ~0.3), and the second-ahead prefetch covers a
+    /// short page.
     private func prefetch(_ segments: [AudiobookSegment], at index: Int, language: String) {
         guard segments.indices.contains(index) else { return }
-        let text = segments[index].text
-        guard cache[text] == nil else { return }
         Task { [weak self] in
             _ = try? await self?.bufferFor(segments[index], language: language)
         }
+        if segments.indices.contains(index + 1) {
+            let text = segments[index + 1].text
+            guard cache[text] == nil else { return }
+            Task { [weak self] in
+                _ = try? await self?.bufferFor(segments[index + 1], language: language)
+            }
+        }
+    }
+
+    /// Long pages are synthesized in sentence chunks and concatenated:
+    /// one giant synthesis call can truncate its tail (whole sentences
+    /// silently dropped at the engine's practical output length), and
+    /// smaller chunks also fill the pipeline faster between pages.
+    static func sentenceChunks(_ text: String, limit: Int = 380) -> [String] {
+        guard text.count > limit else { return [text] }
+        // Boundary = whitespace run directly after a sentence terminator
+        // (optionally past a closing quote/paren/bracket).
+        let pattern = try? NSRegularExpression(pattern: "(?<=[.!?…])[\"')\\]]?\\s+")
+        var boundaries: [String.Index] = []
+        if let pattern {
+            for m in pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                if let r = Range(m.range, in: text) { boundaries.append(r.lowerBound) }
+            }
+        }
+        // Pieces split AT boundaries: each sentence keeps its terminator
+        // and hands the separator whitespace to the next piece, so the
+        // concatenation is exactly the original text.
+        var pieces: [String] = []
+        var start = text.startIndex
+        for b in boundaries {
+            pieces.append(String(text[start..<b]))
+            start = b
+        }
+        pieces.append(String(text[start...]))
+
+        var chunks: [String] = []
+        var current = ""
+        for piece in pieces {
+            if !current.isEmpty, current.count + piece.count > limit {
+                chunks.append(current)
+                current = piece
+            } else {
+                current += piece
+            }
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks.isEmpty ? [text] : chunks
     }
 
     private func bufferFor(_ segment: AudiobookSegment, language: String) async throws -> AVAudioPCMBuffer {
@@ -630,9 +682,22 @@ final class AudiobookModel {
         // locked screen can't freeze generation mid-flight.
         synthKeepAlive.start()
         defer { synthKeepAlive.stop() }
-        let (samples, sampleRate) = try await synthesize(segment.text, language: language)
+        let chunks = Self.sentenceChunks(segment.text)
+        var samples: [Float] = []
+        var sampleRate = 44_100
+        for chunk in chunks {
+            let (chunkSamples, rate) = try await synthesize(chunk, language: language)
+            sampleRate = rate
+            samples.append(contentsOf: chunkSamples)
+        }
+        guard !samples.isEmpty else {
+            throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "no audio generated"])
+        }
         let buffer = Self.makeBuffer(samples, sampleRate: sampleRate)
-        cache.removeAll()
+        // Multi-entry (4): the playing page's buffer must survive the
+        // next pages' prefetches — removeAll() evicted the just-played
+        // page while its successor was still synthesizing.
+        while cache.count >= 4 { cache.removeValue(forKey: cache.keys.first ?? "") }
         cache[segment.text] = buffer
         return buffer
     }
