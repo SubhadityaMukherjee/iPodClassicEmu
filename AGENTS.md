@@ -45,9 +45,9 @@ There is no linter; keep style consistent with surrounding code. Swift 5, iOS 18
 ## Documentation
 
 - Every declaration in `Sources/` carries a `///` Quick-Help docstring: summary line, why-this-API rationale where non-obvious, `- Parameter`/`- Returns`/`- Throws` markup, and a `Concept: <Name> → docs/concepts/<page>.md` cross-link when a framework/language concept is involved. Keep new code documented to the same bar.
-- `docs/concepts/` explains each concept **once** (audience: knows programming, new to Swift/iOS) — mechanism, why this project chose it, where it lives, real gotchas. `docs/concepts/README.md` is the index; when you add a page, add it there. Reference pages from docstrings instead of re-explaining inline.
+- `docs/concepts/` explains each concept **once** (audience: knows programming, new to Swift/iOS) — mechanism, why this project chose it, where it lives, real gotchas. `docs/concepts/README.md` is the index; when you add a page, add it there AND to the `nav:` in `mkdocs.yml`. Reference pages from docstrings instead of re-explaining inline.
+- The docs site is MkDocs Material (`mkdocs.yml`): sidebar nav + search. Build locally with `./scripts/build_docs.sh` (uvx — no install needed; strict build fails on nav/link errors). GitHub Pages deploys via `.github/workflows/docs.yml` on pushes touching `docs/**`, `mkdocs.yml`, `AGENTS.md`, or `README.md`; `docs/README.md` is the site home, `docs/overview.html` the product page, root `AGENTS.md` is copied in at build time.
 - A `///` block must sit DIRECTLY above its declaration (below any plain `//` block) or Quick Help won't attach it.
-- `docs/index.html` is the GitHub Pages site — update it when user-facing features change (it links the concept docs and project guides).
 
 ## Tests
 
