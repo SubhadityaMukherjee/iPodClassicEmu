@@ -12,11 +12,14 @@ struct ClocksMenuScreen: View {
         MenuItem(id: "stopwatch", title: "Stopwatch"),
     ]
 
+    /// The three-row Clocks menu list.
     var body: some View {
         MenuList(items: rows, selection: selection)
             .onWheel { handle($0) }
     }
 
+    /// Wheel routing: ticks move the selection, center pushes the matching
+    /// clock screen, MENU pops back to the parent menu.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -42,11 +45,20 @@ struct AlarmScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var alarm: AlarmStore
 
+    /// The wheel's editable focus, in visit order: hour → minute → AM/PM →
+    /// repeat days → the on/off toggle.
     enum Segment: Int, CaseIterable { case hour, minute, ampm, repeatDays, toggle }
 
+    /// Which segment the wheel currently edits; center advances it.
+    ///
+    /// Concept: SwiftUI @State → docs/concepts/swiftui-views-and-state.md
     @State private var segment: Segment = .hour
+    /// Highlighted weekday letter while editing Repeat Days.
     @State private var dayCursor = 0  // highlighted letter within Repeat Days
 
+    /// The setter page: segment caption, analog face at the set time,
+    /// editable time/day rows, toggle, and red health warnings (armed
+    /// but unscheduled, or notifications denied).
     var body: some View {
         VStack(spacing: 6) {
             Text(segmentTitle)
@@ -122,6 +134,8 @@ struct AlarmScreen: View {
         }
     }
 
+    /// Caption naming the active segment; the days segment shows the
+    /// live repeat summary instead.
     private var segmentTitle: String {
         switch segment {
         case .hour: return "Set Hour"
@@ -132,6 +146,7 @@ struct AlarmScreen: View {
         }
     }
 
+    /// HH : MM AM-PM row; the active segment gets the selection fill.
     private var timeRow: some View {
         HStack(spacing: 4) {
             timeSegment(text: String(format: "%02d", alarm.hour), selected: segment == .hour, width: 34)
@@ -141,6 +156,8 @@ struct AlarmScreen: View {
         }
     }
 
+    /// One boxed time field — white on the blue selection gradient while
+    /// its segment is active.
     private func timeSegment(text: String, selected: Bool, width: CGFloat, fontSize: CGFloat = 20) -> some View {
         Text(text)
             .font(.system(size: fontSize, weight: .semibold, design: .default))
@@ -153,6 +170,8 @@ struct AlarmScreen: View {
             )
     }
 
+    /// The Su–Sa letters. Selected days render as ink on a chip; the
+    /// wheel-focused letter gets the selection fill.
     private var repeatRow: some View {
         HStack(spacing: 3) {
             ForEach(0..<7, id: \.self) { i in
@@ -171,6 +190,7 @@ struct AlarmScreen: View {
         }
     }
 
+    /// The On/Off pill, highlighted while it is the active segment.
     private var alarmToggle: some View {
         HStack(spacing: 5) {
             Image(systemName: "alarm.clock")
@@ -189,6 +209,9 @@ struct AlarmScreen: View {
 
     // MARK: Input
 
+    /// Wheel routing for the setter. Center behaves per segment: on the
+    /// toggle it arms/disarms, on the days row it flips the focused day,
+    /// otherwise it advances to the next segment (wrapping). MENU pops.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -210,6 +233,11 @@ struct AlarmScreen: View {
         }
     }
 
+    /// Applies a wheel delta to the active segment. Numbers wrap (1–12,
+    /// 0–59); AM/PM and the toggle flip on any non-zero delta; the day
+    /// cursor walks 0…6 and stepping past either edge hands the wheel to
+    /// the neighbouring segment — the whole setter reads as one
+    /// continuous strip, like the original iPod's column flow.
     private func adjust(by delta: Int) {
         switch segment {
         case .hour:
@@ -236,6 +264,9 @@ struct AlarmScreen: View {
         WheelFeedback.tick(dir: delta)
     }
 
+    /// Wraps `v` into lo…hi (inclusive) so wheel spins cycle instead of
+    /// clamping. The `range * 4` headroom keeps negative inputs correct
+    /// in a single modulo pass.
     private func wrap(_ v: Int, _ lo: Int, _ hi: Int) -> Int {
         let range = hi - lo + 1
         return lo + ((v - lo + range * 4) % range)
@@ -247,18 +278,28 @@ struct TimerScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
 
+    /// Focus rows for the timer: Start/Pause, Reset, Set Duration.
     enum Segment: Int, CaseIterable { case startStop, reset, setDuration }
+    /// Which h/m/s field the wheel edits in duration-editing mode.
     enum DurationSegment: Int, CaseIterable { case hour, minute, second }
 
+    /// Highlighted action row (Start/Pause, Reset, Set Duration).
     @State private var segment: Segment = .startStop
+    /// Active h/m/s field while editing the duration.
     @State private var durationSegment: DurationSegment = .minute
+    /// True while the h/m/s fields are being edited (center-press mode).
     @State private var editingDuration = false
+    /// Whether the quick-presets hold panel is up.
     @State private var presetsOpen = false
+    /// Highlighted row in the presets panel.
     @State private var presetSelection = 0
 
     /// Quick-start durations (minutes) — hold center on the timer screen.
     private let presets = [5, 10, 15, 30, 60]
 
+    /// Blue countdown dial, digital readout and action rows; the presets
+    /// panel overlays everything while open. Records the Recents
+    /// "last clock" entry on appear.
     var body: some View {
         ZStack {
             VStack(spacing: 6) {
@@ -290,6 +331,7 @@ struct TimerScreen: View {
         }
     }
 
+    /// The hold-center quick-start panel: preset minute counts + Cancel.
     private var presetsPanel: some View {
         ModalPanel(title: "Presets", onClose: { closePresets() }) {
             MenuList(
@@ -303,6 +345,7 @@ struct TimerScreen: View {
         }
     }
 
+    /// Dismisses the presets panel with the standard panel fade.
     private func closePresets() {
         withAnimation(.easeIn(duration: 0.15)) { presetsOpen = false }
     }
@@ -334,6 +377,7 @@ struct TimerScreen: View {
         return true
     }
 
+    /// Solid blue dial carrying the tick/hand overlay.
     private var dial: some View {
         ZStack {
             Circle()
@@ -344,11 +388,15 @@ struct TimerScreen: View {
         }
     }
 
+    /// Remaining/total for the sweep hand; 0 when no total is set.
     private var dialFraction: Double {
         guard model.timer.total > 0 else { return 0 }
         return model.timer.remaining / model.timer.total
     }
 
+    /// Two modes: duration-editing shows the h/m/s segments; otherwise
+    /// the duration readout sits above the Start/Pause + Reset pair,
+    /// with Set Duration as its own row.
     private var controls: some View {
         VStack(spacing: 4) {
             // Duration sits above the buttons so it's always in view.
@@ -390,6 +438,9 @@ struct TimerScreen: View {
 
     private var running: Bool { model.timer.isRunning }
 
+    /// One half of the paired Start/Reset row; the selection gradient is
+    /// masked to round only the OUTER corners so the pair reads as a
+    /// single split bar.
     private func controlRow(text: String, selected: Bool, leading: Bool) -> some View {
         Text(text)
             .font(Theme.font(16, .semibold))
@@ -408,6 +459,7 @@ struct TimerScreen: View {
             )
     }
 
+    /// One boxed h/m/s value, highlighted when its field is active.
     private func durSegment(label: String, value: Int, selected: Bool) -> some View {
         HStack(spacing: 2) {
             Text(String(format: "%02d", value))
@@ -424,6 +476,10 @@ struct TimerScreen: View {
 
     // MARK: Input
 
+    /// Wheel routing. The presets panel consumes events first when open;
+    /// otherwise ticks move the segment, center activates, hold center
+    /// opens the presets (idle only), and MENU leaves duration-editing
+    /// before it ever pops the screen.
     private func handle(_ event: ControlEvent) {
         if handlePresets(event) { return }
         switch event {
@@ -449,6 +505,11 @@ struct TimerScreen: View {
         }
     }
 
+    /// Wheel ticks. In edit mode they adjust the active h/m/s field
+    /// (wrapping); otherwise ticks ALWAYS navigate rows — hijacking
+    /// ticks as minute-adjustments made it impossible to scroll back
+    /// out of the Set Duration row, which is exactly what the
+    /// center-press editing mode exists for.
     private func tickAdjust(by d: Int) {
         if editingDuration {
             switch durationSegment {
@@ -466,11 +527,20 @@ struct TimerScreen: View {
         }
     }
 
+    /// Bridges `segment` to a plain inout Int so the wrap-around list
+    /// helper can drive it. The setter is `nonmutating` because an
+    /// @State setter mutates SwiftUI-owned storage, not the struct view
+    /// that declares it — Swift requires `nonmutating` for exactly that.
+    ///
+    /// Concept: Swift value & reference types → docs/concepts/swift-value-and-reference-types.md
     private var rawSegmentIndex: Int {
         get { segment.rawValue }
         nonmutating set { segment = Segment(rawValue: newValue) ?? .startStop }
     }
 
+    /// Center press. In edit mode it walks h → m → s and exits editing on
+    /// the last field; otherwise Start/Pause/Resume (tri-state on the
+    /// model), Reset, or entering duration editing.
     private func selectCurrent() {
         WheelHaptics.shared.ensureRunning()
         WheelHaptics.shared.buttonPress(strength: 0.8)
@@ -500,6 +570,8 @@ struct TimerScreen: View {
         }
     }
 
+    /// Wraps `v` into lo…hi (inclusive) so wheel spins cycle (same
+    /// helper as AlarmScreen.wrap).
     private func wrap(_ v: Int, _ lo: Int, _ hi: Int) -> Int {
         let range = hi - lo + 1
         return lo + ((v - lo + range * 4) % range)
@@ -508,8 +580,11 @@ struct TimerScreen: View {
 
 /// Tick marks overlay for the timer dial.
 private struct TimerDialOverlay: View {
+    /// Remaining fraction of the countdown (1 = full, 0 = done).
     let fraction: Double
 
+    /// Twelve tick marks plus a sweep hand that empties clockwise as the
+    /// remaining fraction shrinks.
     var body: some View {
         Canvas { ctx, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -544,10 +619,13 @@ struct StopwatchScreen: View {
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
 
+    /// State-dependent actions: Stop/Lap/Reset while running;
+    /// Resume/Reset when paused with time on the clock; Start when fresh.
     private var rows: [String] {
         model.stopwatch.isRunning ? ["Stop", "Lap", "Reset"] : (model.stopwatch.elapsed > 0 ? ["Resume", "Reset"] : ["Start"])
     }
 
+    /// Big monospaced readout, newest-first lap list, action rows.
     var body: some View {
         VStack(spacing: 4) {
             Text(TimeFormat.stopwatch(model.stopwatch.elapsed))
@@ -577,6 +655,9 @@ struct StopwatchScreen: View {
         .onWheel { handle($0) }
     }
 
+    /// Lap rows, newest first, height-capped so the readout and actions
+    /// stay on screen. Values are cumulative splits (see
+    /// StopwatchModel.lap).
     private var lapList: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 0) {
@@ -597,6 +678,7 @@ struct StopwatchScreen: View {
         .frame(maxHeight: 60)
     }
 
+    /// Wheel routing: ticks move the selection, center activates, MENU pops.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -610,6 +692,7 @@ struct StopwatchScreen: View {
         }
     }
 
+    /// Runs the highlighted action and re-homes the selection.
     private func activateCurrent() {
         let row = rows[min(selection, rows.count - 1)]
         switch row {

@@ -42,8 +42,11 @@ every call site.
 | Page | Concept |
 |---|---|
 | [foundation.md](foundation.md) | Foundation essentials: `Date`, `Calendar`, `String`, `Data`, `FileManager` |
+| [filemanager-and-sandbox.md](filemanager-and-sandbox.md) | The app sandbox, Documents vs Application Support, atomic writes |
+| [on-device-ml.md](on-device-ml.md) | CoreML/ANE, FluidAudio, model downloads — the ASR/TTS story |
 | [userdefaults.md](userdefaults.md) | UserDefaults key-value persistence |
 | [nscache.md](nscache.md) | `NSCache` — memory cache with eviction |
+| [usernotifications.md](usernotifications.md) | Local notifications: alarms that fire when the app is dead |
 | [activitykit-live-activities.md](activitykit-live-activities.md) | Live Activities / Dynamic Island |
 
 ## Device input & feedback
@@ -70,6 +73,14 @@ every call site.
 | [avfoundation-camera.md](avfoundation-camera.md) | AVCaptureSession pipeline, session queue, delegates, torch |
 | [eventkit.md](eventkit.md) | EventKit calendar access & queries |
 | [remote-commands.md](remote-commands.md) | MPRemoteCommandCenter / Now Playing info |
+
+## Documents & rendering (Reader)
+
+| Page | Concept |
+|---|---|
+| [epub-and-zip.md](epub-and-zip.md) | EPUB structure, ZIP extraction, traversal guard |
+| [webkit-wkwebview.md](webkit-wkwebview.md) | WKWebView rendering, JS probing, pagination races |
+| [pdfkit.md](pdfkit.md) | PDFKit pages/outlines/annotations, reflow |
 
 > Pages are added batch-by-batch as documented code reaches them; the list
 > above grows over time. When you add a page, add it to this index.

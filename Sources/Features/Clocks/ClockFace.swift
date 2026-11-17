@@ -3,13 +3,25 @@ import SwiftUI
 /// Analog clock face: numerals, minute ticks, blue hands. Shows either live
 /// time (`date`) or a fixed time (`hour`/`minute`) for the alarm setter.
 struct ClockFace: View {
+    /// Live mode: when non-nil the face renders this instant (second hand
+    /// included); nil switches to fixed-time mode for the alarm setter.
     var date: Date? = nil
     /// Fixed display time (alarm set), 24h.
     var fixedHour24: Int? = nil
+    /// Fixed minutes for the alarm-set time (ignored in live mode).
     var fixedMinute: Int? = nil
+    /// Color of the second hand and center dot (matches the host page's
+    /// accent so the clock blends into each screen).
     var accent: Color = Color(red: 0.22, green: 0.42, blue: 0.85)
+    /// Whether the 1–12 numerals are drawn (the minute ticks always are).
     var showNumerals = true
 
+    /// Draws the whole face in one Canvas pass: rim, 60 minute ticks,
+    /// numerals, hands, center dot. There is no internal clock — in live
+    /// mode the parent's re-render (AppModel's clockTick heartbeat)
+    /// supplies fresh Dates, and fixed mode needs no ticking at all.
+    ///
+    /// Concept: SwiftUI views & state → docs/concepts/swiftui-views-and-state.md
     var body: some View {
         Canvas { ctx, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -60,6 +72,8 @@ struct ClockFace: View {
                 }
             }
 
+            /// Draws one hand: a rounded stroke from the center at
+            /// `angleDegrees` (0 = 12 o'clock, clockwise).
             func hand(angleDegrees: Double, length: CGFloat, width: CGFloat, color: Color) {
                 let rad = (angleDegrees - 90) / 180 * .pi
                 var p = Path()
