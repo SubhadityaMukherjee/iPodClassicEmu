@@ -4,7 +4,7 @@ import UIKit
 /// App Shortcut so the Action Button (or Spotlight/Shortcuts) can jump
 /// straight into the camera, like the stock Camera shortcut.
 ///
-/// Concept: AppIntents
+/// Concept: AppIntents → docs/concepts/app-intents.md
 struct OpenCameraIntent: AppIntent {
     /// Short user-visible name in Spotlight and the Shortcuts list.
     static let title: LocalizedStringResource = "Open Camera"
@@ -29,7 +29,7 @@ struct OpenCameraIntent: AppIntent {
 /// add-article actions appear in Spotlight, the Action Button, and Siri
 /// without the user building anything in Shortcuts.
 ///
-/// Concept: AppIntents
+/// Concept: AppIntents → docs/concepts/app-intents.md
 struct iPodClassicShortcuts: AppShortcutsProvider {
     /// The app's shortcut list (camera, transcribe memo, get transcript,
     /// add article) with their spoken/Spotlight phrases.

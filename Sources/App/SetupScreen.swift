@@ -420,7 +420,7 @@ struct SetupScreen: View {
     ///
     /// - Returns: Whether music access is authorized.
     ///
-    /// Concept: MusicKit
+    /// Concept: MusicKit → docs/concepts/musickit.md
     private func requestMusic() async -> Bool {
         if MusicAuthorization.currentStatus == .authorized { return true }
         let status = await MusicAuthorization.request()
@@ -432,7 +432,7 @@ struct SetupScreen: View {
     ///
     /// - Returns: Whether photo access is authorized or limited.
     ///
-    /// Concept: Photos
+    /// Concept: Photos → docs/concepts/photokit.md
     private func requestPhotos() async -> Bool {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         if status == .authorized || status == .limited { return true }
@@ -469,7 +469,7 @@ struct SetupScreen: View {
     ///
     /// - Returns: Whether notifications may be shown.
     ///
-    /// Concept: UserNotifications
+    /// Concept: UserNotifications → docs/concepts/usernotifications.md
     private func requestNotifications() async -> Bool {
         let center = UNUserNotificationCenter.current()
         let current = await center.notificationSettings()

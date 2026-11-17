@@ -4,7 +4,7 @@ import Foundation
 /// Voice memos addressable from Shortcuts: transcribe on device with
 /// Parakeet, or read back a saved transcript.
 ///
-/// Concept: AppIntents
+/// Concept: AppIntents → docs/concepts/app-intents.md
 struct RecordingEntity: AppEntity {
     /// Type name Shortcuts shows for this entity ("Voice Memo").
     static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Voice Memo")

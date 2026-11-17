@@ -28,7 +28,7 @@ struct iPodClassicApp: App {
     /// artwork, registers a terminate-time session save, and enables
     /// battery monitoring for the status-bar icon.
     ///
-    /// Concept: AVAudioSession
+    /// Concept: AVAudioSession → docs/concepts/avfoundation-audio-session.md
     init() {
         // ApplicationMusicPlayer runs in-process and needs an active
         // .playback audio session or playback dies when the app
