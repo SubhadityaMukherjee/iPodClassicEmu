@@ -7,10 +7,16 @@ import UIKit
 struct RecorderScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Highlighted row index; the wheel moves it, center activates it.
+    /// Mutating this @State is what re-renders the row list.
+    /// Concept: SwiftUI views & state → docs/concepts/swiftui-views-and-state.md
     @State private var selection = 0
 
+    /// Shortcut to the app-wide recorder model.
     private var recorder: RecorderModel { model.recorder }
 
+    /// Menu rows adapt to recorder state: idle → Record, recording → Pause,
+    /// paused → Resume (Stop & Save and All Recordings are always present).
     private var rows: [String] {
         if recorder.isRecording {
             return recorder.isPaused ? ["Resume", "Stop & Save", "All Recordings"] : ["Pause", "Stop & Save", "All Recordings"]
@@ -18,6 +24,7 @@ struct RecorderScreen: View {
         return ["Record", "All Recordings"]
     }
 
+    /// Recording status readout above the state-dependent control rows.
     var body: some View {
         VStack(spacing: 4) {
             statusArea
@@ -32,6 +39,8 @@ struct RecorderScreen: View {
         }
     }
 
+    /// Red/amber recording dot + label, the monospaced elapsed clock, and
+    /// the paused-in-background hint (mic icon when idle).
     private var statusArea: some View {
         VStack(spacing: 6) {
             if recorder.isRecording {
@@ -61,6 +70,7 @@ struct RecorderScreen: View {
         }
     }
 
+    /// The record-control MenuList; `selection` is shared with `handle(_:)`.
     private var controls: some View {
         MenuList(
             items: rows.map { MenuItem(id: $0, title: $0, showsChevron: false) },
@@ -70,6 +80,8 @@ struct RecorderScreen: View {
         .padding(.top, 8)
     }
 
+    /// Wheel/button router: ticks move the row selection, center activates
+    /// it, and MENU pauses an in-progress recording before popping back.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -84,6 +96,8 @@ struct RecorderScreen: View {
         }
     }
 
+    /// Runs the highlighted row's action (Record / Pause / Resume /
+    /// Stop & Save / All Recordings).
     private func activateCurrent() {
         let row = rows[min(selection, rows.count - 1)]
         switch row {
@@ -110,12 +124,17 @@ struct RecordingsListScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
+    /// Recording awaiting the delete-confirm panel.
     @State private var deleteCandidate: RecordingFile?
+    /// Delete-panel row: 0 = Delete, 1 = Cancel (hold-menu entry preselects
+    /// Cancel so a stray center-press can't destroy a memo).
     @State private var deleteSelection = 0
     /// Recording queued to transcribe once the model finishes downloading.
     @State private var pendingTranscribe: RecordingFile?
+    /// Whether the speech-model download panel is showing.
     @State private var downloadOpen = false
 
+    /// Shortcut to the shared transcription manager.
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
 
     /// Transcript state marker shown next to the duration.
@@ -130,6 +149,8 @@ struct RecordingsListScreen: View {
         }
     }
 
+    /// The recordings MenuList with modal panels layered above it (delete
+    /// confirm, hold options, model download).
     var body: some View {
         ZStack {
             MenuList(
@@ -177,6 +198,7 @@ struct RecordingsListScreen: View {
         }
     }
 
+    /// Two-row Delete/Cancel confirm; wheel ticks toggle between the rows.
     private var deletePanel: some View {
         ModalPanel(title: "Delete Recording", onClose: { deleteCandidate = nil }) {
             VStack(spacing: 0) {
@@ -189,6 +211,9 @@ struct RecordingsListScreen: View {
         }
     }
 
+    /// Input router for the list and its panels. Open panels take
+    /// precedence (download → hold → delete → the list itself); within a
+    /// panel, ticks move its selection, center confirms, MENU dismisses.
     private func handle(_ event: ControlEvent) {
         if downloadOpen {
             switch event {
@@ -270,9 +295,13 @@ struct RecordingsListScreen: View {
         }
     }
 
+    /// Recording whose options (hold) panel is open.
     @State private var holdItem: RecordingFile?
+    /// Highlighted row in the options panel.
     @State private var holdSelection = 0
+    /// Audio file queued for the share sheet (non-nil presents it).
     @State private var shareItem: URL?
+    /// Transcript text queued for the share sheet (non-nil presents it).
     @State private var shareText: String?
 
     /// Hold-menu rows depend on the recording's transcript state:
@@ -299,6 +328,9 @@ struct RecordingsListScreen: View {
         return rows
     }
 
+    /// Runs one options-panel row: transcribe/retry/cancel, view or share
+    /// the transcript, share the audio, or delete (via the confirm panel).
+    /// - Parameter row: the selected row title.
     private func holdAction(_ row: String) {
         guard let file = holdItem else { return }
         switch row {
@@ -338,11 +370,16 @@ struct RecordingsListScreen: View {
         }
     }
 
+    /// Shares the transcript as CLEAN TEXT — the paragraph-formatted string
+    /// goes straight into the share sheet, not a .txt file.
+    /// - Parameter file: the recording whose transcript is shared.
     private func shareTranscript(_ file: RecordingFile) {
         guard let entry = TranscriptStore.entry(for: file.id), !entry.text.isEmpty else { return }
         shareText = TranscriptStore.formatParagraphs(entry.text)
     }
 
+    /// Recording Options panel; rows come from `holdRows`, and taps mirror
+    /// the wheel selection for touch users.
     private var holdPanel: some View {
         ModalPanel(title: "Recording Options", onClose: { holdItem = nil }) {
             VStack(spacing: 0) {
@@ -400,17 +437,25 @@ struct RecordingsListScreen: View {
 struct RecordingDetailScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// Identifies the memo (its file name); set when the route is pushed.
     let fileName: String
 
+    /// Highlighted row index in the action list.
     @State private var selection = 0
+    /// Audio file queued for the share sheet (non-nil presents it).
     @State private var shareItem: URL?
 
+    /// Looks the memo's metadata up fresh each render, so deletions and
+    /// list reloads elsewhere are reflected here immediately.
     private var file: RecordingFile? {
         model.recorder.recordings.first { $0.id == fileName }
     }
 
+    /// Shortcut to the shared transcription manager.
     private var transcription: TranscriptionManager { TranscriptionManager.shared }
 
+    /// Action rows; the transcript row adapts to state: Transcribing… while
+    /// a run is active, View Transcript once text exists, else Transcribe.
     private var rows: [String] {
         var rows = ["Play / Pause", "Rewind 15s"]
         if transcription.transcribing.contains(fileName) {
@@ -425,6 +470,7 @@ struct RecordingDetailScreen: View {
         return rows
     }
 
+    /// Playback header above the action rows, with the download toast overlay.
     var body: some View {
         VStack(spacing: 4) {
             playbackHeader
@@ -448,11 +494,17 @@ struct RecordingDetailScreen: View {
         }
     }
 
+    /// Identifiable URL wrapper — `.sheet(item:)` only presents
+    /// Identifiable values, and a plain URL isn't one.
     private struct ShareTarget: Identifiable {
+        /// The URL to share.
         let url: URL
+        /// Sheet identity (the URL string itself).
         var id: String { url.absoluteString }
     }
 
+    /// Memo title (minus the "Recording " prefix), monospaced playhead,
+    /// and total duration.
     private var playbackHeader: some View {
         VStack(spacing: 5) {
             Text(file?.name.replacingOccurrences(of: "Recording ", with: "") ?? "Recording")
@@ -468,6 +520,7 @@ struct RecordingDetailScreen: View {
         }
     }
 
+    /// The action MenuList bound to `selection`.
     private var rowsList: some View {
         MenuList(
             items: rows.map { MenuItem(id: $0, title: $0, showsChevron: false) },
@@ -475,6 +528,8 @@ struct RecordingDetailScreen: View {
         )
     }
 
+    /// Wheel/button router: ticks move the selection, center activates, and
+    /// MENU stops playback before popping so audio never leaks past the screen.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -489,6 +544,9 @@ struct RecordingDetailScreen: View {
         }
     }
 
+    /// Center-press dispatch. The transcript row reuses one path: view the
+    /// transcript if text exists, transcribe if the engine is ready, else
+    /// show the toast and kick off the model download.
     private func activateCurrent() {
         guard let file else { return }
         switch rows[min(selection, rows.count - 1)] {
@@ -521,6 +579,8 @@ struct RecordingDetailScreen: View {
 
     /// Brief "downloading speech model…" note on the detail screen.
     @State private var showToast = false
+    /// Non-interactive capsule note; `allowsHitTesting(false)` lets wheel
+    /// and touch input pass through while it shows.
     private var toastView: some View {
         VStack {
             Spacer()
@@ -538,12 +598,16 @@ struct RecordingDetailScreen: View {
 
 /// UIActivityViewController wrapper for sharing recording files.
 struct ActivityView: UIViewControllerRepresentable {
+    /// Files, URLs, or text strings to hand to the system share sheet.
     let items: [Any]
 
+    /// Creates the share sheet once, seeded with the fixed `items`.
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
 
+    /// Required update callback, intentionally empty: `items` are fixed at
+    /// creation, so SwiftUI re-renders have nothing to push into the VC.
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
 
@@ -552,14 +616,24 @@ struct ActivityView: UIViewControllerRepresentable {
 struct TranscriptScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
+    /// The recording whose transcript this screen shows.
     let fileName: String
 
+    /// Cached backing UITextView the wheel scrolls; SwiftUI may recreate
+    /// the view (keyboard/background transitions), detaching the cached one.
     @State private var textView: UITextView?
+    /// Anchor planted behind the screen by `TextViewProbe`; the view tree
+    /// is walked from here to re-find a recreated text view.
     @State private var probeAnchor: UIView?
+    /// Transcript text queued for the share sheet (non-nil presents it).
     @State private var shareText: String?
+    /// Whether the Transcript Options hold panel is open.
     @State private var holdOpen = false
+    /// Highlighted row in the options panel (0 = Share).
     @State private var holdSelection = 0
 
+    /// This memo's persisted transcript, read fresh from the sidecar each
+    /// render so progress appears live.
     private var entry: TranscriptEntry? { TranscriptStore.entry(for: fileName) }
 
     /// Formatted for reading: sentences grouped into paragraphs. Re-applied
@@ -568,6 +642,8 @@ struct TranscriptScreen: View {
         TranscriptStore.formatParagraphs(entry?.text ?? "")
     }
 
+    /// Read-only formatted transcript (or the Transcribing…/failed
+    /// placeholder) with the options panel overlay.
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -601,6 +677,8 @@ struct TranscriptScreen: View {
         }
     }
 
+    /// Transcript Options: Share / Cancel (Share preselected, like the
+    /// list hold menus).
     private var holdPanel: some View {
         ModalPanel(title: "Transcript Options", onClose: { closeHold() }) {
             MenuList(items: [
@@ -611,6 +689,7 @@ struct TranscriptScreen: View {
         }
     }
 
+    /// Dismisses the options panel with the standard quick fade.
     private func closeHold() {
         withAnimation(.easeIn(duration: 0.15)) { holdOpen = false }
     }

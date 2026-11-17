@@ -15,9 +15,16 @@ struct TranscriptEntry: Codable, Equatable {
     var date: Date
     var secondsDone: Double   // audio seconds transcribed so far
 
+    /// True only for a transcription that ran to completion; `partial` and
+    /// `failed` entries don't count as done.
     var isDone: Bool { state == "done" }
 }
 
+/// All transcripts in one hidden JSON sidecar next to the recordings
+/// (Documents/Recordings/.transcripts.json). An empty `partial` entry is
+/// saved BEFORE a run and the final entry after it, so a killed app never
+/// loses its place; deleting a recording removes its entry.
+/// Concept: FileManager & sandbox → docs/concepts/filemanager-and-sandbox.md
 enum TranscriptStore {
     /// Hidden from the Files app by the leading dot.
     static var url: URL {
@@ -36,12 +43,18 @@ enum TranscriptStore {
         }
     }
 
+    /// Reads and decodes the whole sidecar; a missing or corrupt file means
+    /// "no transcripts yet" rather than an error (fresh installs, wiped sims).
+    /// - Returns: every persisted entry.
     static func loadAll() -> [TranscriptEntry] {
         guard let data = try? Data(contentsOf: url),
               let entries = try? JSONDecoder().decode([TranscriptEntry].self, from: data) else { return [] }
         return entries
     }
 
+    /// Finds one recording's saved transcript.
+    /// - Parameter file: recording file name (the sidecar key, ….m4a).
+    /// - Returns: the entry, or nil if this recording was never transcribed.
     static func entry(for file: String) -> TranscriptEntry? {
         loadAll().first { $0.file == file }
     }
@@ -60,6 +73,13 @@ enum TranscriptStore {
     /// single-paragraph transcripts format too.
     static let paragraphSentences = 5
 
+    /// Formats a raw transcript for reading: ICU sentence detection groups
+    /// sentences into `paragraphSentences`-per-line paragraphs. Existing
+    /// paragraph breaks and already-grouped lines survive, making this
+    /// IDEMPOTENT — display and share re-apply it, so transcripts saved
+    /// before formatting existed still render formatted.
+    /// - Parameter text: raw or previously formatted transcript text.
+    /// - Returns: the paragraph-formatted text (input unchanged if empty).
     static func formatParagraphs(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return text }
@@ -117,6 +137,9 @@ enum TranscriptStore {
         }
     }
 
+    /// Drops one recording's entry so deleted memos leave no orphan
+    /// transcripts behind.
+    /// - Parameter file: recording file name whose entry is removed.
     static func remove(for file: String) {
         ensureDirectory()
         var all = loadAll()
@@ -128,16 +151,27 @@ enum TranscriptStore {
 }
 
 /// Parakeet speech-to-text for voice memos via the FluidAudio CoreML
-/// runtime (parakeet-tdt-0.6b-v3, 25 European languages, runs on the
-/// Apple Neural Engine). The SDK downloads the model from HuggingFace on
+/// runtime (Parakeet ULTRA, 25 European languages, runs on the Apple
+/// Neural Engine). The SDK downloads the model from HuggingFace on
 /// first use; transcription is batch but the SDK chunks long audio
 /// internally, and the transcript sidecar saves as it goes so a killed
 /// app never loses everything.
+///
+/// Model history: the earlier sherpa-onnx paths were REMOVED — the 0.6b
+/// ORT build dequantizes to ~2.4 GB and jetsams on device, and the
+/// v3-coreml model mangles Dutch on iOS; Ultra decodes it correctly
+/// (a one-time sweep deletes stale v3 cache dirs).
+/// Concept: on-device ML → docs/concepts/on-device-ml.md
 @Observable
 final class TranscriptionManager {
+    /// Process-wide instance: the model download and the loaded engine are
+    /// far too expensive to duplicate per caller.
     static let shared = TranscriptionManager()
+    /// Singleton — use `shared`.
     private init() {}
 
+    /// Lifecycle of the on-device ASR model: not started, downloading
+    /// (progress nil = indeterminate), ready, or failed with a reason.
     enum DownloadState: Equatable {
         case notStarted
         case downloading(file: String, progress: Double?) // nil = indeterminate
@@ -145,12 +179,15 @@ final class TranscriptionManager {
         case failed(String)
     }
 
+    /// Published model state, seeded from a DISK PROBE rather than
+    /// `.notStarted` — a cached model must never show "Downloading" (a warm
+    /// load reads from disk instantly and stays silent).
+    /// Concept: actors & isolation → docs/concepts/swift-actors-and-isolation.md
     @MainActor private(set) var downloadState: DownloadState = TranscriptionManager.hasCachedModels() ? .ready : .notStarted
 
-    /// True when the Parakeet Ultra model is fully cached on disk — the
-    /// UI must not show "Downloading" for a load that reads from cache.
-    /// True when the ASR model cache already exists on disk (used to skip
-    /// the "download voice model?" step in first-run setup).
+    /// True when the Parakeet Ultra model is fully cached on disk —
+    /// seeds `downloadState` so a cached load never shows "Downloading",
+    /// and lets first-run setup skip its download step.
     nonisolated static func hasCachedModels() -> Bool {
         AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .ultra), version: .ultra)
     }
@@ -173,6 +210,8 @@ final class TranscriptionManager {
     /// Recording file names currently transcribing.
     @MainActor private(set) var transcribing: Set<String> = []
 
+    /// The loaded ASR engine, kept once loaded so later runs are warm
+    /// starts (no re-download, no re-compile for the ANE).
     private var asrManager: AsrManager?
 
     /// Loads (downloading first if needed) the Parakeet Ultra CoreML
@@ -223,12 +262,19 @@ final class TranscriptionManager {
         }
     }
 
+    /// Lock-protected cancellation flag shared between the main actor
+    /// (`cancel(file:)`) and the detached transcription task, which polls
+    /// it. `@unchecked Sendable` is sound here: every field access takes
+    /// the lock.
     private final class CancelFlag: @unchecked Sendable {
         private let lock = NSLock()
         private var value = false
+        /// Sets the flag (thread-safe).
         func cancel() { lock.lock(); value = true; lock.unlock() }
+        /// True once `cancel()` ran (thread-safe read).
         var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return value }
     }
+    /// Live cancel flags keyed by recording file name.
     private var cancelFlags: [String: CancelFlag] = [:]
 
     /// Transcribes one recording (async, off main). One transcription at
@@ -258,11 +304,27 @@ final class TranscriptionManager {
         return TranscriptStore.entry(for: file)?.text ?? ""
     }
 
+    /// Cooperatively cancels a running transcription: sets the flag the
+    /// background task checks after model load (before decoding starts).
+    /// - Parameter file: the recording being transcribed.
     @MainActor
     func cancel(file: String) {
         cancelFlags[file]?.cancel()
     }
 
+    /// Background transcription body, detached from the main actor.
+    ///
+    /// Holds a `SilentKeepAlive` so the audio background mode keeps the
+    /// process alive for the whole run, streams the SDK's chunked progress
+    /// (0…1) into the transcription Live Activity, and decodes from the file
+    /// URL so audio stays disk-backed (~1.2 MB constant memory — hour-long
+    /// memos are safe). The sidecar entry was written before the run (empty
+    /// `partial`, by `transcribe`); `finish` writes it again on completion,
+    /// and a QA RESULT line (rtf, memory headroom) is logged per run.
+    /// - Parameter file: recording file name (the sidecar key).
+    /// - Parameter url: the recording's audio file.
+    /// - Parameter cancel: flag checked after model load, before decoding.
+    /// Concept: async/await → docs/concepts/swift-async-await.md
     nonisolated private func runTranscription(file: String, url: URL, cancel: CancelFlag) async {
         let keepAlive = SilentKeepAlive()
         keepAlive.start()
@@ -271,6 +333,9 @@ final class TranscriptionManager {
         let logger = Logger(subsystem: "com.ipodclassic.app", category: "transcribe")
         logger.notice("start \(file, privacy: .public)")
 
+        /// Writes the final sidecar entry (done transcripts are
+        /// paragraph-formatted first), logs the QA RESULT line, then hops
+        /// to the main actor to clear bookkeeping and end the Live Activity.
         func finish(state: String, text: String, seconds: Double) {
             let stored = state == "done" ? TranscriptStore.formatParagraphs(text) : text
             TranscriptStore.save(TranscriptEntry(file: file, text: stored, state: state,
@@ -331,6 +396,9 @@ final class TranscriptionManager {
 final class SilentKeepAlive {
     private var player: AVAudioPlayer?
 
+    /// Starts the keep-alive: writes a 1-second silent .caf to the temp
+    /// directory once (8 kHz mono — tiny), then loops it at volume 0.01
+    /// under the app's active .playback session.
     func start() {
         guard player == nil else { return }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("silence.caf")
@@ -349,6 +417,7 @@ final class SilentKeepAlive {
         player?.play()
     }
 
+    /// Stops the loop and releases the player — the process may sleep again.
     func stop() {
         player?.stop()
         player = nil

@@ -9,7 +9,10 @@ struct RecordingFile: Identifiable, Equatable {
     let duration: TimeInterval
     let date: Date
 
+    /// Identity used for list routing and lookup: the file name (unique
+    /// inside Recordings/).
     var id: String { url.lastPathComponent }
+    /// The URL handed to the share sheet (same file, named for intent).
     var shareURL: URL { url }
 }
 
@@ -17,6 +20,11 @@ struct RecordingFile: Identifiable, Equatable {
 /// playback, and file sharing. Files live in Documents/Recordings (.m4a).
 @Observable
 final class RecorderModel {
+    /// Registers the recorder's elapsed-time provider with
+    /// LiveActivityManager: when a first-launch activity request has to be
+    /// retried (it races widget-extension registration on fresh installs),
+    /// the retry re-derives its count-up base from the true elapsed value.
+    /// Concept: Live Activities → docs/concepts/activitykit-live-activities.md
     init() {
         // Live Activities retry on first-launch races with the true
         // elapsed base, provided here.
@@ -24,26 +32,41 @@ final class RecorderModel {
     }
     private(set) var isRecording = false
     private(set) var isPaused = false
+    /// Recorded seconds so far, excluding paused intervals: the sum of
+    /// finished segments (`pausedTotal`) plus the live segment's span.
     private(set) var elapsed: TimeInterval = 0
 
     private(set) var recordings: [RecordingFile] = []
 
     // Playback
+    /// File id (`RecordingFile.id`) of the memo loaded in the player, if any.
     private(set) var playingID: String?
     private(set) var isPlaying = false
+    /// Playhead of the current playback in seconds, ticked by the shared timer.
     private(set) var playTime: TimeInterval = 0
 
     private var recorder: AVAudioRecorder?
     private var player: AVAudioPlayer?
+    /// One 0.25 s timer drives BOTH clocks — recorded `elapsed` and playback
+    /// `playTime` — so it deliberately outlives `stop()` while a memo plays.
     private var timer: Timer?
+    /// Accumulated seconds of finished recording segments — the base that
+    /// `elapsed` counts up from once a pause ends.
     private var pausedTotal: TimeInterval = 0
+    /// When the current recording segment began (set by start/resume); its
+    /// span is folded into `pausedTotal` when the segment ends.
     private var segmentStart: Date = Date()
+    /// Guards `observeInterruptions()` so the observer registers exactly once.
     private var observingInterruptions = false
 
+    /// The file being written by an active recording session, if any.
     var currentFileURL: URL? {
         recorder?.url
     }
 
+    /// Documents/Recordings — where every memo lives; created on first
+    /// access so callers never need to bootstrap the directory.
+    /// Concept: FileManager & sandbox → docs/concepts/filemanager-and-sandbox.md
     var recordingsURL: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Recordings", isDirectory: true)
@@ -53,6 +76,17 @@ final class RecorderModel {
 
     // MARK: Recording
 
+    /// Starts a new .m4a recording in Documents/Recordings and the elapsed timer.
+    ///
+    /// The audio session category here is a hard-won invariant:
+    /// `.playAndRecord` with `[.defaultToSpeaker, .allowBluetoothHFP]`. The
+    /// BluetoothHFP option is REQUIRED — without it iOS engages the AirPods
+    /// microphone, finds the category declares no Bluetooth support, and
+    /// churns A2DP↔HFP until the AirPods disconnect mid-recording; with it
+    /// AirPods make ONE clean switch at record start. `.defaultToSpeaker`
+    /// is the no-headphones fallback (loud speaker, not the earpiece). Any
+    /// setup failure just returns — the screen stays in its idle state.
+    /// Concept: AVAudioSession → docs/concepts/avfoundation-audio-session.md
     func start() {
         guard !isRecording else { return }
         let session = AVAudioSession.sharedInstance()
@@ -93,6 +127,9 @@ final class RecorderModel {
         loadRecordings()
     }
 
+    /// Pauses the active recording: banks the finished segment into
+    /// `pausedTotal` (so `elapsed` freezes instead of drifting) and mirrors
+    /// the pause into the recorder Live Activity.
     func pause() {
         guard isRecording, !isPaused else { return }
         recorder?.pause()
@@ -101,6 +138,8 @@ final class RecorderModel {
         LiveActivityManager.shared.recorderPaused(elapsed: pausedTotal)
     }
 
+    /// Resumes a paused recording by opening a new segment, and re-bases the
+    /// Live Activity count-up at `pausedTotal` so it continues seamlessly.
     func resume() {
         guard isRecording, isPaused else { return }
         recorder?.record()
@@ -109,6 +148,10 @@ final class RecorderModel {
         LiveActivityManager.shared.recorderResumed(base: pausedTotal)
     }
 
+    /// Stops the recorder and saves the file. `elapsed` resets to 0 — the
+    /// duration now lives on the file itself — the Live Activity ends, and
+    /// the shared audio session is deliberately left active (background
+    /// music depends on it; see `leaveSessionActive()`).
     func stop() {
         guard isRecording else { return }
         if !isPaused { pausedTotal += Date().timeIntervalSince(segmentStart) }
@@ -134,6 +177,11 @@ final class RecorderModel {
 
     // MARK: Playback
 
+    /// Plays a memo through AVAudioPlayer, switching the shared session to
+    /// `.playback` first. Completion arrives via `PlaybackBridge` — the
+    /// delegate protocol needs a class instance, and the bridge's closure
+    /// hands control back into this model.
+    /// - Parameter file: the recording to load and play.
     func play(_ file: RecordingFile) {
         stopPlayback()
         let session = AVAudioSession.sharedInstance()
@@ -152,6 +200,9 @@ final class RecorderModel {
         startTimer()
     }
 
+    /// Toggles play/pause of `file`; if it isn't the already-loaded memo,
+    /// starts it from the top instead.
+    /// - Parameter file: the recording acted on.
     func playPauseCurrent(_ file: RecordingFile) {
         guard let p = player, playingID == file.id else {
             play(file)
@@ -166,12 +217,16 @@ final class RecorderModel {
         }
     }
 
+    /// Moves the playhead of the loaded memo by `delta` seconds, clamped to
+    /// the file's [0, duration] range.
+    /// - Parameter delta: seconds to seek by (negative rewinds).
     func seekCurrent(_ delta: TimeInterval) {
         guard let p = player else { return }
         p.currentTime = min(max(0, p.currentTime + delta), p.duration)
         playTime = p.currentTime
     }
 
+    /// Stops the current playback and clears the playing state and playhead.
     func stopPlayback() {
         player?.stop()
         player = nil
@@ -195,6 +250,10 @@ final class RecorderModel {
         return candidate.lastPathComponent
     }
 
+    /// Rescans Documents/Recordings for .m4a files and republishes the list,
+    /// newest first. Display dates prefer the timestamp parsed from the file
+    /// NAME over the filesystem creation date — creation dates move when
+    /// files are synced or restored, file names don't.
     func loadRecordings() {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(at: recordingsURL, includingPropertiesForKeys: [.creationDateKey, .fileSizeKey]) else { return }
@@ -209,6 +268,10 @@ final class RecorderModel {
         recordings = loaded.sorted { $0.date > $1.date }
     }
 
+    /// Deletes a memo: stops playback if it's the playing one, removes the
+    /// file AND its transcript sidecar entry (no orphaned transcripts),
+    /// then reloads the list.
+    /// - Parameter file: the recording to delete.
     func delete(_ file: RecordingFile) {
         if playingID == file.id { stopPlayback() }
         try? FileManager.default.removeItem(at: file.url)
@@ -216,6 +279,10 @@ final class RecorderModel {
         loadRecordings()
     }
 
+    /// Parses the capture date out of a recording's file name.
+    /// - Parameter name: file name without extension, e.g.
+    ///   "Recording 2026-11-04 14-05-37" (seconds optional for old files).
+    /// - Returns: the parsed date, or nil when the name doesn't match.
     private static func date(fromName name: String) -> Date? {
         // "Recording 2026-11-04 14-05-37" (seconds optional for old files)
         let pattern = #"(\d{4})-(\d{2})-(\d{2}) (\d{2})-(\d{2})(?:-(\d{2}))?"#
@@ -224,6 +291,8 @@ final class RecorderModel {
               match.numberOfRanges >= 6,
               let range = Range(match.range(at: 1), in: name) else { return nil }
         let ns = name as NSString
+        /// Captured group `i` as an Int, nil when the group didn't
+        /// participate in the match (e.g. the optional seconds).
         func group(_ i: Int) -> Int? { match.range(at: i).location != NSNotFound ? Int(ns.substring(with: match.range(at: i))) : nil }
         let comps = DateComponents(
             year: group(1), month: group(2), day: group(3),
@@ -232,6 +301,11 @@ final class RecorderModel {
         return Calendar.current.date(from: comps)
     }
 
+    /// Reads a file's duration synchronously via AVAudioPlayer —
+    /// AVURLAsset's duration load is async-only, and list reloads need the
+    /// value right now.
+    /// - Parameter url: the audio file to measure.
+    /// - Returns: duration in seconds (0 if the file can't be read).
     private static func duration(of url: URL) -> TimeInterval {
         // Sync duration via AVAudioPlayer (AVURLAsset.load is async-only).
         (try? AVAudioPlayer(contentsOf: url))?.duration ?? 0
@@ -239,6 +313,8 @@ final class RecorderModel {
 
     // MARK: Timer
 
+    /// Runs the shared 0.25 s timer that ticks `elapsed` while recording
+    /// and `playTime` while playing (one timer drives both clocks).
     private func startTimer() {
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -252,6 +328,9 @@ final class RecorderModel {
         }
     }
 
+    /// Invalidates the shared timer only when no player is left — a
+    /// recording can stop while a memo is still playing, and `playTime`
+    /// must keep ticking.
     private func stopTimer() {
         if player == nil {
             timer?.invalidate()
@@ -286,9 +365,14 @@ final class RecorderModel {
 
 /// AVAudioPlayerDelegate bridge (delegate pattern needs a class).
 final class PlaybackBridge: NSObject, AVAudioPlayerDelegate {
+    /// Process-wide delegate instance (AVAudioPlayer's delegate is a weak,
+    /// class-constrained property).
     static let shared = PlaybackBridge()
+    /// Set per playback by RecorderModel; fired when the file finishes.
     var onFinish: (() -> Void)?
 
+    /// AVAudioPlayerDelegate callback: forwards playback completion into the
+    /// current `onFinish` closure.
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         onFinish?()
     }
