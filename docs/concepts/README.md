@@ -73,6 +73,7 @@ every call site.
 | [avfoundation-camera.md](avfoundation-camera.md) | AVCaptureSession pipeline, session queue, delegates, torch |
 | [eventkit.md](eventkit.md) | EventKit calendar access & queries |
 | [remote-commands.md](remote-commands.md) | MPRemoteCommandCenter / Now Playing info |
+| [app-intents.md](app-intents.md) | App Intents: Shortcuts/Siri integration |
 
 ## Documents & rendering (Reader)
 

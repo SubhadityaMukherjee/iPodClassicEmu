@@ -7,26 +7,51 @@ import PDFKit
 /// PDFs are copied as files.
 @Observable
 final class ReaderStore {
+    /// One imported book's registry record: identity, reading position,
+    /// and typography settings, persisted as JSON in UserDefaults.
+    /// EPUBs live as extracted folders under Books/<id>/; PDFs as copied
+    /// files Books/<id>.pdf.
     struct Book: Codable, Identifiable, Equatable {
+        /// Storage format — selects the rendering pipeline (web view vs
+        /// PDFKit) and where highlights are kept.
         enum Kind: String, Codable {
             case pdf, epub
         }
 
+        /// Books/<id> folder name (EPUB) or file stem (PDF) — doubles as
+        /// the stable identity across launches.
         let id: String             // folder (epub) or file stem (pdf) under Books/
+        /// Which pipeline renders and stores this book.
         let kind: Kind
+        /// Display title (imported file name or article headline).
         var title: String
+        /// Reading position by chapter: EPUB spine index / reflow chapter
+        /// index, or PDF page index.
         var chapterIndex: Int      // epub: spine index; pdf: page index
+        /// Position within the chapter, 0–1 (page-view modes; reflow
+        /// tracks its own field so switching modes never moves either).
         var scrollFraction: Double // epub: position within the chapter
+        /// CSS body font size in px (EPUB and reflow only).
         var fontSize: Int          // epub: CSS body font size in px
+        /// Index into fontFamilyNames/fontFamilyStacks (parallel arrays).
         var fontFamily: Int        // epub: index into fontFamilies (0..count-1)
+        /// 0 compact / 1 normal / 2 wide — index into the CSS line-height table.
         var lineSpacing: Int       // epub: 0 compact, 1 normal, 2 wide
+        /// 0 narrow / 1 normal / 2 wide — side padding in px.
         var margin: Int            // epub: 0 narrow, 1 normal, 2 wide
+        /// Wheel tick size: 0 Small (1 page/tick), 1 Medium (2), 2 Large (3).
         var scrollStep: Int        // epub: 0 small, 1 medium, 2 full page
+        /// PDF view mode: 0 Continuous, 1 One Page, 2 Reflowed text.
         var pdfMode: Int           // pdf: 0 continuous, 1 one page, 2 reflowed text
+        /// Reflow-mode chapter index (own fields so switching view modes
+        /// never moves the page view).
         var reflowChapter: Int     // pdf reflow: chapter index (kept separate so
                                    // switching view modes never moves the page view)
+        /// Reflow-mode position within the chapter, 0–1.
         var reflowFraction: Double // pdf reflow: position within the chapter
+        /// Screen dim overlay level; maps to BookScreen.dimOverlays.
         var dim: Int               // 0 bright, 1 dim, 2 darker (screen overlay)
+        /// Non-nil = Read Later article; the origin URL (nil = real book).
         var sourceURL: String?     // non-nil = article (Read Later); the origin URL
 
         /// Explicit because decoding must still read the retired
@@ -38,6 +63,9 @@ final class ReaderStore {
             case pdfContinuousLegacy = "pdfContinuous"
         }
 
+        /// Creates a record with reading defaults: start of book, 17 px
+        /// body text, normal spacing/margins — and `scrollStep` 0 (one
+        /// page per wheel tick; larger defaults made fresh books skip).
         init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
              scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
              lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 0,
@@ -109,6 +137,8 @@ final class ReaderStore {
         /// names for the settings row and CSS stacks for the web view.
         /// Indexes are shared by both arrays — keep them in sync.
         static let fontFamilyNames = ["Serif", "Sans", "Iowan", "Baskerville", "Avenir", "Typewriter"]
+        /// CSS font stacks injected into the reader stylesheet, one per
+        /// name above (same index).
         static let fontFamilyStacks = [
             "Georgia,'Times New Roman',serif",
             "-apple-system,'Helvetica Neue',sans-serif",
@@ -119,10 +149,12 @@ final class ReaderStore {
         ]
     }
 
+    /// Import failures surfaced to the user as a toast.
     enum ImportError: LocalizedError {
         case unsupported
         case badEPUB
 
+        /// User-facing message (how LocalizedError reaches the UI).
         var errorDescription: String? {
             switch self {
             case .unsupported: return "Only PDF and EPUB files are supported"
@@ -131,13 +163,23 @@ final class ReaderStore {
         }
     }
 
+    /// Process-wide store, created lazily on first access.
     static let shared = ReaderStore()
 
+    /// Every imported book and article, newest first. Tracked by the
+    /// @Observable macro, so reads in views update on mutation.
+    ///
+    /// Concept: Observation → docs/concepts/swiftui-views-and-state.md
     private(set) var books: [Book] = []
 
+    /// Backing storage for the encoded registry.
     private let d = UserDefaults.standard
+    /// Defaults key the registry is encoded under.
     private static let key = "reader.books"
 
+    /// Loads the registry, then applies one-time migrations that heal
+    /// books persisted under retired scroll-step defaults. Each migration
+    /// is guarded by its own defaults flag so it runs exactly once.
     private init() {
         if let data = d.data(forKey: Self.key),
            let decoded = try? JSONDecoder().decode([Book].self, from: data) {
@@ -182,6 +224,10 @@ final class ReaderStore {
         return dir
     }
 
+    /// Looks up a record by its persisted identity.
+    ///
+    /// - Parameter id: folder/file-stem ID from `Book.id`.
+    /// - Returns: the book, or nil if it is no longer registered.
     func book(id: String) -> Book? {
         books.first { $0.id == id }
     }
@@ -193,6 +239,9 @@ final class ReaderStore {
         persist()
     }
 
+    /// Removes a book from the registry and disk. Both on-disk shapes
+    /// are tried (EPUB folder `<id>/` and PDF file `<id>.pdf`); deletes
+    /// are best effort — filesystem failures are ignored.
     func remove(_ book: Book) {
         books.removeAll { $0.id == book.id }
         persist()
@@ -307,6 +356,9 @@ final class ReaderStore {
         return candidate
     }
 
+    /// Encodes the registry to UserDefaults; called after every mutation.
+    ///
+    /// Concept: userdefaults → docs/concepts/userdefaults.md
     private func persist() {
         if let data = try? JSONEncoder().encode(books) {
             d.set(data, forKey: Self.key)

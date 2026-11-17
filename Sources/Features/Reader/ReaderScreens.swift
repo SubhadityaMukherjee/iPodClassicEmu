@@ -12,8 +12,10 @@ struct ReaderHomeScreen: View {
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
 
+    /// The shared reader store (from the app model).
     private var store: ReaderStore { model.reader }
 
+    /// The two top-level rows: Books and Articles, each with its count.
     private var items: [MenuItem] {
         [
             MenuItem(id: "books", title: "Books",
@@ -23,11 +25,14 @@ struct ReaderHomeScreen: View {
         ]
     }
 
+    /// The Books/Articles selector list, driven by the wheel.
     var body: some View {
         MenuList(items: items, selection: selection)
             .onWheel { handle($0) }
     }
 
+    /// Wheel routing: ticks move the row, center opens the picked list,
+    /// MENU pops back to the parent menu.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -53,11 +58,13 @@ struct ReaderScreen: View {
     @State private var deleteSelection = 0
     @State private var toast = ""
 
+    /// The shared reader store (from the app model).
     private var store: ReaderStore { model.reader }
 
     /// Books only — articles (Read Later) live in their own list.
     private var books: [ReaderStore.Book] { store.books.filter { $0.sourceURL == nil } }
 
+    /// Menu rows: the import action on top, then one row per book.
     private var items: [MenuItem] {
         var rows = [MenuItem(id: "hdr.add", title: "Add from Files", symbol: "plus.circle.fill", showsChevron: false, isActionRow: true)]
         rows += books.map { book in
@@ -66,6 +73,7 @@ struct ReaderScreen: View {
         return rows
     }
 
+    /// Book list plus the delete-confirmation panel and toast overlays.
     var body: some View {
         ZStack {
             MenuList(items: items, selection: selection, emptyText: "No Books")
@@ -86,6 +94,7 @@ struct ReaderScreen: View {
         }
     }
 
+    /// Confirmation panel for deleting the held book row.
     private var deletePanel: some View {
         ModalPanel(title: "Delete Book", onClose: { deleteCandidate = nil }) {
             VStack(spacing: 8) {
@@ -101,6 +110,8 @@ struct ReaderScreen: View {
         }
     }
 
+    /// Imports a picked file through the store and reports the outcome
+    /// via toast.
     private func importBook(_ url: URL) {
         do {
             let book = try store.addBook(from: url)
@@ -110,6 +121,7 @@ struct ReaderScreen: View {
         }
     }
 
+    /// Shows a transient toast; it fades out after two seconds.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -119,6 +131,8 @@ struct ReaderScreen: View {
 
     // MARK: Input
 
+    /// Wheel routing; while the delete panel is up, input drives the
+    /// panel instead of the list.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -182,8 +196,11 @@ struct ArticleListScreen: View {
     @State private var toast = ""
     @FocusState private var focused: Bool
 
+    /// The shared reader store (from the app model).
     private var store: ReaderStore { model.reader }
 
+    /// Menu rows: the add-article action on top, then saved articles
+    /// (subtitle = source domain).
     private var items: [MenuItem] {
         var rows = [MenuItem(id: "hdr.add", title: "Add Article", symbol: "plus.circle.fill", showsChevron: false, isActionRow: true)]
         rows += store.articles.map { article in
@@ -192,6 +209,7 @@ struct ArticleListScreen: View {
         return rows
     }
 
+    /// Article list with the URL entry bar, delete panel, and toast.
     var body: some View {
         ZStack {
             VStack(spacing: 4) {
@@ -220,6 +238,7 @@ struct ArticleListScreen: View {
         }
     }
 
+    /// URL entry row (touch keyboard): link icon, field, clear button.
     private var entryBar: some View {
         HStack(spacing: 5) {
             Image(systemName: "link")
@@ -257,6 +276,7 @@ struct ArticleListScreen: View {
         .onTapGesture { focused = true }
     }
 
+    /// Confirmation panel for deleting the held article row.
     private var deletePanel: some View {
         ModalPanel(title: "Delete Article", onClose: { deleteCandidate = nil }) {
             VStack(spacing: 8) {
@@ -272,11 +292,15 @@ struct ArticleListScreen: View {
         }
     }
 
+    /// Host of an article's origin URL, for the row subtitle.
+    ///
+    /// - Returns: "" when the URL can't be parsed.
     private func domain(of urlString: String?) -> String {
         guard let urlString, let url = URL(string: urlString) else { return "" }
         return url.host ?? ""
     }
 
+    /// Reveals the URL entry bar, cleared for a fresh paste.
     private func beginAdd() {
         adding = true
         urlString = ""
@@ -287,6 +311,7 @@ struct ArticleListScreen: View {
         }
     }
 
+    /// Commits the typed URL (center press or keyboard Go).
     private func commitAdd() {
         focused = false
         let url = urlString
@@ -295,6 +320,8 @@ struct ArticleListScreen: View {
         Task { await add(url) }
     }
 
+    /// Fetches and registers an article, surfacing progress/errors as
+    /// toasts; resets the selection afterwards.
     private func add(_ urlString: String) async {
         fetching = true
         showToast("Fetching…")
@@ -308,6 +335,7 @@ struct ArticleListScreen: View {
         selection = 0
     }
 
+    /// Shows a transient toast; it fades out after two seconds.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -317,6 +345,8 @@ struct ArticleListScreen: View {
 
     // MARK: Input
 
+    /// Wheel routing; the delete panel and keyboard entry each take
+    /// priority over the list.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -372,25 +402,35 @@ struct ArticleListScreen: View {
 /// Document picker (Files app) for PDF/EPUB. `asCopy` hands us a plain
 /// copy URL, so no security-scoped bookmark juggling.
 struct DocumentPicker: UIViewControllerRepresentable {
+    /// Called with the picked file's copy URL.
     var onPick: (URL) -> Void
 
+    /// Creates the system picker limited to PDF/EPUB, in copy mode.
+    ///
+    /// Concept: swiftui-views-and-state → docs/concepts/swiftui-views-and-state.md
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.pdf, UTType.epub], asCopy: true)
         picker.delegate = context.coordinator
         return picker
     }
 
+    /// No-op: the picker is configured entirely at creation.
     func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
 
+    /// SwiftUI coordinator factory (delegate target).
     func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
 
+    /// Bridges picker delegate callbacks into the SwiftUI closure.
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        /// The SwiftUI-side callback, retained here.
         let onPick: (URL) -> Void
 
+        /// Stores the escaping callback.
         init(onPick: @escaping (URL) -> Void) {
             self.onPick = onPick
         }
 
+        /// Hands the first picked URL to the callback.
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             if let url = urls.first { onPick(url) }
         }
@@ -404,21 +444,35 @@ struct DocumentPicker: UIViewControllerRepresentable {
 /// book's settings (font, spacing, margins, scroll step, PDF view mode);
 /// prev/next change chapter/page.
 struct BookScreen: View {
+    /// Identity of the book to open (Books/Articles list row).
     let bookID: String
 
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.scenePhase) private var scenePhase
+    /// The open book's record; nil until onAppear resolves the ID (or
+    /// permanently when the book was deleted).
     @State private var book: ReaderStore.Book?
+    /// EPUB spine chapters — or the reflow chapters once generated.
     @State private var chapters: [EpubChapter] = []
+    /// Flattened PDF outline, built lazily when Contents first opens.
     @State private var outline: [OutlineEntry] = []
+    /// Shared modal state: `panelIsSettings` picks which panel shows.
     @State private var panelOpen = false
     @State private var panelIsSettings = false
     @State private var panelSelection = 0
+    /// Transient toast message (empty = hidden).
     @State private var toast = ""
+    /// Saved text highlights for the open book.
     @State private var highlights: [BookHighlight] = []
+    /// Live text selection (EPUB JS or PDFKit), driving the action bar.
     @State private var selectedText = ""
+    /// PDFViewSelectionChanged observer token (removed on disappear).
     @State private var pdfSelectionToken: NSObjectProtocol?
+    /// Command handles for the two renderers; @State keeps them alive
+    /// across re-renders while the representable views re-attach.
+    ///
+    /// Concept: swift-property-wrappers → docs/concepts/swift-property-wrappers.md
     @State private var epubController = EpubController()
     @State private var pdfController = PDFBookController()
     /// Pages per chapter. Estimates come from each chapter's text length
@@ -426,15 +480,20 @@ struct BookScreen: View {
     /// the live web view (readerPosition), which also calibrates the
     /// estimates for the whole book.
     @State private var chapterPages: [Int] = []
+    /// Stripped-text length per chapter — the estimate input.
     @State private var chapterChars: [Int] = []
+    /// Chars-per-page prior once calibrated by a real page count
+    /// (0 = still using the built-in prior).
     @State private var charsPerPage: Double = 0
     /// Live in-chapter position, updated on page turns so the progress
     /// bar tracks pages, not just chapters.
     @State private var liveFraction = 0.0
     /// PDF reflow: generated text chapters + generation state.
     @State private var reflowChapters: [EpubChapter] = []
+    /// True while reflow chapters are being generated (spinner state).
     @State private var reflowPreparing = false
 
+    /// True when the open book is a PDF (any view mode).
     private var isPDF: Bool { book?.kind == .pdf }
     /// Reflowed text mode: the EPUB pipeline renders extracted text.
     private var isReflow: Bool { book?.kind == .pdf && book?.pdfMode == 2 }
@@ -444,21 +503,28 @@ struct BookScreen: View {
     /// Reflow keeps its own position fields so switching view modes never
     /// moves the page view (and vice versa).
     private func chapterIndex(of b: ReaderStore.Book) -> Int { isReflow ? b.reflowChapter : b.chapterIndex }
+    /// In-chapter position for the ACTIVE view mode (0–1).
     private func fraction(of b: ReaderStore.Book) -> Double { isReflow ? b.reflowFraction : b.scrollFraction }
+    /// Writes the chapter index into the ACTIVE view mode's field.
     private func setChapter(_ v: Int, on b: inout ReaderStore.Book) {
         if isReflow { b.reflowChapter = v } else { b.chapterIndex = v }
     }
+    /// Writes the in-chapter position into the ACTIVE view mode's field.
     private func setFraction(_ v: Double, on b: inout ReaderStore.Book) {
         if isReflow { b.reflowFraction = v } else { b.scrollFraction = v }
     }
 
+    /// Black-overlay opacity per `dim` level (bright/dim/darker).
     private static let dimOverlays: [Double] = [0, 0.18, 0.38]
 
+    /// Overlay opacity for the open book's dim setting.
     private var dimOpacity: Double {
         guard let book else { return 0 }
         return Self.dimOverlays[min(max(book.dim, 0), 2)]
     }
 
+    /// The open book: reading area, progress bar, panels, toasts, and
+    /// the dim overlay.
     var body: some View {
         VStack(spacing: 4) {
             // Reading area: strictly between the title bar and the progress
@@ -609,6 +675,9 @@ struct BookScreen: View {
         }
     }
 
+    /// The reading surface for the active mode: the original PDF view, a
+    /// preparing/no-text placeholder while reflow generates, or the EPUB
+    /// web view (EPUB, articles, and reflow all render through it).
     @ViewBuilder
     private func content(book: ReaderStore.Book) -> some View {
         if isPDFOriginal {
@@ -678,6 +747,11 @@ struct BookScreen: View {
         }
     }
 
+    /// Whole-book progress 0–1: the PDF page view centers the current
+    /// page in its slot; web-view modes add the live in-chapter fraction
+    /// on top of the estimated pages before the current chapter.
+    ///
+    /// - Returns: 0 when nothing is loaded.
     private func progressFraction(_ book: ReaderStore.Book) -> Double {
         if isPDFOriginal, let count = pdfController.document?.pageCount, count > 0 {
             return (Double(min(chapterIndex(of: book), count - 1)) + 0.5) / Double(count)
@@ -707,6 +781,8 @@ struct BookScreen: View {
         return "\(current)/\(total)"
     }
 
+    /// Identity of the typography settings; a change invalidates the
+    /// page estimates (capacity changed) and triggers re-estimation.
     private var styleStamp: String {
         "\(book?.fontSize ?? 0)|\(book?.fontFamily ?? 0)|\(book?.lineSpacing ?? 0)|\(book?.margin ?? 0)"
     }
@@ -739,6 +815,13 @@ struct BookScreen: View {
         return max(50, charsPerLine * linesPerPage)
     }
 
+    /// Fills `chapterPages` from `chapterChars` at the current capacity.
+    /// Estimates only — NEVER re-add an offscreen WKWebView measurer to
+    /// "improve" these: iOS WebKit paginates columns asynchronously
+    /// (scrollWidth overshoots then tightens, and about:blank races made
+    /// the old hidden measurer report every chapter as 1 page). Exact
+    /// counts arrive via readerPosition as chapters are visited (see
+    /// `exactPages(_:forChapter:)`).
     private func computeEstimates() {
         guard chapterChars.count == chapters.count else { return }
         let cap = pageCapacity()
@@ -797,6 +880,7 @@ struct BookScreen: View {
         .padding(.bottom, 36)
     }
 
+    /// Action-button look for the selection bar.
     private func capsuleLabel(_ text: String, primary: Bool) -> some View {
         Text(text)
             .font(Theme.font(12, .bold))
@@ -807,10 +891,12 @@ struct BookScreen: View {
                                                : AnyShapeStyle(Color(white: 0.82))))
     }
 
+    /// Extraction folder of a book's EPUB (also the reflow output root).
     static func epubDir(for book: ReaderStore.Book) -> URL {
         ReaderStore.booksRoot.appendingPathComponent(book.id)
     }
 
+    /// On-disk PDF file of a book.
     static func pdfURL(for book: ReaderStore.Book) -> URL {
         ReaderStore.booksRoot.appendingPathComponent(book.id).appendingPathExtension("pdf")
     }
@@ -825,8 +911,12 @@ struct BookScreen: View {
         var index: Int
     }
 
+    /// Selectable body sizes (px) for the Font Size setting row.
     private static let fontSizes = [11, 13, 15, 17, 19, 22, 25]
 
+    /// Rows for the Book Settings panel; a PDF in reflow mode gets the
+    /// full typography set too. ("Read Aloud" activates instead of
+    /// cycling; the panel swaps to audiobook rows while it runs.)
     private var bookSettings: [BookSetting] {
         guard let book else { return [] }
         // Read Aloud is the top row in both branches; while an audiobook
@@ -863,6 +953,8 @@ struct BookScreen: View {
         ]
     }
 
+    /// Rows of whichever panel is open: settings rows, the PDF outline
+    /// (indented by level), or EPUB chapters.
     private var panelRows: [MenuItem] {
         if panelIsSettings {
             if model.audiobook.isActive {
@@ -891,6 +983,7 @@ struct BookScreen: View {
         }
     }
 
+    /// The open modal panel over the reading area.
     private var panel: some View {
         ModalPanel(title: panelTitle, onClose: { closePanel() }) {
             MenuList(items: panelRows, selection: panelSelection, compact: true, emptyText: "No Contents")
@@ -898,6 +991,7 @@ struct BookScreen: View {
         }
     }
 
+    /// Title of the open panel.
     private var panelTitle: String {
         if panelIsSettings {
             return model.audiobook.isActive ? "Read Aloud" : "Book Settings"
@@ -905,10 +999,13 @@ struct BookScreen: View {
         return isPDFOriginal ? "Contents" : "Chapters"
     }
 
+    /// Dismisses the open panel.
     private func closePanel() {
         withAnimation(.easeIn(duration: 0.15)) { panelOpen = false }
     }
 
+    /// Opens the contents panel (chapters, or the PDF outline flattened
+    /// on first open).
     private func openContents() {
         if isPDFOriginal && outline.isEmpty {
             outline = PDFBookView.flattenOutline(pdfController.document?.outlineRoot, document: pdfController.document)
@@ -918,12 +1015,17 @@ struct BookScreen: View {
         withAnimation(.easeOut(duration: 0.18)) { panelOpen = true }
     }
 
+    /// Opens the book-settings panel.
     private func openSettings() {
         panelIsSettings = true
         panelSelection = 0
         withAnimation(.easeOut(duration: 0.18)) { panelOpen = true }
     }
 
+    /// Center-press on a panel row: settings rows cycle their value,
+    /// outline rows jump to that page, chapter rows open that chapter
+    /// (persisted directly — the old chapter's fraction must not leak
+    /// into the new one).
     private func activatePanelRow() {
         let rows = panelRows
         guard rows.indices.contains(panelSelection) else { return }
@@ -956,6 +1058,7 @@ struct BookScreen: View {
     /// Cycles one setting to its next value and applies it immediately.
     private func cycleSetting(id: String) {
         guard var b = book else { return }
+        /// Next index in a 0..<count cycle (wrap past the end).
         func wrapped(_ current: Int, _ count: Int) -> Int { (current + 1) % count }
         switch id {
         case "view":
@@ -1119,6 +1222,8 @@ struct BookScreen: View {
         showToast("Read Aloud starting")
     }
 
+    /// Bundles this screen's rendering closures into the model-facing
+    /// provider (the model stays ignorant of WKWebView/PDFKit).
     @MainActor private func makeAudiobookProvider() -> AudiobookPageProvider {
         AudiobookPageProvider(
             segments: { await self.audiobookSegments() },
@@ -1160,6 +1265,8 @@ struct BookScreen: View {
         }
     }
 
+    /// Page index the reader is currently showing — where playback
+    /// starts and where seeks re-land.
     @MainActor private func audiobookCurrentPage() async -> Int {
         guard book != nil else { return 0 }
         if isPDFOriginal { return pdfController.currentPageIndex }
@@ -1253,6 +1360,10 @@ struct BookScreen: View {
         model.notes.write(noteName, "\(body)- \"\(highlight.text)\"\n")
     }
 
+    /// prev/next handler: one chapter (PDF page view: one page). EPUB
+    /// steps persist directly rather than via `saveLocation()` — the
+    /// async position callback would sample the OLD chapter's fraction
+    /// and restore the new one near its bottom.
     private func stepChapter(_ delta: Int) {
         guard var b = book else { return }
         if isPDFOriginal {
@@ -1296,6 +1407,7 @@ struct BookScreen: View {
         }
     }
 
+    /// Shows a transient toast; it fades out after ~1.4 s.
     private func showToast(_ text: String) {
         withAnimation(.easeOut(duration: 0.2)) { toast = text }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
@@ -1305,6 +1417,10 @@ struct BookScreen: View {
 
     // MARK: Input
 
+    /// Wheel routing. Ticks page-turn the active renderer (1–3 pages
+    /// per tick per Scroll Step) and flag the audiobook to re-sync;
+    /// center opens contents, or play/pauses while read-aloud runs;
+    /// MENU closes the panel, then audiobook mode, then the book.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -1391,6 +1507,7 @@ struct BookScreen: View {
 
 /// Command handle for the parent screen to drive the web view.
 final class EpubController {
+    /// The live web view, set by EpubWebView (weak — SwiftUI owns the view).
     weak var webView: WKWebView?
 
     /// Turns `count` pages (negative = backwards). A column period is one
@@ -1417,6 +1534,9 @@ final class EpubController {
         }
     }
 
+    /// Re-injects the reader stylesheet after a settings change.
+    ///
+    /// Concept: webkit-wkwebview → docs/concepts/webkit-wkwebview.md
     func applyStyle(to book: ReaderStore.Book) {
         webView?.evaluateJavaScript(EpubController.cssJS(for: book), completionHandler: nil)
     }
@@ -1429,6 +1549,7 @@ final class EpubController {
         }
     }
 
+    /// Collapses the text selection without altering the DOM.
     func clearSelection() {
         webView?.evaluateJavaScript(HighlightJS.clearSelection, completionHandler: nil)
     }
@@ -1460,6 +1581,7 @@ final class EpubController {
         }
     }
 
+    /// Fraction-only convenience over `readerPosition`.
     func scrollFraction(completion: @escaping (Double) -> Void) {
         readerPosition { f, _ in completion(f) }
     }
@@ -1492,6 +1614,9 @@ final class EpubController {
         webView?.evaluateJavaScript("window.scrollTo(window.innerWidth * \(page), 0)", completionHandler: nil)
     }
 
+    /// Async flavor of `readerPosition` for the audiobook loop.
+    ///
+    /// - Returns: (fraction 0–1, page count or nil).
     @MainActor func readerPositionAsync() async -> (Double, Int?) {
         await withCheckedContinuation { continuation in
             readerPosition { fraction, count in
@@ -1519,6 +1644,8 @@ final class EpubController {
         return false
     }
 
+    /// JSON shape returned by the segments script (short keys keep the
+    /// bridge payload small).
     private struct RawSegment: Codable {
         let p: Int
         let t: String
@@ -1583,9 +1710,10 @@ final class EpubController {
     /// one viewport tall, so the browser fills columns with COMPLETE
     /// lines only; side margins come from body padding + an equal column
     /// gap, giving every page identical breathing room.
-    /// Reader stylesheet: viewport-sized columns (true pages). Body is
-    /// one viewport tall, so the browser fills columns with COMPLETE
-    /// lines only; side margins come from body padding + an equal column
+    ///
+    /// Built with SINGLE-backslash interpolation — `\\(x)` here would
+    /// emit the literal text `\(x)` and silently break the CSS.
+    /// Concept: WKWebView → docs/concepts/webkit-wkwebview.md
     static func cssJS(for book: ReaderStore.Book) -> String {
         let family = ReaderStore.Book.fontFamilyStacks[
             min(max(book.fontFamily, 0), ReaderStore.Book.fontFamilyStacks.count - 1)
@@ -1610,14 +1738,28 @@ final class EpubController {
 /// from the book's settings, restore the saved scroll position on load,
 /// watch text selection (highlighting), and re-wrap saved highlights.
 struct EpubWebView: UIViewRepresentable {
+    /// Chapter to render; nil = nothing loadable yet.
     let chapter: EpubChapter?
+    /// Root folder the web view may read (EPUB resources load relatively).
     let bookDir: URL
+    /// Settings source for the injected stylesheet.
     let book: ReaderStore.Book
+    /// In-chapter position (0–1) to restore once layout settles.
     let restoreFraction: Double
+    /// Parent screen's command handle; receives the created web view.
     let controller: EpubController
+    /// Saved highlight texts for THIS chapter (re-wrapped after load).
     var highlightTexts: [String] = []
+    /// Selection-change callback driving the highlight action bar.
     var onSelection: ((String) -> Void)?
 
+    /// Creates the web view: horizontal-column scroll config, a
+    /// document-start user script injecting a device-width viewport when
+    /// the book lacks one (otherwise WebKit lays out at 980 px and each
+    /// page shows a slice), a document-end selection watcher, and the
+    /// "selection" message handler; then loads the first chapter.
+    ///
+    /// Concept: webkit-wkwebview → docs/concepts/webkit-wkwebview.md
     func makeUIView(context: Context) -> WKWebView {
         let wv = WKWebView(frame: .zero)
         wv.navigationDelegate = context.coordinator
@@ -1655,6 +1797,8 @@ struct EpubWebView: UIViewRepresentable {
         return wv
     }
 
+    /// Reloads when the chapter changes; re-injects the stylesheet only
+    /// when style-relevant fields changed (see `styleMatches`).
     func updateUIView(_ wv: WKWebView, context: Context) {
         context.coordinator.parent = self
         controller.webView = wv
@@ -1676,23 +1820,38 @@ struct EpubWebView: UIViewRepresentable {
             && a.lineSpacing == b.lineSpacing && a.margin == b.margin
     }
 
+    /// SwiftUI coordinator factory (delegate + script-message target).
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
+    /// Bridges web-view callbacks back to SwiftUI, holding the newest
+    /// parent (the struct is recreated on every re-render).
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        /// Latest view values (kept current by updateUIView).
         var parent: EpubWebView
+        /// Chapter currently loaded — guards against redundant loads.
         var loadedURL: URL?
+        /// Book snapshot whose stylesheet was applied — guards against
+        /// re-injecting identical CSS.
         var appliedStyle: ReaderStore.Book?
 
+        /// Keeps the newest view values.
         init(parent: EpubWebView) {
             self.parent = parent
         }
 
+        /// Selection-watch messages hop to the main thread here.
         func userContentController(_ userContentController: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
             guard message.name == "selection", let text = message.body as? String else { return }
             DispatchQueue.main.async { self.parent.onSelection?(text) }
         }
 
+        /// Load settled: record the URL (page extraction waits for it),
+        /// inject the stylesheet, restore saved highlights, then restore
+        /// the scroll position — twice, because reflow/images change the
+        /// document height after the first pass (both restores are
+        /// idempotent, and the second never yanks back once reading has
+        /// moved on).
         func webView(_ webview: WKWebView, didFinish navigation: WKNavigation!) {
             // Inject the reader stylesheet, restore highlights, then the
             // saved scroll position. Reflow (CSS + images) changes the
@@ -1727,40 +1886,62 @@ struct EpubWebView: UIViewRepresentable {
 struct OutlineEntry: Identifiable {
     let id: Int
     let title: String
+    /// Resolved page index; nil when the destination doesn't land on a page.
     let pageIndex: Int?
     let level: Int
 }
 
 /// Command handle for the parent screen to drive the PDF view.
 final class PDFBookController {
+    /// The live PDF view, set by PDFBookView (weak).
     weak var view: PDFView?
 
+    /// The open document, via the attached view.
     var document: PDFDocument? { view?.document }
 
+    /// Steps one page forward.
     func nextPage() { view?.goToNextPage(nil) }
+    /// Steps one page backward.
     func prevPage() { view?.goToPreviousPage(nil) }
 
+    /// Clears the text selection.
     func clearSelection() {
         view?.clearSelection()
     }
 
+    /// Jumps to a page index (bounds-checked — this SDK's PDFDocument
+    /// has no `.pages`; use `page(at:)` with `pageCount`).
     func goToPage(_ index: Int) {
         guard let doc = view?.document, (0..<doc.pageCount).contains(index), let page = doc.page(at: index) else { return }
         view?.go(to: page)
     }
 
+    /// Index of the visible page via `index(for:)` (this SDK's
+    /// alternative to a `.pages` collection); 0 when nothing shows.
     var currentPageIndex: Int {
         guard let view, let doc = view.document, let page = view.currentPage else { return 0 }
         return doc.index(for: page)
     }
 }
 
+/// PDFKit-backed page view. Note this SDK's PDFKit shape: documents
+/// expose `pageCount`/`page(at:)`/`index(for:)` — there is no `.pages`
+/// collection — and outlines iterate via `numberOfChildren` +
+/// `child(at:)` (see `flattenOutline`).
 struct PDFBookView: UIViewRepresentable {
+    /// File URL of the copied PDF.
     let url: URL
+    /// Parent screen's command handle; receives the created view.
     let controller: PDFBookController
+    /// Page to show on first display (restored reading position).
     let initialPage: Int
+    /// Continuous scroll vs one-page-at-a-time display mode.
     let continuous: Bool
 
+    /// Creates the PDFView (auto-scaling, vertical), loads the document,
+    /// and jumps to the initial page.
+    ///
+    /// Concept: pdfkit → docs/concepts/pdfkit.md
     func makeUIView(context: Context) -> PDFView {
         let v = PDFView()
         v.autoScales = true
@@ -1775,6 +1956,8 @@ struct PDFBookView: UIViewRepresentable {
         return v
     }
 
+    /// Switches display mode when `continuous` changes, keeping the
+    /// current page on screen.
     func updateUIView(_ v: PDFView, context: Context) {
         controller.view = v
         if context.coordinator.continuous != context.coordinator.parent.continuous {
@@ -1785,12 +1968,18 @@ struct PDFBookView: UIViewRepresentable {
         }
     }
 
+    /// SwiftUI coordinator factory.
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
+    /// Remembers the last-applied display mode so updateUIView can
+    /// detect changes.
     final class Coordinator {
+        /// Latest view values (kept current by updateUIView).
         var parent: PDFBookView
+        /// Display mode currently applied to the view.
         var continuous: Bool
 
+        /// Snapshots the initial display mode.
         init(parent: PDFBookView) {
             self.parent = parent
             self.continuous = parent.continuous

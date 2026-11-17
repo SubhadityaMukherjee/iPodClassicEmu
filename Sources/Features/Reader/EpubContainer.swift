@@ -5,10 +5,12 @@ import Compression
 /// (sizes are always present there), then inflates each entry — Apple's
 /// COMPRESSION_ZLIB is raw deflate, which is exactly what ZIP uses.
 enum EpubUnzip {
+    /// Extraction failures surfaced to the user (bad ZIP, unknown compression).
     enum UnzipError: LocalizedError {
         case badArchive
         case unsupportedEntry(String)
 
+        /// User-facing message (how LocalizedError reaches the UI).
         var errorDescription: String? {
             switch self {
             case .badArchive: return "Not a valid ZIP/EPUB file"
@@ -17,11 +19,21 @@ enum EpubUnzip {
         }
     }
 
+    /// Extracts an archive file into `destination`.
+    ///
+    /// - Throws: `UnzipError` when the archive is malformed or an entry
+    ///   uses an unsupported compression method.
     static func extract(zipURL: URL, to destination: URL) throws {
         let data = try Data(contentsOf: zipURL)
         try extract(data: data, to: destination)
     }
 
+    /// Extracts an in-memory archive: parses the central directory, then
+    /// writes every entry out. Path traversal is defused by splitting
+    /// names on "/" and skipping entries whose components include ".."
+    /// (or that resolve to nothing); parent folders are created per entry.
+    ///
+    /// Concept: epub-and-zip → docs/concepts/epub-and-zip.md
     static func extract(data: Data, to destination: URL) throws {
         let bytes = [UInt8](data)
         let fm = FileManager.default
@@ -47,6 +59,8 @@ enum EpubUnzip {
 
     // MARK: ZIP structures
 
+    /// One parsed central-directory record (sizes come from here — local
+    /// headers can carry zeros when the writer used data descriptors).
     private struct CDEntry {
         let name: [UInt8]
         let method: Int
@@ -55,14 +69,17 @@ enum EpubUnzip {
         let localOffset: Int
     }
 
+    /// The archive's entry list, in central-directory order.
     private struct CentralDirectory {
         var entries: [CDEntry] = []
     }
 
+    /// Little-endian UInt16 at byte offset `o` (ZIP integers are LE).
     private static func u16(_ b: [UInt8], _ o: Int) -> Int {
         Int(b[o]) | (Int(b[o + 1]) << 8)
     }
 
+    /// Little-endian UInt32 at byte offset `o`.
     private static func u32(_ b: [UInt8], _ o: Int) -> Int {
         u16(b, o) | (u16(b, o + 2) << 16)
     }
@@ -81,6 +98,10 @@ enum EpubUnzip {
         throw UnzipError.badArchive
     }
 
+    /// Parses the end-of-central-directory record, then walks the fixed
+    /// 46-byte central-directory headers (name/extra/comment lengths
+    /// vary per entry). Stops at a wrong signature or truncated data
+    /// rather than throwing mid-archive.
     private static func centralDirectory(_ b: [UInt8]) throws -> CentralDirectory {
         let eocd = try findEOCD(b)
         let count = u16(b, eocd + 10)
@@ -127,6 +148,11 @@ enum EpubUnzip {
         }
     }
 
+    /// Raw-deflate decompression via Apple's Compression framework:
+    /// COMPRESSION_ZLIB takes the raw deflate stream (no zlib wrapper),
+    /// which is exactly what a ZIP entry holds. The output buffer is
+    /// preallocated from the central-directory size and the byte count
+    /// verified — a mismatch means a corrupt archive.
     private static func inflate(_ input: [UInt8], outputSize: Int) throws -> [UInt8] {
         guard outputSize > 0 else { return [] }
         var output = [UInt8](repeating: 0, count: outputSize)
@@ -151,6 +177,7 @@ struct EpubChapter: Identifiable, Equatable {
     let title: String
     let url: URL
 
+    /// Identifiable by spine index (stable for a given book load).
     var id: Int { index }
 }
 
@@ -159,6 +186,14 @@ struct EpubChapter: Identifiable, Equatable {
 /// EPUB3 nav document, the authoritative names), then each document's
 /// <title>/<h1>/<h2>, then a "Chapter N" fallback.
 enum EpubParser {
+    /// Loads a book's reading order: container.xml → OPF → spine items
+    /// filtered to HTML/XHTML, each titled from the TOC map when the
+    /// book has one. Chapter URLs are OPF-relative and percent-decoded.
+    ///
+    /// - Returns: chapters in spine order; empty when the container or
+    ///   OPF can't be read (the caller shows an empty book).
+    ///
+    /// Concept: epub-and-zip → docs/concepts/epub-and-zip.md
     static func load(bookDir: URL) -> [EpubChapter] {
         let containerURL = bookDir.appendingPathComponent("META-INF/container.xml")
         guard let containerData = try? Data(contentsOf: containerURL),
@@ -197,18 +232,28 @@ enum EpubParser {
 
     // MARK: TOC (NCX + EPUB3 nav)
 
+    /// One OPF <item>: href / media-type / properties by item id.
     private struct ManifestItem {
         let href: String
         let mediaType: String
         let properties: String
     }
 
+    /// The parsed package: manifest by item id, spine idrefs in reading
+    /// order, and the EPUB2 spine@toc id.
     private struct OPF {
         var manifest: [String: ManifestItem] = [:]
         var spine: [String] = []
         var tocID: String?
     }
 
+    /// Builds href → title from the book's own TOC: the EPUB2 NCX (found
+    /// via media type or spine@toc) and the EPUB3 nav document (manifest
+    /// item with properties="…nav…"); where both exist the nav wins.
+    /// XMLParser drives the NCX; the nav is plain XHTML, so a regex over
+    /// its <a> links suffices.
+    ///
+    /// - Returns: normalized-href → display title (possibly empty).
     private static func parseTOC(bookDir: URL, opfDir: URL, opf: OPF) -> [String: String] {
         var map: [String: String] = [:]
 
@@ -249,6 +294,9 @@ enum EpubParser {
 
     // MARK: XML plumbing
 
+    /// Reads container.xml for the OPF's full-path.
+    ///
+    /// - Returns: the rootfile path, or nil when absent/unparseable.
     private static func parseContainer(_ data: Data) -> String? {
         let delegate = ContainerDelegate()
         let parser = XMLParser(data: data)
@@ -257,6 +305,7 @@ enum EpubParser {
         return delegate.rootFile
     }
 
+    /// Reads the OPF's manifest and spine into an `OPF`.
     private static func parseOPF(_ data: Data) -> OPF {
         let delegate = OPFDelegate()
         let parser = XMLParser(data: data)
@@ -265,9 +314,11 @@ enum EpubParser {
         return delegate.opf
     }
 
+    /// Captures the first <rootfile full-path=…> seen (the OPF location).
     private final class ContainerDelegate: NSObject, XMLParserDelegate {
         var rootFile: String?
 
+        /// XMLParser callback: remembers the first rootfile's full-path.
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                     qualifiedName: String?, attributes: [String: String]) {
             if name == "rootfile", rootFile == nil {
@@ -276,9 +327,11 @@ enum EpubParser {
         }
     }
 
+    /// Fills an `OPF` from <item>/<itemref> start elements.
     private final class OPFDelegate: NSObject, XMLParserDelegate {
         var opf = OPF()
 
+        /// XMLParser callback: records manifest items and spine order.
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                     qualifiedName: String?, attributes: [String: String]) {
             if name == "item", let id = attributes["id"], let href = attributes["href"] {
@@ -296,8 +349,11 @@ enum EpubParser {
     private final class NCXDelegate: NSObject, XMLParserDelegate {
         var entries: [(src: String, label: String)] = []
         private var frames: [(label: String?, src: String?)] = []
+        /// True between a navLabel's <text> and its close.
         private var inText = false
 
+        /// XMLParser callback: pushes a frame per nested navPoint; grabs
+        /// content src attributes and text starts.
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                     qualifiedName: String?, attributes: [String: String]) {
             if name == "navPoint" {
@@ -310,12 +366,16 @@ enum EpubParser {
             }
         }
 
+        /// XMLParser callback: accumulates <text> characters into the
+        /// innermost navPoint's label.
         func parser(_ parser: XMLParser, foundCharacters string: String) {
             if inText, !frames.isEmpty, frames[frames.count - 1].label != nil {
                 frames[frames.count - 1].label?.append(string)
             }
         }
 
+        /// XMLParser callback: on navPoint close, pops the frame and
+        /// keeps the (src, label) pair when both are usable.
         func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
             if name == "text" {
                 inText = false

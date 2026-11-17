@@ -4,6 +4,8 @@ import Foundation
 /// text (text-anchored, so it survives font-size/reflow changes).
 struct BookHighlight: Codable, Identifiable, Equatable {
     let id: String
+    /// Chapter index at capture time: EPUB spine index, reflow chapter
+    /// index, or PDF page index.
     let chapter: Int
     let text: String
 }
@@ -11,6 +13,12 @@ struct BookHighlight: Codable, Identifiable, Equatable {
 /// Highlights live WITH the book (epub folder / pdf sibling file) so they
 /// stay in sync when books are copied around or deleted.
 enum HighlightStore {
+    /// Where a book's highlights live: inside the EPUB's folder, or as a
+    /// JSON sibling of the PDF file — so they travel and die with the book.
+    ///
+    /// - Returns: the highlights.json path for the given book/kind.
+    ///
+    /// Concept: filemanager-and-sandbox → docs/concepts/filemanager-and-sandbox.md
     static func url(bookID: String, kind: ReaderStore.Book.Kind) -> URL {
         let root = ReaderStore.booksRoot
         switch kind {
@@ -19,12 +27,18 @@ enum HighlightStore {
         }
     }
 
+    /// Reads a book's saved highlights.
+    ///
+    /// - Returns: the stored list, or [] when nothing is saved yet or
+    ///   the JSON is unreadable.
     static func load(bookID: String, kind: ReaderStore.Book.Kind) -> [BookHighlight] {
         guard let data = try? Data(contentsOf: url(bookID: bookID, kind: kind)),
               let items = try? JSONDecoder().decode([BookHighlight].self, from: data) else { return [] }
         return items
     }
 
+    /// Writes the full list atomically — a crash mid-write can't corrupt
+    /// the previous copy.
     static func save(_ highlights: [BookHighlight], bookID: String, kind: ReaderStore.Book.Kind) {
         guard let data = try? JSONEncoder().encode(highlights) else { return }
         try? data.write(to: url(bookID: bookID, kind: kind), options: .atomic)

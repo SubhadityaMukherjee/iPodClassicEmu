@@ -8,6 +8,8 @@ import UIKit
 /// order. The page index drives the real page turns, so audiobook playback
 /// and normal reading always agree on position.
 struct AudiobookSegment: Equatable, Sendable {
+    /// Chapter-relative page index (PDF page-view: the PDF page index) —
+    /// drives the real page turns so listening and reading agree.
     let page: Int
     let text: String
 }
@@ -47,11 +49,13 @@ enum AudiobookPlayOutcome {
 /// without an AVAudioEngine.
 @MainActor
 protocol AudiobookAudioEngineType: AnyObject {
+    /// Playback rate (time-pitch).
     var rate: Float { get set }
     /// Mixer output level 0–1 (read-aloud volume setting).
     var outputVolume: Float { get set }
     /// Play diagnostics surface (wired to the model's status line).
     var onDebug: ((String) -> Void)? { get set }
+    /// Makes sure the audio session is active before playing.
     func ensureStarted() throws
     /// Schedules and starts playback of the page. Returns false on
     /// failure (the loop then skips the page).
@@ -64,7 +68,9 @@ protocol AudiobookAudioEngineType: AnyObject {
     /// Set by the engine when playback was interrupted for a reader seek;
     /// the loop consumes it (resets to false).
     var seekRequested: Bool { get set }
+    /// Pauses the current page (resumable in place).
     func pause()
+    /// Resumes the paused page.
     func resume()
     /// Stops playback immediately (seek or exit — the loop re-checks
     /// `seekRequested` to distinguish).
@@ -80,9 +86,12 @@ protocol AudiobookAudioEngineType: AnyObject {
 /// launch, so playing needs no per-page session work.
 @MainActor
 final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPlayerDelegate {
+    /// Player for the current page (one player per page buffer).
     private var player: AVAudioPlayer?
+    /// Rate/volume remembered between players (applied on each start).
     private var currentRate: Float = 1
     private var currentVolume: Float = 1
+    /// Token for the interruption observer (removed in deinit).
     private var interruptionObserver: NSObjectProtocol?
     /// Set when playback was interrupted for a reader seek; the loop
     /// consumes it and re-syncs instead of counting the page as finished.
@@ -90,15 +99,20 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
     /// Optional sink for play diagnostics (wired to the model's status file).
     var onDebug: ((String) -> Void)?
 
+    /// True while the current page's player runs.
     var isPlaying: Bool { player?.isPlaying ?? false }
 
+    /// Seconds of the current page rendered so far.
     var playbackSeconds: Double { player?.currentTime ?? 0 }
 
+    /// Interrupt flag shared with the loop (bridge over `interrupted`).
     var seekRequested: Bool {
         get { interrupted }
         set { interrupted = newValue }
     }
 
+    /// Registers the audio-interruption observer (resumes playback when
+    /// the system allows it after an interruption ends).
     override init() {
         super.init()
         // Interruption-end resume playback — a dead route would otherwise
@@ -120,12 +134,15 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         }
     }
 
+    /// Drops the interruption observer.
     deinit {
         if let interruptionObserver {
             NotificationCenter.default.removeObserver(interruptionObserver)
         }
     }
 
+    /// Time-pitch rate, applied to the live player and remembered for
+    /// the next one.
     var rate: Float {
         get { currentRate }
         set {
@@ -134,6 +151,7 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         }
     }
 
+    /// Output level 0–1, applied to the live player and remembered.
     var outputVolume: Float {
         get { player?.volume ?? currentVolume }
         set {
@@ -142,6 +160,11 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         }
     }
 
+    /// Defensively re-activates the shared .playback session (an
+    /// interruption may have deactivated it); activation failures are
+    /// logged, not thrown.
+    ///
+    /// Concept: avfoundation-audio-session → docs/concepts/avfoundation-audio-session.md
     func ensureStarted() throws {
         // The session is active app-wide; re-activate defensively (an
         // interruption may have deactivated it) and surface failures.
@@ -168,6 +191,15 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         }
     }
 
+    /// Plays one page: encodes the buffer as an in-memory WAV and hands
+    /// it to AVAudioPlayer(data:) — the temp-FILE route wrote zero-frame
+    /// files on device, so nothing touches the filesystem here. Every
+    /// attempt lands in the engine trace.
+    ///
+    /// - Returns: false when encoding or playback fails (the loop then
+    ///   stops with a visible reason).
+    ///
+    /// Concept: avfoundation-playback → docs/concepts/avfoundation-playback.md
     func start(_ buffer: AVAudioPCMBuffer) -> Bool {
         // In-memory 16-bit PCM WAV → AVAudioPlayer(data:). The tmp-file
         // route wrote zero-frame files on device (both Int16 and Float32),
@@ -220,8 +252,11 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         }
         var data = Data()
         data.reserveCapacity(44 + pcm.count)
+        /// Appends a 4-character RIFF chunk tag (e.g. "RIFF").
         func str(_ s: String) { data.append(contentsOf: s.utf8) }
+        /// Appends a little-endian 16-bit field.
         func u16(_ v: UInt16) { var x = v.littleEndian; withUnsafeBytes(of: &x) { data.append(contentsOf: $0) } }
+        /// Appends a little-endian 32-bit field.
         func u32(_ v: UInt32) { var x = v.littleEndian; withUnsafeBytes(of: &x) { data.append(contentsOf: $0) } }
         str("RIFF"); u32(UInt32(36 + pcm.count)); str("WAVE")
         str("fmt "); u32(16); u16(1); u16(1)
@@ -231,24 +266,30 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         return data
     }
 
+    /// Logs decode failures (they surface as the loop's "no audio
+    /// rendered" stop).
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         Logger(subsystem: "com.ipodclassic.app", category: "tts")
             .notice("page decode error: \(error?.localizedDescription ?? "none", privacy: .public)")
     }
 
+    /// Deliberately empty — the loop's isPlaying polling detects the end.
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         // Polling detects the end via isPlaying; the delegate only exists
         // so nothing else is needed here.
     }
 
+    /// Pauses the current page in place.
     func pause() {
         player?.pause()
     }
 
+    /// Resumes the paused page.
     func resume() {
         player?.play()
     }
 
+    /// Stops and drops the player (seek or exit).
     func stopPlayback() {
         player?.stop()
         player = nil
@@ -259,8 +300,10 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
 /// among the common reader languages. Falls back to English when the
 /// counts are inconclusive (short texts, names, numbers).
 enum AudiobookLanguage {
+    /// Codes the TTS engines accept (and `detect` can return).
     static let supported = ["en", "nl", "de", "fr", "es", "it"]
 
+    /// Frequent-word sets per language; hit counts decide the winner.
     private static let markers: [String: Set<String>] = [
         "en": ["the", "and", "of", "to", "that", "with", "was", "for", "his", "her", "not", "but", "had"],
         "nl": ["de", "het", "een", "van", "en", "dat", "niet", "met", "zijn", "haar", "ook", "maar", "voor"],
@@ -270,6 +313,11 @@ enum AudiobookLanguage {
         "it": ["il", "la", "che", "di", "non", "per", "con", "una", "sono", "anche", "più", "come", "nel"],
     ]
 
+    /// Stopword-count language guess. Needs ≥12 words and a clear lead
+    /// (the runner-up must not reach half the winner's hits) — otherwise
+    /// the English default stands.
+    ///
+    /// - Returns: a code from `supported` (or "en").
     static func detect(_ text: String) -> String {
         let words = text.lowercased()
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
@@ -290,8 +338,8 @@ enum AudiobookLanguage {
 }
 
 /// Synthesis seam: the real implementation is ReadAloudVoiceStore
-/// (Breeze TTS 2 via MLX — download, load, voice presets); tests supply a
-/// mock. Voice identity travels as its preset name string.
+/// (engine-selectable — Supertonic3 CoreML by default, MLX engines WIP);
+/// tests supply a mock. Voice identity travels as its preset name string.
 @MainActor
 protocol AudiobookSynthesizerType: AnyObject {
     /// Download + load the pipeline once (idempotent).
@@ -300,16 +348,27 @@ protocol AudiobookSynthesizerType: AnyObject {
     /// from its disk probe) — lets callers label "Preparing" instead of
     /// "Downloading" for warm starts.
     var isReady: Bool { get }
+    /// Synthesizes one text chunk to raw float samples.
+    ///
+    /// - Returns: mono samples and their sample rate.
+    /// - Throws: engine-specific errors (device requirements, download
+    ///   failures) — surfaced to the user by the model.
+    ///
+    /// Concept: on-device-ml → docs/concepts/on-device-ml.md
     func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int)
 }
 
-/// Audiobook mode for the book reader: on-device neural TTS (Breeze TTS 2
-/// via MLX, see BreezeTTS.swift) that reads the open book page by page through the same
-/// page-turn path as manual reading, so exiting mid-page leaves the reader
-/// exactly where listening stopped.
+/// Audiobook mode for the book reader: on-device neural TTS (engine per
+/// Settings → Read Aloud; Supertonic3 CoreML default, MLX engines WIP —
+/// see ReadAloudTTS.swift) that reads the open book page by page through
+/// the same page-turn path as manual reading, so exiting mid-page leaves
+/// the reader exactly where listening stopped.
 @Observable
 @MainActor
 final class AudiobookModel {
+    /// Pipeline phases: downloading (model fetch), loading (cached
+    /// engine warming up), playing/paused, and failed carrying the
+    /// user-facing reason.
     enum State: Equatable {
         case idle
         case downloading
@@ -319,6 +378,7 @@ final class AudiobookModel {
         case failed(String)
     }
 
+    /// Current phase; every change rewrites the QA status file.
     private(set) var state: State = .idle {
         didSet { writeStatus() }
     }
@@ -358,6 +418,7 @@ final class AudiobookModel {
             engine.rate = Self.speeds[wrapped]
         }
     }
+    /// Speed cycle (indexed by `speedIndex`).
     static let speeds: [Float] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
     /// Read-aloud volume (mixer output level); index into `volumes`. Wraps.
@@ -369,6 +430,7 @@ final class AudiobookModel {
             engine.outputVolume = Self.volumes[wrapped]
         }
     }
+    /// Volume cycle (indexed by `volumeIndex`).
     static let volumes: [Float] = [0.1, 0.25, 0.5, 0.75, 1.0]
 
     /// Voice preset; index into `voices`. Wraps.
@@ -390,18 +452,28 @@ final class AudiobookModel {
         default: return ReadAloudVoiceStore.Engine.supertonic.voices
         }
     }
+    /// Count of the selected engine's voices.
     nonisolated static var voiceCount: Int { voices.count }
+    /// Stored voice preset, persisted on change and re-validated when
+    /// the engine switches (`voices`).
     private var currentVoice: String {
         didSet { AppSettings.shared.audiobookVoice = currentVoice }
     }
 
+    /// Audio backend (injected for tests).
     private let engine: AudiobookAudioEngineType
+    /// TTS backend (injected for tests).
     private let synthesis: AudiobookSynthesizerType
+    /// Set after the first successful ensureReady — later loads are
+    /// "Preparing", never a bogus "Downloading".
     private var pipelineReady = false
+    /// The book screen's page closures (nil while stopped).
     private var provider: AudiobookPageProvider?
+    /// The running playback-loop task (cancelled by `stop`).
     private var loop: Task<Void, Never>?
-    /// Single-entry buffer cache (current segment) + the in-flight
-    /// prefetch. A page of audio is ~10 MB at 44.1 kHz float mono.
+    /// Four-entry buffer cache (playing page + prefetches; a single-entry
+    /// cache evicted the playing page). A page of audio is ~10 MB at
+    /// 44.1 kHz float mono.
     private var cache: [String: AVAudioPCMBuffer] = [:]
     /// Silent loop during synthesis windows: nothing is playing while a
     /// page is being generated, and with the screen locked iOS suspends
@@ -410,10 +482,13 @@ final class AudiobookModel {
     /// syntheses; this covers the syntheses themselves.
     private let synthKeepAlive = SilentKeepAlive()
 
+    /// Production wiring: the real engine and voice store.
     convenience init() {
         self.init(engine: AudiobookAudioEngine(), synthesis: ReadAloudVoiceStore.shared)
     }
 
+    /// Test-friendly initializer (both backends are seams); restores the
+    /// persisted voice/speed/volume onto the engine.
     init(engine: AudiobookAudioEngineType, synthesis: AudiobookSynthesizerType) {
         self.engine = engine
         self.synthesis = synthesis
@@ -427,6 +502,7 @@ final class AudiobookModel {
         }
     }
 
+    /// True while a session runs (any state but idle).
     var isActive: Bool { state != .idle }
 
     /// Current playback rate (time-pitch).
@@ -434,10 +510,12 @@ final class AudiobookModel {
 
     /// Panel labels.
     var voiceLabel: String { currentVoice }
+    /// Speed for the panel row, e.g. "1.5×".
     var speedLabel: String {
         let v = Self.speeds[min(max(speedIndex, 0), Self.speeds.count - 1)]
         return v == v.rounded() ? String(format: "%.0f×", v) : String(format: "%g×", v)
     }
+    /// Volume for the panel row, e.g. "75%".
     var volumeLabel: String {
         let v = Self.volumes[min(max(volumeIndex, 0), Self.volumes.count - 1)]
         return "\(Int((v * 100).rounded()))%"
@@ -457,6 +535,8 @@ final class AudiobookModel {
 
     // MARK: Controls
 
+    /// (Re)starts read-aloud for the open book; any prior session is
+    /// stopped first.
     func start(provider: AudiobookPageProvider) {
         stop()
         self.provider = provider
@@ -465,6 +545,7 @@ final class AudiobookModel {
         }
     }
 
+    /// Pauses or resumes the current page.
     func togglePlayPause() {
         switch state {
         case .playing:
@@ -478,6 +559,8 @@ final class AudiobookModel {
         }
     }
 
+    /// Full teardown: loop, engine, keep-alive, provider, and buffer
+    /// cache; state returns to idle.
     func stop() {
         loop?.cancel()
         engine.seekRequested = false
@@ -504,6 +587,22 @@ final class AudiobookModel {
 
     // MARK: Loop
 
+    /// The playback loop — deliberately POLL-BASED: engine.start, then
+    /// isPlaying checks every 0.5 s. No continuation ever waits on an
+    /// engine callback; lost callbacks stalled the audiobook before,
+    /// while Task.sleep always resumes.
+    ///
+    /// Per chapter: fetch page segments, start at the page the reader
+    /// shows, then per segment synthesize → play → poll. The seek flag
+    /// is cleared on the SAME tick a page starts (a stale delayed flag
+    /// from the wheel path cut pages mid-sentence). Two consecutive
+    /// idle polls (~1 s grace) end a page; a page that ends without
+    /// rendering half its audio is a dead backend and stops the book
+    /// instead of racing on. Seeks re-index to the page now showing;
+    /// normal completion prefetches ahead. Chapters advance until
+    /// stepChapter reports the book's end.
+    ///
+    /// Concept: swift-async-await → docs/concepts/swift-async-await.md
     private func runLoop() async {
         guard let provider else { return }
         state = .playing
@@ -679,6 +778,15 @@ final class AudiobookModel {
         return chunks.isEmpty ? [text] : chunks
     }
 
+    /// Synthesizes (or recalls) one page's audio. Cache hits return
+    /// immediately; misses synthesize the page's sentence chunks
+    /// sequentially and concatenate, holding the silent keep-alive so a
+    /// locked screen can't freeze generation. The cache holds FOUR
+    /// entries — the playing page must survive the next pages'
+    /// prefetches (a single entry got evicted mid-play).
+    ///
+    /// - Returns: the page's PCM buffer at the engine's sample rate.
+    /// - Throws: when no audio at all was generated.
     private func bufferFor(_ segment: AudiobookSegment, language: String) async throws -> AVAudioPCMBuffer {
         if let cached = cache[segment.text] { return cached }
         // Synthesis can take a while (first load, model warmup) and no
@@ -706,6 +814,12 @@ final class AudiobookModel {
         return buffer
     }
 
+    /// One chunk through the backend. The first call ensures the
+    /// pipeline, labeling the wait from the isReady seam (cached engine
+    /// → "Preparing voices…", uncached → "Downloading").
+    ///
+    /// - Returns: the chunk's samples and sample rate.
+    /// - Throws: engine prep/synthesis errors (user-meaningful).
     private func synthesize(_ text: String, language: String) async throws -> (samples: [Float], sampleRate: Int) {
         if !pipelineReady {
             // A cached engine must not show a bogus "Downloading" label
@@ -732,6 +846,9 @@ final class AudiobookModel {
 
     // MARK: Audio
 
+    /// Copies samples into a mono float PCM buffer at `sampleRate`.
+    ///
+    /// - Returns: a buffer sized exactly to the samples.
     static func makeBuffer(_ samples: [Float], sampleRate: Int) -> AVAudioPCMBuffer {
         let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1)!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(samples.count, 1)))!
@@ -752,6 +869,8 @@ final class AudiobookModel {
     func qaHook(text: String) async {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let status = docs.appendingPathComponent("qa_status.txt")
+        /// Writes one stage to qa_status.txt (overwrite, one line) and
+        /// logs it — device QA reads the file without a debugger.
         func stage(_ s: String) {
             FileManager.default.createFile(atPath: status.path, contents: Data(s.utf8))
             Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("STAGE \(s, privacy: .public)")

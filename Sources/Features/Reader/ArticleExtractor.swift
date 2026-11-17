@@ -6,8 +6,11 @@ import Foundation
 /// drop boilerplate containers, keep the text of paragraph-ish elements,
 /// and rebuild clean XHTML. No external dependencies.
 enum ArticleExtractor {
+    /// Failure carrying a user-presentable reason (bad URL, server error).
     struct ExtractionError: LocalizedError {
+        /// The message shown to the user.
         let message: String
+        /// Surfacing the message through LocalizedError.
         var errorDescription: String? { message }
     }
 
@@ -148,8 +151,11 @@ enum ArticleExtractor {
 
     // MARK: Helpers
 
+    /// Opening tag of a paragraph-ish element whose text is kept.
     private static let paragraphOpenPattern = "<(p|h1|h2|h3|blockquote|li)(\\s[^>]*)?>"
 
+    /// Strips all tags (each replaced by a space so adjacent words
+    /// don't glue) and collapses whitespace runs.
     private static func stripTags(_ html: String) -> String {
         html.replacingOccurrences(of: "<[^>]*>", with: " ", options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -173,6 +179,8 @@ enum ArticleExtractor {
         return out
     }
 
+    /// Removes <!-- … --> spans (comments can hide markup that would
+    /// confuse the paragraph scan).
     private static func dropComments(_ source: String) -> String {
         var out = source
         while let open = out.range(of: "<!--"), let close = out[open.upperBound...].range(of: "-->") {
@@ -181,6 +189,9 @@ enum ArticleExtractor {
         return out
     }
 
+    /// Content of the first complete <tag>…</tag> block.
+    ///
+    /// - Returns: nil when the tag is absent or never closed.
     private static func firstBlock(_ tag: String, in source: String) -> String? {
         guard let open = source.range(of: "<\(tag)", options: .caseInsensitive),
               let gt = source[open.upperBound...].range(of: ">"),
@@ -189,6 +200,13 @@ enum ArticleExtractor {
         return String(source[open.lowerBound..<close.upperBound])
     }
 
+    /// og:title / twitter:title meta first (site names pollute <title>),
+    /// then <title> itself; capped at 120 chars.
+    ///
+    /// - Returns: nil when no usable title exists (the caller then
+    ///   falls back to "Article").
+    ///
+    /// Concept: foundation → docs/concepts/foundation.md
     private static func pageTitle(in html: String) -> String? {
         // og:title / twitter:title meta tags first (cleaner than <title>).
         for (attr, name) in [("property", "og:title"), ("name", "twitter:title")] {
@@ -213,6 +231,7 @@ enum ArticleExtractor {
         return t.isEmpty ? nil : String(t.prefix(120))
     }
 
+    /// Named entity → character pairs applied by `unescape`.
     private static let namedEntities: [(String, String)] = [
         ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""),
         ("&apos;", "'"), ("&#39;", "'"), ("&nbsp;", " "), ("&mdash;", "—"),
@@ -259,6 +278,7 @@ enum ArticleExtractor {
                                            options: .regularExpression)
     }
 
+    /// Escapes &, <, > for embedding extracted text in the output XHTML.
     private static func escape(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")

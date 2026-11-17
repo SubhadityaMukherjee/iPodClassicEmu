@@ -9,8 +9,11 @@ enum PDFReflow {
     /// One reflow chapter: a page range [start, end) with a title — from
     /// the PDF's top-level outline when present, else the whole book.
     struct Span {
+        /// Outline title ("Book" when the PDF has no outline).
         let title: String
+        /// First PDF page of the span.
         let start: Int
+        /// One past the last PDF page of the span (half-open range).
         let end: Int
     }
 
@@ -47,6 +50,7 @@ enum PDFReflow {
     static func paragraphs(from lines: [String]) -> [String] {
         var out: [String] = []
         var buf: [String] = []
+        /// Emits the buffered lines as one joined paragraph.
         func flush() {
             guard !buf.isEmpty else { return }
             out.append(buf.joined(separator: " "))
@@ -75,6 +79,8 @@ enum PDFReflow {
         return String(line.dropLast()) + next
     }
 
+    /// True when the line ends with sentence-terminal punctuation or a
+    /// closing quote/bracket — treated as a paragraph break.
     private static func endsSentence(_ line: String) -> Bool {
         guard let c = line.unicodeScalars.last else { return false }
         return ".?!…:;\"”’)]".contains(Character(c))
@@ -82,6 +88,9 @@ enum PDFReflow {
 
     // MARK: HTML
 
+    /// Builds one standalone chapter document. The device-width
+    /// viewport meta matters: without it WebKit lays the page out at
+    /// 980 px and the reader's column pagination sees only a slice.
     static func html(title: String, paragraphs: [String]) -> String {
         let body = paragraphs.map { "<p>\(escapeHTML($0))</p>" }.joined(separator: "\n")
         return """
@@ -93,6 +102,7 @@ enum PDFReflow {
         """
     }
 
+    /// Escapes &, <, > so extracted text can't introduce markup.
     static func escapeHTML(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")

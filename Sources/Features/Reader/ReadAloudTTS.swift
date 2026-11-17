@@ -28,11 +28,13 @@ import os
 final class ReadAloudVoiceStore {
     static let shared = ReadAloudVoiceStore()
 
+    /// The selectable TTS engines (see the class doc for sizes/status).
     enum Engine: String, CaseIterable {
         case supertonic
         case qwen
         case breeze
 
+        /// Settings-row label; WIP markers keep expectations honest.
         var title: String {
             switch self {
             case .supertonic: return "Supertonic"
@@ -41,6 +43,7 @@ final class ReadAloudVoiceStore {
             }
         }
 
+        /// True for the MLX engines — used to keep them visually flagged.
         var isExperimental: Bool { self != .supertonic }
 
         /// MLX repo, or nil for the CoreML engine (FluidAudio manages
@@ -62,6 +65,7 @@ final class ReadAloudVoiceStore {
             }
         }
 
+        /// Download button label with the engine's approximate size.
         var downloadLabel: String {
             switch self {
             case .supertonic: return "Download Now (~400 MB)"
@@ -113,11 +117,19 @@ final class ReadAloudVoiceStore {
         ]
     }
 
+    /// Download/load lifecycle of the selected engine, mirrored into the
+    /// Settings screen and the download Live Activity.
     enum DownloadState: Equatable {
+        /// Nothing on disk and no attempt made.
         case notStarted
+        /// Weights arriving; the optional fraction (0…1) is nil when the
+        /// engine gives no measurable progress yet.
         case downloading(progress: Double?)  // nil = indeterminate
+        /// Files complete; weights being loaded/compiled into memory.
         case loading                          // weights into memory
+        /// Ready to synthesize.
         case ready
+        /// Download or load failed; the message is user-facing.
         case failed(String)
     }
 
@@ -135,9 +147,17 @@ final class ReadAloudVoiceStore {
         }
     }
 
+    /// Current engine's state. Initialized from a DISK PROBE at store
+    /// creation (not "notStarted") so an already-downloaded model never
+    /// shows a bogus "Downloading…" — the fix for warm starts being
+    /// mislabeled as downloads.
     private(set) var state: DownloadState =
         ReadAloudVoiceStore.hasCachedModel(Engine(rawValue: AppSettings.shared.readAloudEngine) ?? .supertonic) ? .ready : .notStarted
 
+    /// MLX weights live in Application Support (survives eviction) via an
+    /// explicit HubCache — the SDK default puts repos in evictable
+    /// Library/Caches, which iOS may purge under storage pressure and
+    /// silently break the engine.
     nonisolated static var mlxCacheRoot: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent("MLXAudio", isDirectory: true)
@@ -178,13 +198,22 @@ final class ReadAloudVoiceStore {
         }
     }
 
+    /// The loaded MLX model, nil until `prepare()` succeeds (supertonic
+    /// uses its own backend instead).
     private var mlxModel: (any SpeechGenerationModel)?
+    /// The loaded Supertonic backend (the default engine's object).
     private var supertonicBackend: SupertonicSynthesis?
+    /// In-flight MLX load task — awaited by concurrent `prepare()` calls
+    /// so the download happens once (single-flight).
     private var readyTask: Task<Void, Never>?
+    /// Directory-size poller driving download progress (see
+    /// `startProgressPolling`).
     private var progressTask: Task<Void, Never>?
 
+    /// Private: process-wide singleton (`ReadAloudVoiceStore.shared`).
     private init() {}
 
+    /// Voice presets of the currently selected engine.
     var voices: [String] { engine.voices }
 
     /// Download + load the selected engine once (idempotent,
@@ -267,6 +296,7 @@ final class ReadAloudVoiceStore {
         }
     }
 
+    /// Human-readable one-liner for settings/QA surfaces.
     var statusMessage: String {
         switch state {
         case .notStarted: return "Voice model not downloaded"
@@ -305,16 +335,21 @@ final class ReadAloudVoiceStore {
         }
     }
 
+    /// Cancels and clears the progress poller (success, failure, or
+    /// engine switch).
     private func stopProgressPolling() {
         progressTask?.cancel()
         progressTask = nil
     }
 
+    /// On-disk bytes of one MLX repo's cache (download-progress numerator).
     nonisolated private static func cacheBytes(repo: String) -> Int64 {
         let dir = mlxCacheRoot.appendingPathComponent("models--" + repo.replacingOccurrences(of: "/", with: "--"))
         return dirBytes(dir)
     }
 
+    /// Recursively sums file sizes under `dir` via a FileManager
+    /// enumerator (cheap metadata walk, no file reads).
     nonisolated private static func dirBytes(_ dir: URL) -> Int64 {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
@@ -361,10 +396,17 @@ final class ReadAloudVoiceStore {
 /// HF repo's duplicate `Config.json`/`config.json` pair.
 @MainActor
 final class SupertonicSynthesis {
+    /// The loaded FluidAudio manager; nil until `ensureReady()` succeeds.
     private var manager: Supertonic3Manager?
+    /// Per-voice style resources (loaded lazily at first use of a voice).
     private var styles: [String: Supertonic3VoiceStyle] = [:]
+    /// In-flight ensure task — single-flight guard for concurrent callers.
     private var readyTask: Task<Void, Error>?
 
+    /// Fetches the repo tree and builds the CoreML pipeline. Skips the
+    /// colliding `Config.json` stub and the unneeded `.mlpackage`
+    /// sources; compute units are cpuOnly on the simulator (no ANE, and
+    /// ANE-bucketed compiles can stall there) and CPU+ANE on device.
     private func downloadOnce() async throws {
         let cache = ReadAloudVoiceStore.fluidTTSRoot
         let repoDir = cache.appendingPathComponent("supertonic-3", isDirectory: true)
@@ -394,6 +436,8 @@ final class SupertonicSynthesis {
         Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("supertonic pipeline ready")
     }
 
+    /// Deletes the repo directory — used to clear half-written
+    /// downloads (stale `*.partial` staging files block the retry).
     private func purgeRepo() {
         try? FileManager.default.removeItem(
             at: ReadAloudVoiceStore.fluidTTSRoot.appendingPathComponent("supertonic-3", isDirectory: true))
@@ -420,6 +464,16 @@ final class SupertonicSynthesis {
         try await task.value
     }
 
+    /// Synthesizes PCM samples for one text chunk with a cached voice
+    /// style (first use of a voice downloads its style resource).
+    ///
+    /// - Parameters:
+    ///   - text: chunk to speak (≤ ~380 chars — see the page pipeline).
+    ///   - language: ISO code; Supertonic maps it internally.
+    ///   - voiceName: one of the M1–M5/F1–F5 presets (default M1).
+    /// - Returns: Float samples at 44.1 kHz (the vocoder's fixed rate).
+    /// - Throws: `CocoaError` when the backend was never readied, or the
+    ///   underlying synthesis error.
     func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int) {
         guard let manager else {
             throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "engine not ready"])
@@ -440,13 +494,21 @@ final class SupertonicSynthesis {
 }
 
 /// Adapter to the audiobook seam so tests keep their mock.
+///
+/// `isReady` is answered from the store's state (disk-probe-initialized),
+/// which is exactly the contract AudiobookModel needs to distinguish a
+/// warm start from a download.
 extension ReadAloudVoiceStore: AudiobookSynthesizerType {
+    /// True when the selected engine's weights are loaded and cached —
+    /// from the init-time disk probe, so warm starts never read false.
     var isReady: Bool { state == .ready }
 
+    /// Seam counterpart of `prepare()` (download + load, idempotent).
     func ensureReady() async throws {
         try await prepare()
     }
 
+    /// Seam counterpart of `synthesize(text:language:voiceName:)`.
     func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int) {
         try await synthesize(text: text, language: language, voiceName: voiceName)
     }
