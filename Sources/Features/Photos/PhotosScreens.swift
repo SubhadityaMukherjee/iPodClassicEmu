@@ -4,13 +4,20 @@ import Photos
 /// Photo gallery: 4-column grid navigated by the wheel, selected cell has a
 /// blue frame; center opens the full photo.
 struct PhotosGridScreen: View {
+    /// App-wide model from the environment: navigation (`push`/`pop`) and
+    /// the shared `photos` service.
     @Environment(AppModel.self) private var model
+    /// User settings; `moveListSelection` reads tick-speed behavior from them.
     @EnvironmentObject private var settings: AppSettings
+    /// Index of the highlighted cell; wheel ticks move it, center opens it.
     @State private var selection = 0
+    /// Photo awaiting the share sheet; non-nil presents it.
     @State private var shareImage: UIImage?
 
     private let columns = 4
 
+    /// Shows the grid when authorized (else a permission prompt) plus the
+    /// share sheet; first appear requests access, later appears reload.
     var body: some View {
         ZStack {
             if model.photos.authorized {
@@ -35,6 +42,16 @@ struct PhotosGridScreen: View {
         }
     }
 
+    /// The 4-column thumbnail grid, rendering only a moving window of rows.
+    ///
+    /// Cell side = (width − gaps) / columns. `visibleRows` rounds UP so a
+    /// partial next row peeks in at the bottom edge — the grid always
+    /// fills the screen instead of showing an empty band. `startRow` keeps
+    /// the selected row `visibleRows − 4` rows below the window's top
+    /// (look-ahead below the selection), clamped to 0…(rows − visibleRows)
+    /// so short libraries pin to the top and never scroll past the end.
+    /// Windowing is the point: only visible cells exist, so only their
+    /// thumbnails decode — a huge library stays cheap.
     private var grid: some View {
         GeometryReader { geo in
             let cell = (geo.size.width - 5) / CGFloat(columns)
@@ -71,6 +88,11 @@ struct PhotosGridScreen: View {
         }
     }
 
+    /// Wheel input for the grid: ticks move the selection (honoring the
+    /// adaptive tick settings), center opens the selected photo,
+    /// hold-center loads it full-size and shares it (with a confirm
+    /// haptic), MENU pops the screen.
+    /// - Parameter event: The control event delivered by the click wheel.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -100,14 +122,26 @@ struct PhotosGridScreen: View {
 
 /// One thumbnail cell with blue selection frame.
 private struct PhotoCell: View {
+    /// App model from the environment; provides the shared photo service.
     @Environment(AppModel.self) private var model
+    /// Display pixel density (2x/3x). Cells request thumbnails at
+    /// cellSize * displayScale — real pixels, not points — because a
+    /// lower-resolution bitmap scaled up to fill the cell renders soft.
     @Environment(\.displayScale) private var displayScale
+    /// The photo for this cell; nil for the empty grey cells that pad a
+    /// partial last row.
     let asset: PHAsset?
+    /// True when this cell is the wheel-selected one (blue frame).
     let selected: Bool
+    /// Cell side in points; the decode multiplies it by `displayScale`.
     let cellSize: CGFloat
 
+    /// The decoded thumbnail; nil renders the grey placeholder until the
+    /// final bitmap lands in the model's cache.
     @State private var image: UIImage?
 
+    /// Square aspect-filled thumbnail (or placeholder) with the blue
+    /// selection frame; starts the decode on appear.
     var body: some View {
         ZStack {
             Color(white: 0.88)
@@ -147,28 +181,54 @@ private struct PhotoCell: View {
 /// Full-screen photo with prev/next navigation, pinch/drag zoom, and
 /// hold-center share.
 struct PhotoDetailScreen: View {
+    /// App-wide model from the environment: navigation and the shared
+    /// `photos` service.
     @Environment(AppModel.self) private var model
+    /// User settings; `moveListSelection` reads tick-speed behavior from them.
     @EnvironmentObject private var settings: AppSettings
+    /// The photo to open first — the payload of `Route.photoDetail(index)`.
     let index: Int
 
     // Initialized from `index`, NOT 0 — a fresh screen must start decoding
     // the photo that was clicked. Starting at 0 raced: the cancelled
     // photo-0 load could land after the real one and overwrite it (the
     // "opened the first photo" bug).
+    /// The photo currently shown; seeded from `index` by `init(index:)`.
     @State private var selection: Int
+    /// The fully decoded photo; nil shows the progress spinner.
     @State private var image: UIImage?
+    /// Photo awaiting the share sheet; non-nil presents it.
     @State private var shareImage: UIImage?
 
     // Pinch zoom / pan
+    /// Current zoom factor (1…6); values ≤1.04 read as "not zoomed" —
+    /// the photo springs back to 1 and panning is disabled.
     @State private var scale: CGFloat = 1
+    /// Zoom captured when the current pinch began; the gesture ratio
+    /// multiplies it, so a second pinch continues from the live zoom
+    /// instead of restarting at 1.
     @State private var baseScale: CGFloat = 1
+    /// Pan translation while zoomed; reset to center when zoom returns to 1.
     @State private var offset: CGSize = .zero
 
+    /// Creates the detail screen showing photo `index`.
+    ///
+    /// `selection` must be seeded through `State(initialValue:)` rather
+    /// than left at a default: ScreenRouter gives each route VALUE its
+    /// own view identity, so opening a different photo builds a fresh
+    /// screen whose `@State` runs this initializer. With a default of 0
+    /// every fresh screen started on photo 0, and that superseded decode
+    /// could land after the real one and overwrite it — the "opened the
+    /// first photo" bug.
+    /// - Parameter index: Index of the tapped photo in grid order.
+    /// Concept: @State and view identity → docs/concepts/swiftui-views-and-state.md
     init(index: Int) {
         self.index = index
         _selection = State(initialValue: index)
     }
 
+    /// The photo with pinch-zoom and pan (or a spinner while decoding),
+    /// the zoom hint capsule, and the share sheet; wheel drives `handle`.
     var body: some View {
         ZStack {
             Color.black
@@ -235,6 +295,15 @@ struct PhotoDetailScreen: View {
         }
     }
 
+    /// Decodes the selected photo full-size and installs it; the caller
+    /// (`.task(id: selection)`) then resets zoom for the new photo.
+    ///
+    /// `requested` snapshots `selection` BEFORE the await and the result
+    /// is dropped unless it still matches and the task wasn't cancelled:
+    /// PHImageManager ignores Swift task cancellation, so a decode
+    /// superseded by a quick wheel step still resumes — without the
+    /// guard it would install the photo that just scrolled off screen.
+    /// Concept: async/await and cancellation → docs/concepts/swift-async-await.md
     private func load() async {
         guard let asset = model.photos.asset(at: selection) else { return }
         // PHImageManager ignores task cancellation: a superseded load still
@@ -245,6 +314,11 @@ struct PhotoDetailScreen: View {
         image = loaded
     }
 
+    /// Wheel input for the detail view: ticks move to the neighboring
+    /// photo (`.task(id: selection)` reloads it and resets zoom),
+    /// hold-center shares the shown photo (with a haptic), MENU pops.
+    /// `.select` and `.playPause` are deliberately inert here.
+    /// - Parameter event: The control event delivered by the click wheel.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):

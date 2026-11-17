@@ -5,24 +5,42 @@ import UIKit
 /// Camera: live preview inside the screen, wheel zoom, prev/next cycles the
 /// aspect ratio, hold flips the lens, center captures, MENU opens options.
 struct CameraScreen: View {
+    /// App-wide model from the environment: navigation, wheel input, and
+    /// the `camera` + `photos` services.
     @Environment(AppModel.self) private var model
+    /// Persisted camera preferences (flash, aspect ratio, lens) and tick
+    /// behavior for the options list.
     @EnvironmentObject private var settings: AppSettings
 
+    /// Whether the Camera Options modal is showing (MENU toggles it).
     @State private var optionsOpen = false
+    /// Highlighted row in the options panel; wheel ticks move it.
     @State private var optionsSelection = 0
+    /// Drives the brief white full-screen flash on capture.
     @State private var flashOverlay = false
+    /// Shows the "Saved…" toast; auto-hides after ~1.2–1.4 s.
     @State private var savedOverlay = false
+    /// Timestamp of the last MENU press; a second press within 0.65 s
+    /// exits the camera instead of toggling options.
     @State private var lastMenuTap = Date.distantPast
+    /// Toast text ("Saved to Photos", "Video saved", …); empty falls back
+    /// to the default "Saved to Photos" label.
     @State private var recordToast = ""
     /// Last lens flip. `.prevHold`/`.nextHold` REPEAT every ~0.18s while
     /// held (the track-scrub repeat) — flipping on each repeat toggles the
     /// lens back and forth, so only one flip lands per hold.
     @State private var lastFlipAt = Date.distantPast
 
+    /// The active aspect ratio (display label + width/height) resolved
+    /// from the persisted index, clamped so a stale stored index can't
+    /// fall outside the list.
     private var aspect: (label: String, value: CGFloat) {
         AppSettings.aspectRatios[min(settings.cameraAspectIndex, AppSettings.aspectRatios.count - 1)]
     }
 
+    /// The aspect-cropped, effect-tinted live preview (or the no-camera
+    /// prompt) with the status/hint overlay and flash, toast, and options
+    /// layers on top; claims the camera on appear and releases it on exit.
     var body: some View {
         ZStack {
             if model.camera.deviceAvailable {
@@ -130,6 +148,10 @@ struct CameraScreen: View {
         .allowsHitTesting(false)
     }
 
+    /// One "key · action" hint pair in the bottom control bar.
+    /// - Parameters:
+    ///   - key: The button label (e.g. "MENU").
+    ///   - action: What it does (e.g. "Options").
     private func hint(_ key: String, _ action: String) -> some View {
         HStack(spacing: 3) {
             Text(key)
@@ -140,10 +162,15 @@ struct CameraScreen: View {
         .foregroundStyle(Color.white.opacity(0.92))
     }
 
+    /// Flash choices in cycling order: display label paired with the
+    /// matching AVCaptureDevice.FlashMode.
     private var flashModes: [(String, AVCaptureDevice.FlashMode)] {
         [("Off", .off), ("On", .on), ("Auto", .auto)]
     }
 
+    /// The options-panel rows; details and ✓ marks re-derive from live
+    /// settings/model state on every render, so cycling a value in
+    /// `activateOption` updates the panel with no manual bookkeeping.
     private var optionsItems: [MenuItem] {
         [
             MenuItem(id: "flash", title: "Flash", detail: flashModes[min(settings.cameraFlash, 2)].0, showsChevron: false),
@@ -155,6 +182,7 @@ struct CameraScreen: View {
         ]
     }
 
+    /// The modal options list over the preview, navigated with the wheel.
     private var optionsPanel: some View {
         ModalPanel(title: "Camera Options", onClose: { optionsOpen = false }) {
             VStack(spacing: 0) {
@@ -169,6 +197,18 @@ struct CameraScreen: View {
 
     // MARK: Input
 
+    /// Routes every wheel/button event for the camera screen.
+    ///
+    /// While the options panel is open, ticks and center drive the panel
+    /// instead of zoom/capture. Single MENU toggles options; a second MENU
+    /// within 0.65 s exits; MENU-hold goes home. prev/next cycle the
+    /// aspect ratio. prevHold/nextHold flip the lens, RATE-LIMITED to one
+    /// flip per hold: hold events repeat every ~0.18 s while the button
+    /// stays down, and an unthrottled handler toggled the lens back and
+    /// forth within a single hold. This screen also claims the transport
+    /// buttons via `model.transportClaimedByScreen` on appear, so
+    /// prev/next/play/pause arrive here instead of controlling music.
+    /// - Parameter event: The control event delivered by the click wheel.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -224,6 +264,9 @@ struct CameraScreen: View {
         }
     }
 
+    /// Applies the highlighted options row: Flash and Photo Effect cycle
+    /// through their values, Mode toggles photo/video, the lens rows
+    /// switch cameras (✓ marks the active one), Aspect Ratio cycles.
     private func activateOption() {
         let id = optionsItems[min(optionsSelection, optionsItems.count - 1)].id
         switch id {
@@ -246,6 +289,9 @@ struct CameraScreen: View {
         }
     }
 
+    /// Center press in video mode: stops an in-flight recording, or starts
+    /// one — the completion callback reports "Video saved" or "Recording
+    /// Failed" as a toast and auto-hides it.
     private func toggleRecording() {
         if model.camera.isRecording {
             model.camera.stopRecording()
@@ -262,6 +308,13 @@ struct CameraScreen: View {
         }
     }
 
+    /// Center press in photo mode: the full capture pipeline.
+    ///
+    /// Plays the flash blink, captures, center-crops to the active aspect
+    /// ratio, bakes in the selected photo effect, saves to the library,
+    /// and toasts the result. A failed save (typically a missing
+    /// photo-add permission) is silent — the shot isn't kept anywhere
+    /// else, so it is lost.
     private func capturePhoto() {
         let flash = flashModes[min(settings.cameraFlash, 2)].1
         withAnimation(.easeOut(duration: 0.06)) { flashOverlay = true }
@@ -289,13 +342,29 @@ struct CameraScreen: View {
 
 /// AVCaptureVideoPreviewLayer host; sized by the parent to the aspect ratio.
 private struct CameraSessionPreview: UIViewRepresentable {
+    /// The capture session to render — the app's single camera session.
     let session: AVCaptureSession
 
+    /// UIKit view whose backing layer IS the video preview layer.
+    /// Overriding `layerClass` (rather than adding the preview layer as a
+    /// sublayer) lets the video resize automatically with the view and
+    /// skips a layer of compositing — the standard UIKit pattern for
+    /// layer-backed views.
+    /// Concept: AVCaptureVideoPreviewLayer → docs/concepts/avfoundation-camera.md
     final class PreviewView: UIView {
+        /// Makes UIKit back every PreviewView with a video preview layer
+        /// instead of the default plain CALayer.
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+        /// The backing layer cast back to its concrete type for session
+        /// and video-gravity access.
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
     }
 
+    /// Creates the preview view once: attaches the session and fills the
+    /// bounds with video (cropping overflow rather than letterboxing).
+    /// - Parameter context: SwiftUI context (unused).
+    /// - Returns: The configured preview view.
+    /// Concept: UIViewRepresentable → docs/concepts/uiviewrepresentable.md
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.session = session
@@ -304,5 +373,6 @@ private struct CameraSessionPreview: UIViewRepresentable {
         return view
     }
 
+    /// No-op: the session is attached once at creation and never changes.
     func updateUIView(_ uiView: PreviewView, context: Context) {}
 }

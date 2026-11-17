@@ -9,19 +9,47 @@ import Photos
 /// on a serial queue.
 @Observable
 final class CameraModel: NSObject {
+    /// The shared capture session: the active lens is its input, the
+    /// photo/movie outputs hang off it, and the preview layer renders it.
+    /// All touching of it goes through `sessionQueue`.
+    /// Concept: AVCaptureSession → docs/concepts/avfoundation-camera.md
     let session = AVCaptureSession()
 
+    /// Still-photo output used by `capture(flashMode:)`.
     private let photoOutput = AVCapturePhotoOutput()
+    /// Video output; records to a temporary .mov and is attached to the
+    /// session only while video mode is on (the preset swaps with it).
     private let movieOutput = AVCaptureMovieFileOutput()
+    /// Serial queue owning ALL session work: configuration, start/stop,
+    /// zoom, and capture setup. Two reasons to serialize: AVCaptureSession
+    /// is not thread-safe, and `startRunning()` blocks for a long time —
+    /// funneling everything through one queue keeps both off the main
+    /// thread while guaranteeing configure → start ordering.
+    /// Concept: serial DispatchQueue → docs/concepts/dispatch-queues.md
     private let sessionQueue = DispatchQueue(label: "camera.session")
+    /// The current lens's input; removed and replaced when the lens flips.
     private var videoInput: AVCaptureDeviceInput?
+    /// Resume closure for the in-flight still capture. It is stored on
+    /// the model (AVCapturePhotoSettings can't carry context through the
+    /// delegate), set on the session queue, and consumed exactly once by
+    /// the photo delegate — on main.
     private var captureCompletion: ((UIImage?) -> Void)?
+    /// Callback stashed by `startRecording`; fired exactly once by the
+    /// file delegate when the clip finishes (Bool = saved successfully).
     private var recordingCompletion: ((Bool) -> Void)?
 
+    /// True once `configureSession` has succeeded; `configureIfNeeded`
+    /// uses it to run first-time setup exactly once.
     private(set) var configured = false
+    /// True when the front (selfie) lens is the active input.
     private(set) var isFront = false
+    /// Current zoom factor, 1…maxZoom; wheel steps it via `bumpZoom`.
     private(set) var zoom: CGFloat = 1
+    /// Zoom ceiling from the active format's `videoMaxZoomFactor`, capped
+    /// at 16; recomputed on reconfigure because lenses differ.
     private(set) var maxZoom: CGFloat = 8
+    /// The most recent captured still, published for review UIs; set on
+    /// main by the photo delegate.
     private(set) var lastImage: UIImage?
     /// No camera hardware (e.g. Simulator).
     private(set) var deviceAvailable = true
@@ -32,8 +60,12 @@ final class CameraModel: NSObject {
     /// Photos: effects are applied to the saved image; video saves clean.
     var effect: CameraEffect = .none
 
+    /// 1 s ticker behind `recordingSeconds`. Scheduled on the main run
+    /// loop because the session queue has no run loop; invalidated on stop.
     private var recordTimer: Timer?
 
+    /// First-time setup: configures the back lens once on the session
+    /// queue; a no-op after that, so it is safe to call on every appear.
     func configureIfNeeded() {
         sessionQueue.async { [weak self] in
             guard let self, !self.configured else { return }
@@ -41,6 +73,9 @@ final class CameraModel: NSObject {
         }
     }
 
+    /// Starts the session on the session queue. `startRunning()` blocks
+    /// until the pipeline is up — keeping it off the main thread is half
+    /// of what `sessionQueue` exists for.
     func start() {
         sessionQueue.async { [weak self] in
             guard let self, self.configured, !self.session.isRunning else { return }
@@ -48,6 +83,8 @@ final class CameraModel: NSObject {
         }
     }
 
+    /// Stops the session off-main when the screen disappears, releasing
+    /// the camera so other apps can claim it.
     func stop() {
         sessionQueue.async { [weak self] in
             guard let self, self.session.isRunning else { return }
@@ -57,6 +94,12 @@ final class CameraModel: NSObject {
 
     // MARK: Setup
 
+    /// Picks the camera for one side, preferring the most capable
+    /// hardware: DiscoverySession returns matches in `deviceTypes` order,
+    /// so `.first` yields Triple → Dual → DualWide → plain WideAngle,
+    /// whichever exists first.
+    /// - Parameter front: True for the selfie camera.
+    /// - Returns: The best device at that position, or nil (Simulator).
     private func bestDevice(front: Bool) -> AVCaptureDevice? {
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInTripleCamera],
@@ -65,6 +108,20 @@ final class CameraModel: NSObject {
         return discovery.devices.first
     }
 
+    /// Rebuilds the session for a lens flip or mode switch. Must already
+    /// run on `sessionQueue` — every caller hops there first.
+    ///
+    /// `beginConfiguration`/`commitConfiguration` bracket the swap so the
+    /// preview doesn't tear while inputs and outputs churn. The preset
+    /// follows the mode (.photo for stills, .high for video); the old
+    /// lens input is removed and the new one added; the movie output is
+    /// attached only in video mode. Zoom resets to 1 (a new lens must
+    /// not inherit the old factor) and `maxZoom` comes from the new
+    /// device, capped at 16. With no camera hardware (Simulator) the
+    /// method bails out early and leaves `deviceAvailable` false, which
+    /// the screen turns into a friendly prompt instead of a crash.
+    /// - Parameter isFront: True to build around the selfie lens.
+    /// Concept: session configuration → docs/concepts/avfoundation-camera.md
     private func configureSession(isFront: Bool) {
         session.beginConfiguration()
         defer { session.commitConfiguration() }
@@ -124,6 +181,11 @@ final class CameraModel: NSObject {
 
     // MARK: Zoom
 
+    /// Steps zoom multiplicatively — ×1.10 per detent in, ÷1.10 out —
+    /// clamped to 1…maxZoom, and applies it to the hardware under
+    /// `lockForConfiguration` (the required handshake for changing
+    /// videoZoomFactor). Runs on the session queue.
+    /// - Parameter direction: +1 zooms in, -1 zooms out.
     func bumpZoom(_ direction: Int) {
         sessionQueue.async { [weak self] in
             guard let self, let device = self.videoInput?.device else { return }
@@ -139,6 +201,16 @@ final class CameraModel: NSObject {
 
     // MARK: Capture
 
+    /// Captures one still photo and awaits the decoded image.
+    ///
+    /// Bridges AVFoundation's delegate-based API into async/await with a
+    /// checked continuation: the resume closure is parked in
+    /// `captureCompletion`, the shot is taken, and the delegate resumes
+    /// the continuation exactly once (nil on failure) — so the await can
+    /// neither hang nor double-resume.
+    /// - Parameter flashMode: Flash setting for this shot.
+    /// - Returns: The captured image, or nil if capture or decoding failed.
+    /// Concept: withCheckedContinuation → docs/concepts/swift-async-await.md
     func capture(flashMode: AVCaptureDevice.FlashMode) async -> UIImage? {
         await withCheckedContinuation { (continuation: CheckedContinuation<UIImage?, Never>) in
             sessionQueue.async { [weak self] in
@@ -178,12 +250,17 @@ final class CameraModel: NSObject {
         }
     }
 
+    /// Stops an in-flight recording by hopping to the session queue; the
+    /// file delegate saves the clip and fires the completion.
     func stopRecording() {
         sessionQueue.async { [weak self] in
             self?.stopRecordingInternal()
         }
     }
 
+    /// Stop path that already runs on `sessionQueue`: invalidate the
+    /// elapsed timer, then hand off to `movieOutput.stopRecording()` —
+    /// the delegate callback finishes the sequence.
     private func stopRecordingInternal() {
         guard isRecording else { return }
         recordTimer?.invalidate()
@@ -209,6 +286,7 @@ enum CameraEffect: String, CaseIterable {
         default: return 1
         }
     }
+    /// Preview hue-rotation degrees for the Warm (-18) / Cool (22) looks.
     var hueRotation: Double {
         switch self {
         case .warm: return -18
@@ -216,6 +294,9 @@ enum CameraEffect: String, CaseIterable {
         default: return 0
         }
     }
+    /// Translucent tint laid over the preview to fake Sepia/Warm/Cool
+    /// (the matching CoreImage filter runs only on capture); nil when
+    /// the effect needs no overlay.
     var overlayColor: Color? {
         switch self {
         case .sepia: return Color(red: 0.98, green: 0.85, blue: 0.6).opacity(0.18)
@@ -246,7 +327,16 @@ enum CameraEffect: String, CaseIterable {
     }
 }
 
+/// Movie-recording completion: clears recording state, saves the clip to
+/// the camera roll, and resolves the pending `startRecording` callback.
 extension CameraModel: AVCaptureFileOutputRecordingDelegate {
+    /// Called by AVFoundation (on its own queue) once the .mov is sealed:
+    /// success is derived from the error, a good clip goes to the photo
+    /// album, and the stored completion fires on main because SwiftUI
+    /// state and UI work must happen there.
+    /// - Parameters:
+    ///   - outputFileURL: The finished temporary recording.
+    ///   - error: Non-nil when recording failed; the file is discarded.
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
         isRecording = false
         let completion = recordingCompletion
@@ -259,7 +349,13 @@ extension CameraModel: AVCaptureFileOutputRecordingDelegate {
     }
 }
 
+/// Still-capture completion: decodes the photo and resolves the pending
+/// `capture(flashMode:)` continuation.
 extension CameraModel: AVCapturePhotoCaptureDelegate {
+    /// Called by AVFoundation when the shot is processed. Extracts the
+    /// image bytes (`fileDataRepresentation` → data → UIImage), publishes
+    /// `lastImage`, and resumes the parked continuation on main — or
+    /// resumes it with nil on any failure so the caller never hangs.
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         let completion = captureCompletion
         captureCompletion = nil
@@ -276,6 +372,8 @@ extension CameraModel: AVCapturePhotoCaptureDelegate {
     }
 }
 
+/// Namespace for capture post-processing helpers — static only, never
+/// instantiated (a case-less enum is Swift's idiom for namespacing).
 enum CameraCapture {
     /// Center-crops a captured image to an aspect ratio (w/h).
     static func crop(_ image: UIImage, toRatio ratio: CGFloat) -> UIImage {
