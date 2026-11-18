@@ -640,7 +640,12 @@ final class AudiobookModel {
         let begin = await provider.currentPage()
         provider.showPage(begin)
         while !Task.isCancelled {
-            let segments = await provider.segments()
+            // Sentence-aligned BEFORE use: a sentence straddling a page
+            // boundary is spoken in full with the page it starts on (and
+            // dropped from the next) — otherwise each segment boundary
+            // mid-sentence gets end-of-sentence intonation + a gap +
+            // fresh intonation ("was <break> overwhelmed").
+            let segments = Self.sentenceAligned(await provider.segments())
             Logger(subsystem: "com.ipodclassic.app", category: "tts")
                 .notice("segments: \(segments.count, privacy: .public)")
             let total = segments.reduce(0) { $0 + $1.text.count }
@@ -784,6 +789,46 @@ final class AudiobookModel {
             if !moved { break }
         }
         if state == .playing || state == .paused { state = .idle }
+    }
+
+    /// Moves sentences that straddle a SEGMENT (page) boundary wholly
+    /// into the segment where they START: page buckets cut sentences at
+    /// arbitrary words, and each segment is synthesized independently —
+    /// a mid-sentence segment edge sounds like the voice finishing a
+    /// sentence ("was ⏸ overwhelmed by tree-trunks"). A straddling tail
+    /// joins the first sentence of the NEXT segment, and that sentence
+    /// is removed from it. Idempotent: aligned segments end on
+    /// terminators and are left untouched.
+    static func sentenceAligned(_ segments: [AudiobookSegment]) -> [AudiobookSegment] {
+        guard segments.count > 1 else { return segments }
+        var texts = segments.map(\.text)
+        func endsSentence(_ s: String) -> Bool {
+            let closers = CharacterSet(charactersIn: "\"'”’)]").union(.whitespacesAndNewlines)
+            let trimmed = s.trimmingCharacters(in: closers)
+            return trimmed.last.map { ".!?…".contains($0) } ?? true
+        }
+        for i in texts.indices.dropLast() {
+            guard !texts[i].isEmpty, !endsSentence(texts[i]) else { continue }
+            var next = texts[i + 1]
+            guard !next.isEmpty else { continue }
+            // The next segment's FIRST sentence (tokenizer: it won't cut
+            // at "Mr." etc.); if even that lacks a terminator, take it
+            // whole — the following boundary pass handles the rest.
+            var cut = next.endIndex
+            let tok = NLTokenizer(unit: .sentence)
+            tok.string = next
+            if let first = tok.tokens(for: next.startIndex..<next.endIndex).first {
+                cut = first.upperBound
+            }
+            let moved = next[..<cut].trimmingCharacters(in: .whitespacesAndNewlines)
+            next = String(next[cut...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !moved.isEmpty else { continue }
+            texts[i] = texts[i] + " " + moved
+            texts[i + 1] = next
+        }
+        return zip(segments, texts).compactMap { seg, text in
+            text.isEmpty ? nil : AudiobookSegment(page: seg.page, text: text)
+        }
     }
 
     /// Begin synthesizing the NEXT pages in the background while the

@@ -397,6 +397,48 @@ final class AudiobookModelTests: XCTestCase {
         model.stop()
     }
 
+    /// Straddling sentences move wholly into the segment where they
+    /// start — page buckets must not cut sentences into separate
+    /// syntheses ("was <break> overwhelmed").
+    func testSentenceAlignedMovesStraddlers() {
+        let segs = [
+            AudiobookSegment(page: 0, text: "When once he descended was"),
+            AudiobookSegment(page: 1, text: "overwhelmed by tree-trunks. Whilst assisting them he was beguiled by"),
+            AudiobookSegment(page: 2, text: "them. Later the story continues. And ends."),
+        ]
+        let out = AudiobookModel.sentenceAligned(segs)
+        XCTAssertEqual(out.count, 3)
+        XCTAssertEqual(out[0].text, "When once he descended was overwhelmed by tree-trunks.")
+        XCTAssertEqual(out[1].text, "Whilst assisting them he was beguiled by them.")
+        XCTAssertEqual(out[2].text, "Later the story continues. And ends.")
+        // No mid-sentence segment tails except possibly the last.
+        for seg in out.dropLast() {
+            XCTAssertTrue(seg.text.hasSuffix("."), "segment ended mid-sentence: \(seg.text.suffix(30))")
+        }
+    }
+
+    /// Already sentence-aligned segments pass through unchanged.
+    func testSentenceAlignedIsNoOpForCleanBoundaries() {
+        let segs = [
+            AudiobookSegment(page: 0, text: "First full sentence."),
+            AudiobookSegment(page: 1, text: "Second full sentence."),
+        ]
+        XCTAssertEqual(AudiobookModel.sentenceAligned(segs).map(\.text), segs.map(\.text))
+    }
+
+    /// A segment that empties out (everything moved to its predecessor)
+    /// is dropped, not spoken as a silent page.
+    func testSentenceAlignedDropsEmptiedSegments() {
+        let segs = [
+            AudiobookSegment(page: 0, text: "A sentence that runs over the page"),
+            AudiobookSegment(page: 1, text: "edge entirely."),
+            AudiobookSegment(page: 2, text: "Next page starts here."),
+        ]
+        let out = AudiobookModel.sentenceAligned(segs)
+        XCTAssertEqual(out.map(\.page), [0, 2])
+        XCTAssertEqual(out[0].text, "A sentence that runs over the page edge entirely.")
+    }
+
     // MARK: Language heuristic
 
     func testLanguageDetection() {        let english = "The quick brown fox jumps over the lazy dog and then rests with his friends in the shade of the old tree."
