@@ -98,10 +98,28 @@ struct AlarmScreen: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.red.opacity(0.85))
                     .padding(.bottom, 6)
+            } else if alarm.enabled, let warning = alarm.deliveryWarning {
+                // Scheduled fine, but iOS settings will deliver it silently
+                // (Sounds toggle off, or Time Sensitive denied so Focus
+                // modes win). The "banner arrives, nothing rings" state —
+                // named, not hidden.
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Text(warning)
+                        .font(Theme.font(11, .semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.orange)
+                        .underline()
+                        .padding(.bottom, 6)
+                }
             }
             // QA hook: pending-request readout for the reschedule E2E.
             if ProcessInfo.processInfo.environment["ALARM_DEBUG"] == "1" {
-                Text("QA pending: \(alarm.pendingAlarmCount.map(String.init) ?? "?")")
+                Text("QA pending: \(alarm.pendingAlarmCount.map(String.init) ?? "?")"
+                     + (alarm.nextFireText.map { " · next \($0)" } ?? ""))
                     .font(Theme.font(10, .medium))
                     .foregroundStyle(Theme.inkDim)
             }

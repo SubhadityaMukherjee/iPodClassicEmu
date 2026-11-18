@@ -370,12 +370,13 @@ final class E2ETests: XCTestCase {
         let wheelEl = wheel(app)
         app.tap() // lets XCUI evaluate the notification prompt
 
-        // Authorized + scheduled: the daily request is pending.
+        // Authorized + scheduled: the daily rule's occurrence window is
+        // pending (seven one-shot occurrences under the window model).
         let pendingOne = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "QA pending: 1")
+            NSPredicate(format: "label BEGINSWITH %@", "QA pending: 7")
         ).firstMatch
         XCTAssertTrue(pendingOne.waitForExistence(timeout: 10),
-                      "arming the alarm did not install the daily request (no prompt granted?)")
+                      "arming the alarm did not install the occurrence window (no prompt granted?)")
 
         // Background the app: keep-alive starts; the alarm minute passes.
         XCUIDevice.shared.press(.home)
@@ -393,11 +394,18 @@ final class E2ETests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Snooze"].waitForNonExistence(timeout: 5),
                       "ringer did not dismiss")
 
-        // THE regression: after the fire + dismissal, the daily request
-        // must be pending again (checkFire re-schedules; RingerManager.stop
-        // re-schedules; the foreground heal re-schedules — at least one
-        // must have landed).
-        XCTAssertTrue(pendingOne.waitForExistence(timeout: 10),
+        // THE regression: after the fire + dismissal, occurrences must
+        // still be pending (the fired one consumed only itself; re-arm
+        // and the foreground heal both reinstall the window — the count
+        // is 6 or 7 depending on which landed first, never 0).
+        let pendingAfter = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "QA pending: ")
+        ).firstMatch
+        XCTAssertTrue(pendingAfter.waitForExistence(timeout: 10),
                       "alarm schedule did not survive the backgrounded fire — this is the silent-death bug")
+        let digits = pendingAfter.label.dropFirst("QA pending: ".count).prefix { $0.isNumber }
+        let count = Int(digits) ?? 0
+        XCTAssertGreaterThanOrEqual(count, 6,
+                                    "window shrunk to \(count) after the fire (expected 6–7)")
     }
 }

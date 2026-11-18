@@ -3,7 +3,38 @@ import AVFoundation
 import UserNotifications
 
 /// The single classic alarm (hour/minute/AM-PM/enabled), persisted and
-/// delivered via repeating local notifications.
+/// delivered via local notifications.
+///
+/// SCHEDULING MODEL (reference-implementation rewrite, 2026-11-18): the
+/// alarm schedules the NEXT SEVEN OCCURRENCES as individual
+/// NON-repeating, fully-specified `UNCalendarNotificationTrigger`s —
+/// a sliding window, refreshed idempotently on every launch/foreground.
+/// This is the pattern used by production alarm apps ("Local
+/// notifications: the 100% delivery myth", "Building Wake Me Smarter",
+/// adaptive-alarms guides) because repeating triggers carry two traps
+/// this codebase lived through:
+///
+/// - Removing a repeating pending request kills EVERY future occurrence
+///   (no per-occurrence removal) — the original "alarm says on but never
+///   rings again" bug. One-shot occurrences make that invariant moot.
+/// - Cancel-then-add of the same identifier races inside the
+///   notification daemon: the remove can land AFTER the add and silently
+///   delete the fresh request. Occurrences use deterministic per-date
+///   ids, and reconciliation only removes ids that are NOT wanted, so
+///   remove and add never target the same identifier in one pass.
+///
+/// Reconciliation treats the OS's pending list as the source of truth
+/// ("your model only says what should be" — Wake Me Smarter): read what
+/// is pending, remove stale `alarm.`-prefixed entries, add missing
+/// occurrences, then VERIFY by re-reading and repair once if the system
+/// dropped one.
+///
+/// DELIVERY DIAGNOSTICS: a banner that arrives silently is a real
+/// failure mode this app has shipped (Sleep Focus, per-app Sounds off,
+/// Time Sensitive denied). The verify pass also reads
+/// `soundSetting`/`timeSensitiveSetting` and publishes
+/// `deliveryWarning` so the alarm screen can say WHY the phone may stay
+/// quiet even though everything is scheduled.
 final class AlarmStore: ObservableObject {
     /// Process-wide singleton: the app, the notification delegate and the
     /// ringer all mutate ONE alarm, so exactly one instance owns the
@@ -15,7 +46,7 @@ final class AlarmStore: ObservableObject {
     /// what is actually scheduled to ring.
     @Published var enabled: Bool { didSet { persist(); if enabled { schedule() } else { cancel() } } }
     /// Alarm hour in 1–12 form (classic clock face). Persisted; any edit
-    /// re-schedules the repeating requests while the alarm is armed.
+    /// re-schedules the occurrence window while the alarm is armed.
     @Published var hour: Int { didSet { persist(); if enabled { schedule() } } }       // 1…12
     /// Alarm minute, 0–59. Persisted; any edit re-schedules while armed.
     @Published var minute: Int { didSet { persist(); if enabled { schedule() } } }     // 0…59
@@ -31,6 +62,18 @@ final class AlarmStore: ObservableObject {
     /// Published so the alarm screen can warn when the alarm is "on" but
     /// nothing is actually scheduled to ring — the silent-death state.
     @Published private(set) var pendingAlarmCount: Int?
+    /// Non-nil when iOS settings will deliver the alarm SILENTLY (Sounds
+    /// toggle off, or Time Sensitive denied so Focus modes win). Read in
+    /// the verify pass and surfaced on the alarm screen — "the banner
+    /// comes but nothing rings" must be diagnosable in-app.
+    @Published private(set) var deliveryWarning: String?
+    /// Next scheduled occurrence for the QA readout / diagnostics.
+    @Published private(set) var nextFireText: String?
+
+    /// How many upcoming occurrences the window schedules. Seven: one per
+    /// possible weekday, so even a week without launching the app leaves
+    /// later days armed, while staying far under iOS's 64-pending cap.
+    static let windowSize = 7
 
     private let d = UserDefaults.standard
     /// UserDefaults keys for the five persisted alarm fields.
@@ -48,14 +91,24 @@ final class AlarmStore: ObservableObject {
     }
 
     /// The persisted store is the single source of truth for system
-    /// notifications. Rebuilds them on every launch: cancels ALL alarm
-    /// identifiers first, then reschedules only when armed. This heals
-    /// ghosts — RESET_DEFAULTS (QA launches) clears the persisted state
-    /// but NOT the notification center, so a stale repeating trigger
-    /// would otherwise ring daily forever with nothing armed.
+    /// notifications. Rebuilds them on every launch and foreground pass:
+    /// sweeps stale `alarm.`-prefixed requests, then re-installs the
+    /// occurrence window when armed. This heals ghosts (RESET_DEFAULTS
+    /// QA launches clear the persisted state but NOT the notification
+    /// center) and repairs windows the system dropped.
+    ///
+    /// Fire-and-forget wrapper for existing sync call sites; tests and
+    /// anything needing completion use `reconcileAsync()`.
     func reconcile() {
-        cancel()
-        if enabled { schedule() }
+        _ = scheduleMaintenance { await self.reconcileBody() }
+    }
+
+    /// Async reconciliation body: cancel-everything when disabled, else
+    /// install the occurrence window. Internal so unit tests can await
+    /// it. Serialized: awaits its turn in the maintenance slot, so a
+    /// straggler install from a just-flipped toggle cannot interleave.
+    func reconcileAsync() async {
+        await scheduleMaintenance { await self.reconcileBody() }.value
     }
 
     /// 24-hour hour for display/scheduling.
@@ -110,117 +163,268 @@ final class AlarmStore: ObservableObject {
         (0..<7).map { mask & (1 << $0) != 0 }
     }
 
-    /// Verifies notification permission, then (re)schedules. Never silently
-    /// gives up: the outcome is published so the alarm screen can warn.
-    func schedule() {
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { [weak self] settings in
-            guard let self else { return }
-            switch settings.authorizationStatus {
-            case .authorized, .provisional, .ephemeral:
-                DispatchQueue.main.async { self.permissionDenied = false }
-                self.installRequest()
-            case .notDetermined:
-                // First-run setup owns the notification prompt (it asks
-                // for all permissions in one pass); once setup is done,
-                // arming an alarm prompts here as usual.
-                // First-run setup owns the notification prompt (it asks
-                // for all permissions in one pass); once setup is done,
-                // arming an alarm prompts here as usual. ALARM_GRANT=1
-                // (UI tests) lets the prompt fire regardless of setup.
-                guard UserDefaults.standard.bool(forKey: "setup.done")
-                        || ProcessInfo.processInfo.environment["ALARM_GRANT"] == "1" else {
-                    DispatchQueue.main.async { self.permissionDenied = false }
-                    return
-                }
-                center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-                    DispatchQueue.main.async { self.permissionDenied = !granted }
-                    if granted { self.installRequest() }
-                }
-            default:
-                DispatchQueue.main.async { self.permissionDenied = true }
-            }
+    // MARK: - Occurrence window (the reference scheduling model)
+
+    /// Next `limit` fire Dates for the alarm rule, strictly after `now`.
+    /// Pure and calendar-injectable so unit tests pin timezones/DST.
+    ///
+    /// Day matching walks forward day by day (an empty or full repeat
+    /// selection means every day); each match resolves wall-clock
+    /// hour:minute on that day via the calendar, so DST gaps resolve to
+    /// the next valid time (Calendar's .nextTime policy) instead of a
+    /// nonexistent instant.
+    ///
+    /// - Parameters:
+    ///   - hour24: hour 0…23.
+    ///   - minute: minute 0…59.
+    ///   - repeatDays: seven booleans, Sunday first; none/fall = daily.
+    ///   - now: instant the window opens after.
+    ///   - calendar: calendar/timezone to resolve in.
+    ///   - limit: how many occurrences to return.
+    /// - Returns: ascending fire dates; fewer than `limit` only when the
+    ///   day search horizon (35 days) runs out, which no real rule hits.
+    static func upcomingFireDates(hour24: Int, minute: Int, repeatDays: [Bool],
+                                  from now: Date = Date(), calendar: Calendar = Calendar.current,
+                                  limit: Int = windowSize) -> [Date] {
+        let everyDay = repeatDays.allSatisfy { !$0 } || repeatDays.allSatisfy { $0 }
+        var out: [Date] = []
+        for offset in 0..<35 where out.count < limit {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: now) else { continue }
+            let weekdayIdx = calendar.component(.weekday, from: day) - 1  // 0 = Sunday
+            guard everyDay || repeatDays.indices.contains(weekdayIdx) && repeatDays[weekdayIdx] else { continue }
+            var comps = calendar.dateComponents([.year, .month, .day], from: day)
+            comps.hour = hour24
+            comps.minute = minute
+            guard let fire = calendar.date(from: comps), fire > now else { continue }
+            out.append(fire)
         }
+        return out
     }
 
-    /// Installs the repeating requests for the currently armed alarm.
-    /// Internal (not private) so AlarmReconcileTests can exercise the
-    /// disabled gate directly — the full schedule() path needs
-    /// notification authorization the unit-test runner can't grant.
-    func installRequest() {
-        // Clean slate first: stale requests from earlier repeat-mode
-        // toggles would otherwise ring alongside the current set (the
-        // alarm "rings twice" and resurrects after Stop).
-        cancel()
-        // Nothing installs while the alarm is off. schedule() is also
-        // called for its side effects (permission prompt on the alarm
-        // screen, post-ringer re-arm, setup completion) — those used to
-        // land here with the alarm disabled and install repeating
-        // requests anyway: a ghost that rings at the set time with the
-        // toggle reading Off until the next relaunch healed it.
-        guard enabled else { return }
+    /// Deterministic request id for one occurrence. Idempotent by
+    /// construction: the same fire instant always maps to the same id,
+    /// so re-adding (iOS replaces same-id requests) can never duplicate.
+    static func occurrenceID(for date: Date) -> String {
+        "alarm.occ.\(Int(date.timeIntervalSince1970))"
+    }
+
+    /// Alarm-family prefix shared by occurrences and snooze — the sweep
+    /// and the QA count both key off it.
+    private static let idPrefix = "alarm."
+
+    /// The notification content for alarm occurrences (and snooze).
+    private func makeContent(title: String) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = "Alarm"
+        content.title = title
         content.body = "\(displayText) · \(repeatLabel)"
         content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmTone.caf"))
         content.categoryIdentifier = "ALARM"
-        // Break through Focus / Do Not Disturb (user can still opt out).
+        // Break through Focus / Do Not Disturb (user can still opt out —
+        // when they do, `deliveryWarning` says so on the alarm screen).
         content.interruptionLevel = .timeSensitive
         content.userInfo["kind"] = "alarm"
+        return content
+    }
 
-        let center = UNUserNotificationCenter.current()
-        let group = DispatchGroup()
-        let add: (UNNotificationRequest) -> Void = { request in
-            group.enter()
-            center.add(request) { error in
-                if let error {
-                    WheelEventLog.log("alarm schedule failed: \(error.localizedDescription)")
-                }
-                group.leave()
-            }
-        }
+    /// The single maintenance slot: every schedule/cancel/reconcile pass
+    /// runs here, one at a time, each new pass cancelling the straggler
+    /// it replaces. Without this, the fire-and-forget `didSet` tasks
+    /// interleave — an install that started while armed could still be
+    /// ADDING occurrences after a disable's sweep finished, leaving a
+    /// ghost armed with the toggle off (the interleaving was caught by
+    /// `testInstallWindowInstallsNothingWhileDisabled`).
+    private var maintenanceTask: Task<Void, Never>?
 
-        let everyDay = repeatDays.allSatisfy { $0 } || repeatDays.allSatisfy { !$0 }
-        if everyDay {
-            // One daily repeating request (the classic iPod behavior).
-            var comps = DateComponents()
-            comps.hour = hour24
-            comps.minute = minute
-            add(UNNotificationRequest(identifier: "alarm.daily", content: content,
-                                      trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)))
+    @discardableResult
+    private func scheduleMaintenance(_ body: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        maintenanceTask?.cancel()
+        let task = Task { @MainActor in await body() }
+        maintenanceTask = task
+        return task
+    }
+
+    private func reconcileBody() async {
+        if enabled {
+            await installBody()
         } else {
-            // One repeating request per weekday (1 = Sunday … 7 = Saturday).
-            for (i, on) in repeatDays.enumerated() where on {
-                var comps = DateComponents()
-                comps.hour = hour24
-                comps.minute = minute
-                comps.weekday = i + 1
-                add(UNNotificationRequest(identifier: "alarm.day.\(i + 1)", content: content,
-                                          trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)))
+            await cancelBody()
+        }
+    }
+
+    /// Verifies notification permission, then installs the occurrence
+    /// window. Never silently gives up: the outcome is published so the
+    /// alarm screen can warn. The settings check runs INSIDE the
+    /// serialized maintenance slot — a pass superseded while awaiting
+    /// settings dies right there, so no late callback can cancel a
+    /// newer install mid-loop (the straggler-callback race this shape
+    /// closed).
+    func schedule() {
+        _ = scheduleMaintenance { await self.scheduleBody() }
+    }
+
+    private func scheduleBody() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard !Task.isCancelled else { return }
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            permissionDenied = false
+            await installBody()
+        case .notDetermined:
+            // First-run setup owns the notification prompt (it asks
+            // for all permissions in one pass); once setup is done,
+            // arming an alarm prompts here as usual. ALARM_GRANT=1
+            // (UI tests) lets the prompt fire regardless of setup.
+            guard UserDefaults.standard.bool(forKey: "setup.done")
+                    || ProcessInfo.processInfo.environment["ALARM_GRANT"] == "1" else {
+                permissionDenied = false
+                return
+            }
+            let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+            guard !Task.isCancelled else { return }
+            permissionDenied = !granted
+            if granted { await installBody() }
+        default:
+            permissionDenied = true
+        }
+    }
+
+    /// Installs the occurrence window for the currently armed alarm.
+    /// Awaitable + serialized (see `scheduleMaintenance`); internal so
+    /// AlarmReconcileTests exercise the disabled gate directly — the
+    /// full schedule() path needs notification authorization the
+    /// unit-test runner can't grant.
+    ///
+    /// The pass is diff-based against the OS's pending list (the source
+    /// of truth): remove stale `alarm.` requests we no longer want, add
+    /// missing occurrences, then verify by re-reading and repair once.
+    func installWindow() async {
+        await scheduleMaintenance { await self.installBody() }.value
+    }
+
+    private func installBody() async {
+        // Nothing installs while the alarm is off. schedule() also runs
+        // for its side effects (permission prompt, post-ringer re-arm,
+        // setup completion, ALARM_ENABLE QA hooks) — installing with the
+        // toggle off was the ghost-ring bug.
+        guard enabled else {
+            await cancelBody()
+            return
+        }
+        let dates = Self.upcomingFireDates(hour24: hour24, minute: minute, repeatDays: repeatDays)
+        let wanted = Set(dates.map { Self.occurrenceID(for: $0) })
+        await sweep(keeping: wanted)
+        guard !Task.isCancelled else { return }
+        await addOccurrences(dates: dates)
+        guard !Task.isCancelled else { return }
+        // Verify + repair: re-read pending; anything still missing gets
+        // one retry (a first add can fail transiently — daemon busy).
+        let missing = await missingOccurrenceIDs(wanted: wanted)
+        if !missing.isEmpty, !Task.isCancelled {
+            WheelEventLog.log("alarm verify: re-adding \(missing.count) dropped request(s)")
+            await addOccurrences(dates: dates)
+        }
+        guard !Task.isCancelled else { return }
+        await publishState(expected: wanted)
+    }
+
+    /// Removes every pending `alarm.`-prefixed request that is not in
+    /// `keeping` — occurrences from an edited time/day set, weekday
+    /// variants from the pre-window era, snoozes, ghosts. Ids come from
+    /// the OS's pending list, never re-derived from model state (the
+    /// "stale identifier" bug: an edit Mon→Fri would otherwise leave
+    /// Monday ringing forever).
+    private func sweep(keeping wanted: Set<String>) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let stale = pending
+            .map { $0.identifier }
+            .filter { $0.hasPrefix(Self.idPrefix) && !wanted.contains($0) }
+        guard !stale.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: stale)
+    }
+
+    /// Adds one-shot, fully-specified trigger per occurrence (iOS
+    /// replaces same-id requests, so re-adding is safe and idempotent).
+    /// Checks cancellation between adds so a superseded pass stops
+    /// mid-loop instead of arming ghosts a later sweep must chase.
+    private func addOccurrences(dates: [Date]) async {
+        let center = UNUserNotificationCenter.current()
+        let content = makeContent(title: "Alarm")
+        for date in dates {
+            guard !Task.isCancelled else { return }
+            let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+            let request = UNNotificationRequest(identifier: Self.occurrenceID(for: date),
+                                                content: content, trigger: trigger)
+            do {
+                try await center.add(request)
+            } catch {
+                WheelEventLog.log("alarm schedule failed: \(error.localizedDescription)")
             }
         }
-        group.notify(queue: .main) { [weak self] in self?.refreshPendingCount() }
     }
 
-    /// Removes every alarm-family request: the repeating triggers, all
-    /// weekday variants, AND a pending snooze (a snoozed alarm left
-    /// pending after disable would ring 9 minutes later as a ghost).
+    /// Pending occurrence ids the system does not have (verify pass).
+    private func missingOccurrenceIDs(wanted: Set<String>) async -> Set<String> {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let have = Set(pending.map { $0.identifier })
+        return wanted.subtracting(have)
+    }
+
+    /// Cancels every alarm-family request: the occurrence window AND a
+    /// pending snooze (a snoozed alarm left pending after disable would
+    /// ring 9 minutes later as a ghost). Fire-and-forget wrapper for
+    /// sync call sites; awaits completion via `cancelAsync()`.
     func cancel() {
-        let ids = ["alarm.daily", "alarm.snooze"] + (1...7).map { "alarm.day.\($0)" }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
-        // The removal lands on the notification daemon in milliseconds;
-        // hop the main queue so the refresh reads the post-cancel state.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.refreshPendingCount()
-        }
+        _ = scheduleMaintenance { await self.cancelBody() }
     }
 
-    /// Publishes how many alarm requests are actually pending — the
-    /// ground truth for "the alarm says ON but will not ring".
-    private func refreshPendingCount() {
-        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-            let count = requests.filter { $0.identifier.hasPrefix("alarm.") }.count
-            DispatchQueue.main.async { self.pendingAlarmCount = count }
+    /// Async cancel body — same sweep with nothing kept; serialized and
+    /// awaitable so tests can assert a deterministic end state.
+    func cancelAsync() async {
+        await scheduleMaintenance { await self.cancelBody() }.value
+    }
+
+    private func cancelBody() async {
+        await sweep(keeping: [])
+        guard !Task.isCancelled else { return }
+        await publishState(expected: [])
+    }
+
+    /// Reads back ground truth (pending count, next fire) plus the
+    /// delivery-diagnostics settings, and publishes it all. This is the
+    /// "schedule, verify, and reconcile" loop's verify step.
+    private func publishState(expected: Set<String>) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let alarmPending = pending.filter { $0.identifier.hasPrefix(Self.idPrefix) }
+        let settings = await center.notificationSettings()
+
+        var warning: String?
+        if enabled, settings.authorizationStatus == .authorized
+            || settings.authorizationStatus == .provisional
+            || settings.authorizationStatus == .ephemeral {
+            if settings.soundSetting != .enabled {
+                warning = "Sounds are off for iPodClassic in Settings —\nthe alarm banner will arrive silently."
+            } else if settings.timeSensitiveSetting != .enabled {
+                warning = "Time Sensitive notifications are off —\nFocus modes (e.g. Sleep) can silence the alarm.\nAllow Time Sensitive in Settings → Notifications."
+            }
+        }
+
+        let next = alarmPending
+            .compactMap { $0.trigger as? UNCalendarNotificationTrigger }
+            .compactMap { $0.nextTriggerDate() }
+            .min()
+
+        pendingAlarmCount = alarmPending.count
+        deliveryWarning = warning
+        nextFireText = next.map {
+            TimeFormat.clock($0) + " · " + TimeFormat.duration($0.timeIntervalSinceNow)
+        }
+        if enabled, alarmPending.isEmpty {
+            WheelEventLog.log("alarm WARNING: enabled but 0 pending (expected \(expected.count))")
         }
     }
 
@@ -229,6 +433,8 @@ final class AlarmStore: ObservableObject {
 
     /// Near-silent looping player: background audio keeps iOS from
     /// suspending the process so the fire monitor can keep running.
+    /// The in-app ringer this enables plays MEDIA audio — audible even
+    /// with the mute switch on and under Focus, unlike the notification.
     private var keepAlivePlayer: AVAudioPlayer?
     /// 1-second fire-check timer while the keep-alive is active.
     private var monitor: Timer?
@@ -244,10 +450,16 @@ final class AlarmStore: ObservableObject {
     /// overlay in-app at the alarm time (the sound comes from the system
     /// notification, which rings at Ringer & Alerts volume regardless of
     /// media volume).
+    ///
+    /// PlayerModel re-invokes this when music stops while backgrounded —
+    /// the old gap: music playing skipped the silent player, the album
+    /// then ended at 2am, the session went idle, iOS suspended the
+    /// process, and the (Focus-silenceable) notification became the only
+    /// sound.
     func startKeepAlive() {
         guard enabled, monitor == nil else { return }
         // Heal before the night matters: if a previous fire/dismiss cycle
-        // died mid-way (force-quit, crash, reboot), the pending requests
+        // died mid-way (force-quit, crash, reboot), the pending window
         // may be gone while enabled is still true — without this the
         // alarm silently never rings again.
         reconcile()
@@ -285,15 +497,12 @@ final class AlarmStore: ObservableObject {
     /// the armed minute and today is a selected day (no day selected =
     /// every day). `lastFireDay` makes it once per day.
     ///
-    /// Deliberately does NOT touch the pending repeating requests:
-    /// removing a repeating UNCalendarNotificationTrigger kills ALL its
-    /// future occurrences (UserNotifications has no per-occurrence
-    /// removal), so a remove/re-add at fire time was exactly how the
-    /// "alarm says on but never rings again" bug happened. Tomorrow's
-    /// rings stay armed; the re-arm/heal paths are RingerManager.stop()
-    /// → schedule() after dismissal and reconcile() on every foreground.
+    /// The fired occurrence's one-shot request consumed itself; the rest
+    /// of the window (and tomorrow's occurrences, replenished on the
+    /// next foreground) stay armed — no remove/re-add at fire time, the
+    /// invariant that broke the repeating-trigger era.
     ///
-    /// Concept: UNUserNotificationCenter → docs/concepts/usernotifications.md
+    /// Concept: UNUserNotifications → docs/concepts/usernotifications.md
     private func checkFire() {
         let cal = Calendar.current
         let now = cal.dateComponents([.hour, .minute], from: Date())
@@ -305,11 +514,8 @@ final class AlarmStore: ObservableObject {
         guard lastFireDay != key else { return }
         lastFireDay = key
         // The system notification IS the alarm sound (Ringer & Alerts
-        // volume — immune to media mute); leave it alone and show the
-        // in-app Snooze/Stop overlay on top. Leaving the repeating
-        // requests untouched also means no remove/re-schedule dance (the
-        // old path had to heal the "removed every future occurrence"
-        // invariant itself).
+        // volume — immune to media mute); it fired on its own. Show the
+        // in-app Snooze/Stop overlay on top.
         stopKeepAlive()
         DispatchQueue.main.async {
             AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
@@ -319,14 +525,9 @@ final class AlarmStore: ObservableObject {
     /// Snooze: notification in 9 minutes (killed-app fallback) plus an
     /// in-app timer that rings without needing the notification.
     func snooze() {
-        let content = UNMutableNotificationContent()
-        content.title = "Snoozed Alarm"
-        content.body = "\(displayText) · \(repeatLabel)"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("AlarmTone.caf"))
-        content.categoryIdentifier = "ALARM"
-        content.interruptionLevel = .timeSensitive
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 9 * 60, repeats: false)
-        let request = UNNotificationRequest(identifier: "alarm.snooze", content: content, trigger: trigger)
+        let request = UNNotificationRequest(identifier: "alarm.snooze",
+                                            content: makeContent(title: "Snoozed Alarm"),
+                                            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 9 * 60, repeats: false))
         UNUserNotificationCenter.current().add(request)
 
         snoozeTimer?.invalidate()
