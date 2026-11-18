@@ -42,7 +42,7 @@ struct DeviceView: View {
                             // Ringer confined to the LCD — the click wheel
                             // stays visible and drives Snooze/Stop.
                             if let ringer = model.ringer {
-                                AlarmRingerOverlay(context: ringer)
+                                RingerOverlay(context: ringer)
                                     .transition(.opacity)
                             }
                         }

@@ -1,28 +1,23 @@
 import SwiftUI
 
-/// Full-screen ringer when the alarm or timer fires in-app: big time, title,
-/// Snooze / Stop rows driven by the wheel.
+/// Full-screen ringer when the timer fires in-app: big time, title, and a
+/// Stop row driven by the wheel.
 ///
 /// Hosted as an overlay on the LCD ONLY (see DeviceView) — it never covers
-/// the click wheel, so Snooze/Stop stay wheel-reachable while it rings.
+/// the click wheel, so Stop stays wheel-reachable while it rings.
 /// While it is up, AppModel.handle diverts every ControlEvent to
 /// `ringerBus`, so the screen underneath cannot react to input.
-struct AlarmRingerOverlay: View {
+struct RingerOverlay: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
-    /// What is ringing (alarm or timer) — drives the title and the rows.
+    /// What is ringing — drives the title.
     let context: RingerContext
 
     /// Index of the highlighted action row.
     @State private var selection = 0
 
-    /// Actions offered: alarms get Snooze + Stop, timers only Stop.
-    private var rows: [String] {
-        switch context.kind {
-        case .alarm: return ["Snooze", "Stop"]
-        case .timer: return ["Stop"]
-        }
-    }
+    /// Timers offer a single Stop action.
+    private var rows: [String] { ["Stop"] }
 
     /// The LCD page: title, live clock, wheel-driven action rows.
     var body: some View {
@@ -52,7 +47,7 @@ struct AlarmRingerOverlay: View {
 
     /// Wheel input, received from `ringerBus`: ticks move the row
     /// selection; center, MENU and play/pause all activate the
-    /// highlighted row (any main button answers a ringing alarm).
+    /// highlighted row (any main button answers a ringing timer).
     ///
     /// Concept: Combine → docs/concepts/combine.md
     private func handle(_ event: ControlEvent) {
@@ -68,19 +63,9 @@ struct AlarmRingerOverlay: View {
         }
     }
 
-    /// Runs the highlighted row: Snooze schedules the 9-minute re-ring and
-    /// dismisses; Stop dismisses (which also re-arms the alarm schedule —
+    /// Runs the highlighted row: Stop dismisses (stopping the tone loop —
     /// see RingerManager.stop).
     private func activateCurrent() {
-        let row = rows[min(selection, rows.count - 1)]
-        switch row {
-        case "Snooze":
-            model.alarms.snooze()
-            RingerManager.shared.stop()
-        case "Stop":
-            RingerManager.shared.stop()
-        default:
-            break
-        }
+        RingerManager.shared.stop()
     }
 }

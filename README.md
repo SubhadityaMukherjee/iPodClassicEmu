@@ -1,6 +1,6 @@
 # iPodClassic
 
-A native iOS app that puts a full iPod Classic in your pocket: a real click wheel with haptics and tick sounds, a scanlined LCD, and the classic menus — wired to **Apple Music** (you need a subscription), plus a PDF/EPUB book reader, camera, voice recorder, weekday alarms, and Live Activities.
+A native iOS app that puts a full iPod Classic in your pocket: a real click wheel with haptics and tick sounds, a scanlined LCD, and the classic menus — wired to **Apple Music** (you need a subscription), plus a PDF/EPUB book reader, camera, voice recorder, and timers with Live Activities.
 
 I wanted this not just because I wanted the vibes of an iPod but mainly because it takes away so much of the distraction of my phone. I can use it with Guided access and it has basically all the normal things I need. If I need anything else, I can just quit Guided access or swipe out.
 
@@ -39,11 +39,11 @@ I wanted this not just because I wanted the vibes of an iPod but mainly because 
 
 **Clocks**
 
-- Classic alarm clock with iPhone-style weekday repeats (S M T W T F S; none selected = daily), in-app ringer with Snooze/Stop, notification-backed so it fires even when the app is closed
+- ~~Alarm clock~~ — removed: a third-party iOS alarm cannot ring through the mute switch or survive a force-quit, so it cannot be trusted for wake-ups (use the iPhone Clock app)
 - Timer and Stopwatch — each with a **Live Activity**: live countdown/elapsed time on the lock screen and Dynamic Island, timer flips to "Done" when it fires in the background
 
 <p align="center">
-  <img src="docs/screenshots/alarm.png" width="230" alt="Alarm with weekday repeats" />
+  <img src="docs/screenshots/timer.png" width="230" alt="Timer with Live Activity" />
   <img src="docs/screenshots/timer.png" width="230" alt="Timer" />
 </p>
 
@@ -119,10 +119,10 @@ xcodebuild -project iPodClassic.xcodeproj -scheme iPodClassic \
   -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
-- **Unit tests** (`Tests/iPodClassicTests/`) cover time formatting, wheel geometry, alarm math and weekday repeats, the player model, the reader store, ZIP/EPUB extraction and parsing, and the highlight store.
-- **UI tests** (`Tests/UITests/`) drive the click wheel with real touch events and verify navigation, the alarm ringer, search, the reader, and the photo gallery end to end.
+- **Unit tests** (`Tests/iPodClassicTests/`) cover time formatting, wheel geometry, the player model, the reader store, ZIP/EPUB extraction and parsing, and the highlight store.
+- **UI tests** (`Tests/UITests/`) drive the click wheel with real touch events and verify navigation, search, the reader, and the photo gallery end to end.
 
-The app exposes launch-environment hooks for testing and screenshots: `RESET_DEFAULTS=1`, `START_ROUTE=<route>` (plus `readerLast` to reopen the last book), `FAKE_LIBRARY=1` (seed songs and a fake Now Playing track — MusicKit items can't be constructed in tests), `ALARM_FIRE_SECONDS=N`, `BINAURAL_START=<preset|1>` + `BINAURAL_AUTOSTOP=<seconds>` (open with a binaural session playing / stop it again — the lock-screen card probe; `BINAURAL_NP_DUMP=1` writes the post-stop `MPNowPlayingInfoCenter` state to `Documents/binaural_np.txt`, must read `state=3` (.stopped)), `READER_IMPORT=<file>` + `READER_CHAPTER=<n>` + `READER_TICKS=<n>` for EPUB harness runs, `NOW_PLAYING_PANEL=1` / `BOOK_SETTINGS=1` to open the hold-panels. `scripts/round_corners.swift` rounds screenshot corners for the README.
+The app exposes launch-environment hooks for testing and screenshots: `RESET_DEFAULTS=1`, `START_ROUTE=<route>` (plus `readerLast` to reopen the last book), `FAKE_LIBRARY=1` (seed songs and a fake Now Playing track — MusicKit items can't be constructed in tests), `BINAURAL_START=<preset|1>` + `BINAURAL_AUTOSTOP=<seconds>` (open with a binaural session playing / stop it again — the lock-screen card probe; `BINAURAL_NP_DUMP=1` writes the post-stop `MPNowPlayingInfoCenter` state to `Documents/binaural_np.txt`, must read `state=3` (.stopped)), `READER_IMPORT=<file>` + `READER_CHAPTER=<n>` + `READER_TICKS=<n>` for EPUB harness runs, `NOW_PLAYING_PANEL=1` / `BOOK_SETTINGS=1` to open the hold-panels. `scripts/round_corners.swift` rounds screenshot corners for the README.
 
 ## Project structure
 

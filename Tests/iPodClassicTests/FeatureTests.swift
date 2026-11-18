@@ -2,68 +2,6 @@ import XCTest
 import Compression
 @testable import iPodClassic
 
-// MARK: - Alarm repeats
-
-final class AlarmRepeatTests: XCTestCase {
-    private let alarm = AlarmStore.shared
-
-    override func setUp() {
-        super.setUp()
-        // Never touch notification scheduling from tests.
-        alarm.enabled = false
-    }
-
-    override func tearDown() {
-        alarm.repeatDays = [Bool](repeating: false, count: 7)
-        super.tearDown()
-    }
-
-    func testRepeatLabelDefaults() {
-        alarm.repeatDays = [Bool](repeating: false, count: 7)
-        XCTAssertEqual(alarm.repeatLabel, "Every Day")
-        alarm.repeatDays = [Bool](repeating: true, count: 7)
-        XCTAssertEqual(alarm.repeatLabel, "Every Day")
-    }
-
-    func testRepeatLabelPresets() {
-        // Sunday-first: Mon–Fri weekdays, Sat+Sun weekends.
-        alarm.repeatDays = [false, true, true, true, true, true, false]
-        XCTAssertEqual(alarm.repeatLabel, "Weekdays")
-        alarm.repeatDays = [true, false, false, false, false, false, true]
-        XCTAssertEqual(alarm.repeatLabel, "Weekends")
-    }
-
-    func testRepeatLabelCustomDays() {
-        alarm.repeatDays = [false, true, false, true, false, false, false]  // Mon + Wed
-        let label = alarm.repeatLabel
-        XCTAssertTrue(label.contains("Mon"), "custom label \(label) missing Mon")
-        XCTAssertTrue(label.contains("Wed"), "custom label \(label) missing Wed")
-        XCTAssertFalse(label.contains("Tue"))
-    }
-
-    func testRepeatDaysPersistAsBitmask() {
-        alarm.repeatDays = [true, false, true, false, false, false, false]  // Sun + Tue
-        let stored = UserDefaults.standard.integer(forKey: "alarm.repeatDays")
-        // Sunday-first: bit 0 = Sunday (1), bit 2 = Tuesday (4).
-        XCTAssertEqual(stored, 0b101, "repeatDays should persist as a Sunday-first bitmask")
-    }
-
-    func testBitmaskRoundTripAfterReload() {
-        alarm.repeatDays = [false, false, false, false, false, true, true]  // Fri + Sat
-        let mask = UserDefaults.standard.integer(forKey: "alarm.repeatDays")
-        XCTAssertEqual(ReaderTestsSupport.days(fromBitmask: mask), [false, false, false, false, false, true, true])
-    }
-}
-
-/// Bit twiddling mirrored from AlarmStore (private there).
-enum ReaderTestsSupport {
-    static func days(fromBitmask mask: Int) -> [Bool] {
-        (0..<7).map { mask & (1 << $0) != 0 }
-    }
-}
-
-// MARK: - Player
-
 final class PlayerModelTests: XCTestCase {
     func testVolumeClamps() {
         let player = PlayerModel()

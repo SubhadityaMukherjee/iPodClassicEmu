@@ -12,7 +12,7 @@ final class RouteTests: XCTestCase {
         "home", "music", "coverflow", "albums", "songs", "playlists",
         "nowplaying", "photos", "camera", "recorder", "recordings",
         "notes", "noteEditor", "clocks", "calendar", "extras",
-        "flashlight", "reader", "search", "alarm", "timer",
+        "flashlight", "reader", "search", "timer",
         "stopwatch", "settings", "clickwheel", "display", "playback",
         "setup", "tour", "noteTrash", "binaural",
     ]
@@ -37,7 +37,7 @@ final class RouteTests: XCTestCase {
             .musicPlaylists, .nowPlaying, .photos, .camera, .recorder,
             .recordings, .notes, .noteEditor("QA Note"), .clocks,
             .calendar, .extras, .flashlight, .reader, .musicSearch,
-            .alarm, .timer, .stopwatch, .settings,
+            .timer, .stopwatch, .settings,
             .settingsClickwheel, .settingsDisplay, .settingsPlayback,
             .artistSearch("x"), .transcript("Recording 2026-01-01.m4a"),
             .readerBooks, .readerArticles, .setup, .tour, .noteTrash, .binaural,

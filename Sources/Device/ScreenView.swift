@@ -45,13 +45,11 @@ struct ScreenView: View {
 struct TitleBarView: View {
     /// App model: hold flag, player state, battery.
     @Environment(AppModel.self) private var model
-    /// Alarm store — shows the bell glyph while the alarm is armed.
-    @ObservedObject private var alarm = AlarmStore.shared
     /// Current time, re-read every second by the timer below.
     @State private var now = Date()
 
     /// Renders the brushed-metal bar: screen title, hold lock, clock, play
-    /// glyph, alarm bell, and battery. The 1 s timer drives the clock.
+    /// glyph, and battery. The 1 s timer drives the clock.
     var body: some View {
         HStack(spacing: 0) {
             Text(title)
@@ -76,15 +74,6 @@ struct TitleBarView: View {
             Spacer(minLength: 10)
 
             playGlyph
-
-            // Armed alarm: bell beside the battery, like the classic's
-            // status icon — visible on every screen.
-            if alarm.enabled {
-                Image(systemName: "bell.fill")
-                    .font(Theme.font(11, .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .padding(.trailing, 5)
-            }
 
             BatteryIcon(level: model.batteryLevel, charging: model.batteryCharging)
         }

@@ -69,23 +69,6 @@ final class WheelGeometryTests: XCTestCase {
     }
 }
 
-final class AlarmMathTests: XCTestCase {
-    func testHour24Conversion() {
-        let alarm = AlarmStore.shared
-        alarm.isPM = false
-        alarm.hour = 12
-        XCTAssertEqual(alarm.hour24, 0)
-        alarm.hour = 7
-        XCTAssertEqual(alarm.hour24, 7)
-        alarm.isPM = true
-        XCTAssertEqual(alarm.hour24, 19)
-        alarm.hour = 12
-        XCTAssertEqual(alarm.hour24, 12)
-        alarm.isPM = false
-        alarm.hour = 7
-    }
-}
-
 final class NotesStoreTests: XCTestCase {
     func testCreateReadDelete() {
         let store = NotesStore()

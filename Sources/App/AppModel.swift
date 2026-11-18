@@ -3,7 +3,7 @@ import SwiftUI
 import Combine
 import os
 
-/// Unified-log tap (os category "wheel") for input and alarm-schedule
+/// Unified-log tap (os category "wheel") for input and scheduling
 /// diagnostics — a single stream that can be filtered in Console or
 /// `log stream` while debugging.
 enum WheelEventLog {
@@ -84,7 +84,6 @@ enum Route: Hashable {
 
     // Clocks
     case clocks
-    case alarm
     case timer
     case stopwatch
 
@@ -138,7 +137,7 @@ final class AppModel {
     var holdActive = false
     /// Screen asleep (hold play/pause). Any wheel press wakes it.
     var screenAsleep = false
-    /// Set when the alarm or timer fires while the app is open.
+    /// Set when the timer fires while the app is open.
     var ringer: RingerContext?
     /// Screens like the camera claim prev/next/play for their own purposes;
     /// when set, media buttons go to the screen instead of the music player.
@@ -169,9 +168,6 @@ final class AppModel {
     let binaural = BinauralModel()
     /// User preferences (UserDefaults-backed; injected as an environment object).
     let settings = AppSettings.shared
-    /// Alarm scheduling and notification healing; its own singleton
-    /// because the notification delegate and keep-alive also reach it.
-    let alarms = AlarmStore.shared
     /// Read Aloud: on-device neural TTS for books.
     let audiobook = AudiobookModel()
 
@@ -183,7 +179,7 @@ final class AppModel {
     ///
     /// Concept: combine → docs/concepts/combine.md
     let controlBus = PassthroughSubject<ControlEvent, Never>()
-    /// Events while the alarm/timer ringer is up go here instead, so the
+    /// Events while the timer ringer is up go here instead, so the
     /// underlying screen can't react to them.
     let ringerBus = PassthroughSubject<ControlEvent, Never>()
 
@@ -260,18 +256,6 @@ final class AppModel {
             stack = [.readerBook(first.id)]
         }
 
-        // QA hook: ALARM_ENABLE arms (1) or disarms (0) the alarm from any
-        // launch (bell/keep-alive screenshot checks).
-        if let qaAlarm = ProcessInfo.processInfo.environment["ALARM_ENABLE"] {
-            let store = AlarmStore.shared
-            if qaAlarm == "1", !store.enabled {
-                store.enabled = true
-            } else if qaAlarm == "0", store.enabled {
-                store.enabled = false
-            }
-            store.schedule()
-        }
-
         // QA hook: AUTOPLAY shuffle-plays the real library at launch
         // (device screenshots — ApplicationMusicPlayer is a simulator
         // no-op, so this only bites on hardware).
@@ -335,7 +319,6 @@ final class AppModel {
         case "readerBooks": return .readerBooks
         case "readerArticles": return .readerArticles
         case "search": return .musicSearch
-        case "alarm": return .alarm
         case "timer": return .timer
         case "stopwatch": return .stopwatch
         case "settings": return .settings
@@ -354,10 +337,6 @@ final class AppModel {
     /// Finishes first-run setup: marks it done and lands on home.
     func completeSetup() {
         UserDefaults.standard.set(true, forKey: "setup.done")
-        // Notification scheduling was deferred while setup was pending
-        // (AlarmStore skips its prompt until setup.done); now that the
-        // permission pass has run, install any armed-alarm requests.
-        alarms.schedule()
         stack = [.home]
     }
 
@@ -489,10 +468,10 @@ final class AppModel {
     }
 }
 
-/// What is currently sounding the in-app alarm/timer overlay.
+/// What is currently sounding the in-app timer overlay.
 struct RingerContext: Equatable {
-    /// What is sounding: a scheduled alarm (by id) or the countdown timer.
-    enum Kind: Equatable { case alarm(id: UUID), timer }
+    /// What is sounding (kept as an enum for future kinds).
+    enum Kind: Equatable { case timer }
     /// Which subsystem fired.
     let kind: Kind
     /// Headline shown on the ringer overlay.

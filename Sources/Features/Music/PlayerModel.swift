@@ -302,19 +302,7 @@ final class PlayerModel {
             // writing unchanged values re-rendered Now Playing 2×/s
             // forever — even paused. Only publish real changes.
             let playing = self.player.state.playbackStatus == .playing
-            if playing != self.isPlaying {
-                self.isPlaying = playing
-                // Music stopped while backgrounded with an armed alarm:
-                // the audio session goes idle and iOS will suspend the
-                // process — revive the alarm's silent keep-alive so the
-                // in-app ringer (media audio: audible under Focus and the
-                // mute switch) survives the night. startKeepAlive's own
-                // guards make this a no-op when the monitor already runs.
-                if !playing, UIApplication.shared.applicationState != .active,
-                   AlarmStore.shared.enabled {
-                    AlarmStore.shared.startKeepAlive()
-                }
-            }
+            if playing != self.isPlaying { self.isPlaying = playing }
             let time = self.player.playbackTime
             if self.playbackTime != time { self.playbackTime = time }
             // Auto-advance sync and session saves only matter while

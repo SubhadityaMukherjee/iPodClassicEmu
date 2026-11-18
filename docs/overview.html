@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>iPodClassic — a real iPod Classic, natively on iOS</title>
-<meta name="description" content="A native iOS app that puts a full iPod Classic in your pocket: real click wheel with haptics, scanlined LCD, Apple Music, a PDF/EPUB reader with on-device read-aloud TTS, camera, voice memos with on-device transcription, weekday alarms and Live Activities.">
+<meta name="description" content="A native iOS app that puts a full iPod Classic in your pocket: real click wheel with haptics, scanlined LCD, Apple Music, a PDF/EPUB reader with on-device read-aloud TTS, camera, voice memos with on-device transcription, and timers with Live Activities.">
 <style>
   :root{
     --bg:#0b0b0d; --panel:#151518; --ink:#e8e8ea; --dim:#9a9aa2;
@@ -60,7 +60,7 @@
 <body>
 <header class="wrap">
   <h1>iPodClassic</h1>
-  <p class="sub">A native iOS app that puts a full iPod Classic in your pocket — a real click wheel with haptics and tick sounds, a scanlined LCD, the classic menus, wired to Apple Music. Plus a PDF/EPUB reader with on-device read-aloud, voice memos with private on-device transcription, camera, weekday alarms and Live Activities.</p>
+  <p class="sub">A native iOS app that puts a full iPod Classic in your pocket — a real click wheel with haptics and tick sounds, a scanlined LCD, the classic menus, wired to Apple Music. Plus a PDF/EPUB reader with on-device read-aloud, voice memos with private on-device transcription, camera, timers with Live Activities.</p>
   <div class="hero">
     <img src="screenshots/home.png" alt="Home menu">
     <img src="screenshots/nowplaying.png" alt="Now Playing">
@@ -114,11 +114,6 @@
 
   <h2>Clocks</h2>
   <div class="grid">
-    <div class="card"><h3>Alarms</h3><ul>
-      <li>iPhone-style weekday repeats (S M T W T F S; none = daily)</li>
-      <li>In-app ringer with Snooze/Stop; fires via notifications even when closed</li>
-      <li>Self-healing schedule — verified on every foreground, with an on-screen warning if anything is ever off</li>
-    </ul></div>
     <div class="card"><h3>Timer &amp; Stopwatch</h3><ul>
       <li><strong>Live Activities</strong> on the lock screen and Dynamic Island</li>
       <li>Timer flips to “Done” if it fires while backgrounded</li>
@@ -161,7 +156,6 @@
     <figure><img src="screenshots/songs.png" alt=""><figcaption>Songs</figcaption></figure>
     <figure><img src="screenshots/queue.png" alt=""><figcaption>Song options / Up Next</figcaption></figure>
     <figure><img src="screenshots/search.png" alt=""><figcaption>Search</figcaption></figure>
-    <figure><img src="screenshots/alarm.png" alt=""><figcaption>Alarm repeats</figcaption></figure>
     <figure><img src="screenshots/timer.png" alt=""><figcaption>Timer</figcaption></figure>
     <figure><img src="screenshots/reader_settings.png" alt=""><figcaption>Book settings</figcaption></figure>
     <figure><img src="screenshots/notes.png" alt=""><figcaption>Notes</figcaption></figure>
@@ -191,14 +185,13 @@ xcrun devicectl device install app --device &lt;YOUR-UDID&gt; \
   <h2 id="tests">Tests &amp; QA hooks</h2>
   <pre><code>xcodebuild -project iPodClassic.xcodeproj -scheme iPodClassic \
   -destination 'platform=iOS Simulator,name=iPhone 17' test</code></pre>
-  <p>Unit tests cover time formatting, wheel geometry, alarm math and weekday repeats, the player model, the reader store, ZIP/EPUB extraction and parsing, and the highlight store. UI tests drive the click wheel with real touch events end to end.</p>
+  <p>Unit tests cover time formatting, wheel geometry, the player model, the reader store, ZIP/EPUB extraction and parsing, and the highlight store. UI tests drive the click wheel with real touch events end to end.</p>
   <p>Launch-environment hooks (also used for the screenshots on this page):</p>
   <table>
     <tr><th>Hook</th><th>Effect</th></tr>
     <tr><td><code>RESET_DEFAULTS=1</code></td><td>Clear all persisted settings/stores</td></tr>
-    <tr><td><code>START_ROUTE=&lt;route&gt;</code></td><td>Open a screen directly (<code>music</code>, <code>songs</code>, <code>nowplaying</code>, <code>alarm</code>, <code>camera</code>, …); <code>readerLast</code> reopens the last book</td></tr>
+    <tr><td><code>START_ROUTE=&lt;route&gt;</code></td><td>Open a screen directly (<code>music</code>, <code>songs</code>, <code>nowplaying</code>, <code>timer</code>, <code>camera</code>, …); <code>readerLast</code> reopens the last book</td></tr>
     <tr><td><code>FAKE_LIBRARY=1</code></td><td>Seed 300 fake songs + a fake Now Playing track (MusicKit items can’t be constructed in tests)</td></tr>
-    <tr><td><code>ALARM_FIRE_SECONDS=N</code></td><td>Fire the ringer N seconds after launch</td></tr>
     <tr><td><code>READER_IMPORT=&lt;file&gt;</code> <code>READER_CHAPTER=&lt;n&gt;</code> <code>READER_TICKS=&lt;n&gt;</code></td><td>EPUB harness: import a book, open a chapter, turn N pages</td></tr>
     <tr><td><code>NOW_PLAYING_PANEL=1</code> / <code>BOOK_SETTINGS=1</code></td><td>Open the Now Playing / Book Settings hold-panels</td></tr>
     <tr><td><code>QA_TRANSCRIBE=&lt;file&gt;</code> / <code>QA_TTS=&lt;text&gt;</code></td><td>End-to-end transcription / read-aloud runs; stage status to <code>Documents/qa_status.txt</code> plus RTF &amp; memory-headroom logs</td></tr>

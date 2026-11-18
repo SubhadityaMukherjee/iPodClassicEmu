@@ -1,7 +1,7 @@
 import XCTest
 
 /// End-to-end checks over real touch events for the newer features:
-/// Reader, search hold-nav surface, alarm repeat segment, Now Playing.
+/// Reader, search hold-nav surface, Now Playing.
 final class E2ETests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -259,32 +259,6 @@ final class E2ETests: XCTestCase {
                       "Home → Reader → Books navigation failed")
     }
 
-    @MainActor
-    func testAlarmRepeatSegmentCyclesAndToggles() throws {
-        let app = launch(start: "alarm")
-        let wheel = app.otherElements["clickwheel"]
-        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
-        let center = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-
-        // Set Hour → (center) Set Minute → AM/PM → Repeat Days.
-        XCTAssertTrue(app.staticTexts["Set Hour"].waitForExistence(timeout: 5))
-        center.tap()
-        XCTAssertTrue(app.staticTexts["Set Minute"].waitForExistence(timeout: 3), "center did not advance to minute")
-        center.tap()
-        XCTAssertTrue(app.staticTexts["AM / PM"].waitForExistence(timeout: 3), "center did not advance to AM/PM")
-        center.tap()
-        XCTAssertTrue(app.staticTexts["Repeat: Every Day"].waitForExistence(timeout: 3),
-                      "center did not advance to the repeat segment")
-
-        // Center now toggles Sunday on: the title must switch from the
-        // every-day default to a weekday listing.
-        center.tap()
-        let summary = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", "Repeat: Sun")
-        ).firstMatch
-        XCTAssertTrue(summary.waitForExistence(timeout: 3),
-                      "toggling a day did not update the repeat summary")
-    }
 
     // MARK: Search / Now Playing
 
@@ -342,70 +316,4 @@ final class E2ETests: XCTestCase {
     /// (keep-alive path), let the alarm minute pass so checkFire handles
     /// the ring in-app — then confirm the repeating schedule SURVIVED
     /// (checkFire used to remove the repeating requests permanently).
-    /// The QA pending readout on the alarm screen is the ground truth.
-    @MainActor
-    func testAlarmStaysScheduledAfterBackgroundedFire() throws {
-        // The notification permission prompt is an app-level alert; accept
-        // it via the interruption monitor (registered before launch).
-        let monitor = addUIInterruptionMonitor(withDescription: "notifications") { alert in
-            for label in ["Allow", "OK"] {
-                let button = alert.buttons[label]
-                if button.exists {
-                    button.tap()
-                    return true
-                }
-            }
-            return false
-        }
-        defer { removeUIInterruptionMonitor(monitor) }
-
-        let app = launch(start: "alarm", extra: [
-            "ALARM_ENABLE": "1",
-            "ALARM_GRANT": "1",
-            "ALARM_DEBUG": "1",
-            // Fire 75s out so the backgrounded keep-alive monitor (1s tick)
-            // handles the ring through checkFire, not the direct hook.
-            "ALARM_SET_NOW_PLUS": "75",
-        ])
-        let wheelEl = wheel(app)
-        app.tap() // lets XCUI evaluate the notification prompt
-
-        // Authorized + scheduled: the daily rule's occurrence window is
-        // pending (seven one-shot occurrences under the window model).
-        let pendingOne = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "QA pending: 7")
-        ).firstMatch
-        XCTAssertTrue(pendingOne.waitForExistence(timeout: 10),
-                      "arming the alarm did not install the occurrence window (no prompt granted?)")
-
-        // Background the app: keep-alive starts; the alarm minute passes.
-        XCUIDevice.shared.press(.home)
-        sleep(85)
-        app.activate()
-
-        // The in-app ringer must have fired while backgrounded.
-        XCTAssertTrue(app.staticTexts["Snooze"].waitForExistence(timeout: 10),
-                      "checkFire did not start the ringer for the alarm minute")
-
-        // Dismiss via Stop (tick down one row, center) — NOT snooze, so no
-        // extra pending request muddies the count.
-        tick(wheelEl)
-        wheelCenterTap(wheelEl)
-        XCTAssertTrue(app.staticTexts["Snooze"].waitForNonExistence(timeout: 5),
-                      "ringer did not dismiss")
-
-        // THE regression: after the fire + dismissal, occurrences must
-        // still be pending (the fired one consumed only itself; re-arm
-        // and the foreground heal both reinstall the window — the count
-        // is 6 or 7 depending on which landed first, never 0).
-        let pendingAfter = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "QA pending: ")
-        ).firstMatch
-        XCTAssertTrue(pendingAfter.waitForExistence(timeout: 10),
-                      "alarm schedule did not survive the backgrounded fire — this is the silent-death bug")
-        let digits = pendingAfter.label.dropFirst("QA pending: ".count).prefix { $0.isNumber }
-        let count = Int(digits) ?? 0
-        XCTAssertGreaterThanOrEqual(count, 6,
-                                    "window shrunk to \(count) after the fire (expected 6–7)")
-    }
 }
