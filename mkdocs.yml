@@ -28,8 +28,7 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Home: README.md
-  - Product page: overview.html
+  - iPodClassic: README.md
   - Guides:
       - AGENTS.md — contributor cheat-sheet: AGENTS.md
       - ARCHITECTURE.md: ARCHITECTURE.md
@@ -56,7 +55,7 @@ nav:
           - FileManager & sandbox: concepts/filemanager-and-sandbox.md
           - UserDefaults: concepts/userdefaults.md
           - NSCache: concepts/nscache.md
-          - UserNotifications (alarms): concepts/usernotifications.md
+          - UserNotifications (timer): concepts/usernotifications.md
           - Live Activities: concepts/activitykit-live-activities.md
       - Input & hardware:
           - Dispatch queues (session queues): concepts/dispatch-queues.md
