@@ -24,3 +24,4 @@ Package.resolved
 
 # MkDocs build output
 /site/
+docs/AGENTS.md
