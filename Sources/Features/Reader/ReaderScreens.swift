@@ -1429,14 +1429,17 @@ struct BookScreen: View {
                 moveListSelection(&panelSelection, count: panelRows.count, delta: d, settings: settings)
             } else if isPDFOriginal {
                 if d > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
-                model.audiobook.readerMoved()
+                model.audiobook.readerMoved(to: pdfController.currentPageIndex)
                 // currentPage settles asynchronously; keep the progress
-                // bar honest.
+                // bar honest. The delayed echo reports the SETTLED page —
+                // if the loop is already speaking it, readerMoved(to:)
+                // ignores it (a same-page echo restarted the page
+                // mid-sentence).
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     if self.isPDFOriginal {
                         self.book?.chapterIndex = self.pdfController.currentPageIndex
                     }
-                    self.model.audiobook.readerMoved()
+                    self.model.audiobook.readerMoved(to: self.pdfController.currentPageIndex)
                 }
             } else {
                 // Instant viewport-fraction jumps track the wheel 1:1.
@@ -1454,8 +1457,15 @@ struct BookScreen: View {
                             self.exactPages(n, forChapter: self.chapterIndex(of: b))
                         }
                         // Wheel = seek while reading aloud: the loop
-                        // re-syncs to the page now showing.
-                        self.model.audiobook.readerMoved()
+                        // re-syncs to the page now showing — UNLESS the
+                        // loop already turned here itself (same-page echo
+                        // guard, see readerMoved(to:)).
+                        if let n, n > 0 {
+                            let shown = min(n - 1, max(0, Int((f * Double(n)).rounded())))
+                            self.model.audiobook.readerMoved(to: shown)
+                        } else {
+                            self.model.audiobook.readerMoved()
+                        }
                     }
                 }
             }
@@ -1655,11 +1665,49 @@ final class EpubController {
     /// sentences, map each to its column via the range's document-space
     /// rect (page = floor((rect.left + scrollX) / viewportWidth)), then
     /// merge consecutive same-page sentences into one speakable unit.
+    ///
+    /// The sentence splitter is a MANUAL scanner, not a global-regex exec
+    /// loop: a regex match can only START where a sentence pattern fits,
+    /// so a mid-word dot (www.gutenberg.org, "Mr.", initials) made exec
+    /// skip forward past everything between the previous sentence and the
+    /// next matchable position — silently DROPPING chunks of text (heard
+    /// as "Read Aloud skips sentences"; 112 of 134 paragraphs in a real
+    /// book lost pieces). The scanner consumes every character: a dot run
+    /// is a boundary only when followed by a closer/whitespace/end, and
+    /// all preceding text stays in the current piece. Pieces reassemble
+    /// to the node exactly.
     /// Static script — no interpolation.
     private static let segmentsJS = """
     (function(){
       var period = window.innerWidth;
       var out = [];
+      function sentences(text) {
+        var res = [], start = 0, i = 0, n = text.length;
+        while (i < n) {
+          var c = text[i];
+          if (c === '.' || c === '!' || c === '?' || c === '…') {
+            var j = i + 1;
+            while (j < n && '.!?…'.indexOf(text[j]) >= 0) j++;
+            var k = j;
+            while (k < n && '"\\')\\u201d\\u2019]'.indexOf(text[k]) >= 0) k++;
+            if (k >= n || /\\s/.test(text[k])) {
+              var end = k < n ? k + 1 : k;
+              res.push(text.slice(start, end));
+              start = end; i = end;
+              continue;
+            }
+            i = j;
+            continue;
+          }
+          if (c === '\\n' || c === '\\r') {
+            res.push(text.slice(start, i + 1));
+            start = i + 1;
+          }
+          i++;
+        }
+        if (start < n) res.push(text.slice(start));
+        return res;
+      }
       var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
       var node;
       while ((node = walker.nextNode())) {
@@ -1667,14 +1715,15 @@ final class EpubController {
         if (tag === 'STYLE' || tag === 'SCRIPT') continue;
         var text = node.nodeValue;
         if (!text || !text.trim()) continue;
-        var re = /[^.!?\\n\\r]+[.!?]+["')\\]]*(\\s|$)|[^.!?\\n\\r]+[.!?]+["')\\]]*$|[^.!?]+$/g;
-        var m;
-        while ((m = re.exec(text))) {
-          var piece = m[0];
-          if (!piece.trim()) continue;
+        var pos = 0;
+        var pieces = sentences(text);
+        for (var idx = 0; idx < pieces.length; idx++) {
+          var piece = pieces[idx];
+          if (!piece.trim()) { pos += piece.length; continue; }
           var r = document.createRange();
-          r.setStart(node, m.index);
-          r.setEnd(node, Math.min(text.length, m.index + piece.length));
+          r.setStart(node, pos);
+          r.setEnd(node, pos + piece.length);
+          pos += piece.length;
           var rect = r.getBoundingClientRect();
           if (!rect || (rect.width < 0.5 && rect.height < 0.5)) continue;
           var page = Math.max(0, Math.floor((rect.left + window.scrollX) / period));
