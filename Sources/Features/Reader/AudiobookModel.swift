@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import NaturalLanguage
 import Observation
 import OSLog
 import UIKit
@@ -473,8 +474,21 @@ final class AudiobookModel {
     private var loop: Task<Void, Never>?
     /// Four-entry buffer cache (playing page + prefetches; a single-entry
     /// cache evicted the playing page). A page of audio is ~10 MB at
-    /// 44.1 kHz float mono.
+    /// 44.1 kHz float mono. `cacheOrder` preserves insertion order —
+    /// dictionary `keys.first` is ARBITRARY and could evict the page
+    /// that is playing or the one just prefetched.
     private var cache: [String: AVAudioPCMBuffer] = [:]
+    /// Insertion order for FIFO eviction (mirrors `cache` keys).
+    private var cacheOrder: [String] = []
+    /// In-flight syntheses keyed by segment text, so the loop's own
+    /// `bufferFor` and a concurrent prefetch of the same page share one
+    /// render instead of synthesizing the text twice.
+    private var inFlight: [String: Task<AVAudioPCMBuffer, Error>] = [:]
+    /// Number of synthesis windows currently open (loop + prefetches).
+    /// The keep-alive is held while ANY window is open — a plain
+    /// start/stop pair per call let one window's defer-stop cut the
+    /// keep-alive under another window's still-running synthesis.
+    private var synthWindows = 0
     /// Silent loop during synthesis windows: nothing is playing while a
     /// page is being generated, and with the screen locked iOS suspends
     /// the process — freezing MLX Metal work mid-generation (the QA run
@@ -569,6 +583,10 @@ final class AudiobookModel {
         loop = nil
         provider = nil
         cache.removeAll()
+        cacheOrder.removeAll()
+        for t in inFlight.values { t.cancel() }
+        inFlight.removeAll()
+        synthWindows = 0
         if state != .idle { state = .idle }
         page = 0
     }
@@ -583,6 +601,17 @@ final class AudiobookModel {
         guard state == .playing || state == .paused else { return }
         engine.seekRequested = true
         engine.stopPlayback()
+    }
+
+    /// Echo-proof `readerMoved`: the loop turns pages programmatically
+    /// (`provider.showPage`) while speaking, and a page-settling callback
+    /// reporting the SAME page we are already speaking must not read as a
+    /// user seek — that restarted the playing page mid-sentence (heard as
+    /// a break + repeat). Only a genuine move to another page interrupts.
+    func readerMoved(to newPage: Int) {
+        guard state == .playing || state == .paused else { return }
+        guard newPage != page else { return }
+        readerMoved()
     }
 
     // MARK: Loop
@@ -653,12 +682,19 @@ final class AudiobookModel {
                         state = .failed("Audio playback failed")
                         return
                     }
+                    // Prefetch NOW, while the page plays — synthesis is
+                    // slower than playback (RTF ~0.3), so the next page
+                    // must render during this one or the gap between pages
+                    // lands mid-sentence (the old call fired only after
+                    // the page had already ended).
+                    prefetch(segments, at: i + 1, language: await provider.language())
                     // Poll until the page ends. Polling (never awaiting a
                     // callback) is deliberate: lost completions stalled the
                     // whole audiobook; Task.sleep always resumes.
                     var idle = 0
                     var seeked = false
                     var rendered = 0.0
+                    var recoveries = 0
                     while !Task.isCancelled {
                         if engine.seekRequested {
                             engine.seekRequested = false
@@ -672,7 +708,21 @@ final class AudiobookModel {
                             rendered = max(rendered, engine.playbackSeconds)
                         } else {
                             idle += 1
-                            if idle >= 2 { break } // ~1 s past the end = page done
+                            // Playback stopped well short of the page end
+                            // without a seek: an interruption (call, Siri,
+                            // route change) paused the player mid-sentence.
+                            // Distinguish that from a natural end — try to
+                            // resume in place a couple of times and wait it
+                            // out; only then treat the page as finished.
+                            let short = seconds - rendered > 3.0
+                            if short, idle >= 2, recoveries < 2 {
+                                recoveries += 1
+                                idle = 0
+                                try? engine.ensureStarted()
+                                engine.resume()
+                            } else if idle >= (short ? 60 : 2) {
+                                break // ~1 s past a natural end = page done
+                            }
                         }
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
@@ -697,7 +747,6 @@ final class AudiobookModel {
                         i = segments.firstIndex { $0.page >= showing } ?? segments.count
                     } else {
                         i += 1
-                        prefetch(segments, at: i, language: await provider.language())
                     }
                 } catch is CancellationError {
                     return
@@ -720,20 +769,18 @@ final class AudiobookModel {
         if state == .playing || state == .paused { state = .idle }
     }
 
-    /// Begin synthesizing the next pages in the background so the gap
-    /// between pages stays small. Two ahead: synthesis is slower than
-    /// playback (RTF ~0.3), and the second-ahead prefetch covers a
-    /// short page.
+    /// Begin synthesizing the NEXT pages in the background while the
+    /// current page plays. Two ahead: synthesis is slower than playback
+    /// (RTF ~0.3), and the second-ahead prefetch covers a short page.
+    /// `bufferFor`'s in-flight dedup makes overlapping calls with the
+    /// loop share one render.
     private func prefetch(_ segments: [AudiobookSegment], at index: Int, language: String) {
-        guard segments.indices.contains(index) else { return }
-        Task { [weak self] in
-            _ = try? await self?.bufferFor(segments[index], language: language)
-        }
-        if segments.indices.contains(index + 1) {
-            let text = segments[index + 1].text
-            guard cache[text] == nil else { return }
+        for offset in 0...1 {
+            guard segments.indices.contains(index + offset) else { return }
+            let text = segments[index + offset].text
+            guard cache[text] == nil, inFlight[text] == nil else { continue }
             Task { [weak self] in
-                _ = try? await self?.bufferFor(segments[index + 1], language: language)
+                _ = try? await self?.bufferFor(segments[index + offset], language: language)
             }
         }
     }
@@ -742,76 +789,189 @@ final class AudiobookModel {
     /// one giant synthesis call can truncate its tail (whole sentences
     /// silently dropped at the engine's practical output length), and
     /// smaller chunks also fill the pipeline faster between pages.
-    static func sentenceChunks(_ text: String, limit: Int = 380) -> [String] {
+    ///
+    /// Sentence boundaries come from `NLTokenizer` (unit: .sentence) —
+    /// it knows "Mr.", "Dr.", "e.g." and initials are NOT sentence
+    /// ends. The previous regex split after any ". " and ended chunks
+    /// mid-sentence at every abbreviation: the voice dropped to
+    /// end-of-sentence intonation, spliced hard, and the user heard it
+    /// as the audio "stopping mid sentence" every few sentences.
+    /// Sentences are grouped up to `limit`; a single sentence longer
+    /// than `limit` is split at word boundaries (never left oversized —
+    /// an oversized call is exactly the tail-truncation bug). Slicing
+    /// the ORIGINAL string at token boundaries keeps reassembly
+    /// lossless: `chunks.joined() == input`.
+    static func sentenceChunks(_ text: String, limit: Int = 300) -> [String] {
         guard text.count > limit else { return [text] }
-        // Boundary = whitespace run directly after a sentence terminator
-        // (optionally past a closing quote/paren/bracket).
-        let pattern = try? NSRegularExpression(pattern: "(?<=[.!?…])[\"')\\]]?\\s+")
-        var boundaries: [String.Index] = []
-        if let pattern {
-            for m in pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                if let r = Range(m.range, in: text) { boundaries.append(r.lowerBound) }
-            }
-        }
-        // Pieces split AT boundaries: each sentence keeps its terminator
-        // and hands the separator whitespace to the next piece, so the
-        // concatenation is exactly the original text.
-        var pieces: [String] = []
+        // Contiguous sentence pieces (whitespace rides with the piece
+        // it follows, so joining is exact).
+        let tok = NLTokenizer(unit: .sentence)
+        tok.string = text
+        var sentences: [String] = []
         var start = text.startIndex
-        for b in boundaries {
-            pieces.append(String(text[start..<b]))
-            start = b
+        tok.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            // A very long "sentence" (list, unpunctuated run) must still
+            // be split — at word boundaries, under the limit.
+            let piece = String(text[start..<range.upperBound])
+            if piece.count > limit {
+                sentences.append(contentsOf: Self.wordSplit(piece, limit: limit))
+            } else {
+                sentences.append(piece)
+            }
+            start = range.upperBound
+            return true
         }
-        pieces.append(String(text[start...]))
+        if start < text.endIndex {
+            let tail = String(text[start...])
+            sentences.append(contentsOf: tail.count > limit ? Self.wordSplit(tail, limit: limit) : [tail])
+        }
+        guard !sentences.isEmpty else { return [text] }
 
         var chunks: [String] = []
         var current = ""
-        for piece in pieces {
-            if !current.isEmpty, current.count + piece.count > limit {
+        for sentence in sentences {
+            if !current.isEmpty, current.count + sentence.count > limit {
                 chunks.append(current)
-                current = piece
+                current = sentence
             } else {
-                current += piece
+                current += sentence
             }
         }
         if !current.isEmpty { chunks.append(current) }
         return chunks.isEmpty ? [text] : chunks
     }
 
+    /// Splits an over-limit run at word boundaries into pieces of at
+    /// most `limit` characters. Joins back to exactly the input.
+    private static func wordSplit(_ text: String, limit: Int) -> [String] {
+        var pieces: [String] = []
+        var current = ""
+        var iter = text.makeIterator()
+        var word = ""
+        while let ch = iter.next() {
+            word.append(ch)
+            if ch == " " || ch == "\n" {
+                if !current.isEmpty, current.count + word.count > limit {
+                    pieces.append(current)
+                    current = word
+                } else {
+                    current += word
+                }
+                word = ""
+            }
+        }
+        if !word.isEmpty {
+            if !current.isEmpty, current.count + word.count > limit {
+                pieces.append(current); current = word
+            } else {
+                current += word
+            }
+        }
+        if !current.isEmpty { pieces.append(current) }
+        return pieces.isEmpty ? [text] : pieces
+    }
+
+    /// Normalizes extracted text for speech before chunking. Source
+    /// text — especially PDFKit `page.string` — carries a hard newline
+    /// at every VISUAL line wrap and hyphenated words split across
+    /// lines; TTS engines treat a newline as a hard stop, so the voice
+    /// drops pitch mid-sentence roughly every line ("breaks in the
+    /// audio while reading"). Soft hyphens are stripped, wrapped words
+    /// are re-joined, in-sentence newlines collapse to a space, and
+    /// PARAGRAPH breaks (blank lines) survive as newlines.
+    static func normalizeForSpeech(_ text: String) -> String {
+        var s = text.replacingOccurrences(of: "\u{00AD}", with: "")   // soft hyphens
+        // Re-join words hyphenated across a line wrap ("concen-\ntrate").
+        s = s.replacingOccurrences(of: "([a-zà-ÿ])-[ \\t]*\\n[ \\t]*([a-zà-ÿ])",
+                                  with: "$1$2", options: .regularExpression)
+        // Preserve paragraph breaks (blank lines) through the collapse.
+        s = s.replacingOccurrences(of: "\\n[ \\t]*\\n([ \\t]*\\n)*",
+                                  with: "\u{1}", options: .regularExpression)
+        // Wrapped lines → single spaces (the mid-sentence hard stops).
+        s = s.replacingOccurrences(of: "\\s*\\n\\s*", with: " ", options: .regularExpression)
+        s = s.replacingOccurrences(of: "\u{1}", with: "\n\n")
+        // Collapse runs of spaces/tabs (but keep paragraph newlines).
+        s = s.replacingOccurrences(of: "[ \\t]{2,}", with: " ", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Synthesizes (or recalls) one page's audio. Cache hits return
     /// immediately; misses synthesize the page's sentence chunks
-    /// sequentially and concatenate, holding the silent keep-alive so a
-    /// locked screen can't freeze generation. The cache holds FOUR
-    /// entries — the playing page must survive the next pages'
-    /// prefetches (a single entry got evicted mid-play).
+    /// sequentially and concatenate, holding the silent keep-alive (for
+    /// as long as ANY synthesis window is open — overlapping prefetches
+    /// used to stop it out from under each other) so a locked screen
+    /// can't freeze generation. The cache holds FOUR entries,
+    /// FIFO-evicted — the playing page must survive the next pages'
+    /// prefetches (a single entry got evicted mid-play, and dictionary
+    /// key order is arbitrary, so `keys.first` could evict anything).
+    ///
+    /// The text is normalized for speech first (wrapped-line newlines
+    /// are hard stops to a TTS engine — the mid-sentence "breaks in the
+    /// audio"), and a short silent gap is inserted between chunks so
+    /// the splice doesn't click.
     ///
     /// - Returns: the page's PCM buffer at the engine's sample rate.
     /// - Throws: when no audio at all was generated.
     private func bufferFor(_ segment: AudiobookSegment, language: String) async throws -> AVAudioPCMBuffer {
         if let cached = cache[segment.text] { return cached }
-        // Synthesis can take a while (first load, model warmup) and no
-        // audio is playing meanwhile — keep the process runnable so a
-        // locked screen can't freeze generation mid-flight.
-        synthKeepAlive.start()
-        defer { synthKeepAlive.stop() }
-        let chunks = Self.sentenceChunks(segment.text)
+        // In-flight dedup: the loop and a prefetch of the same page share
+        // one render (both used to synthesize the text twice).
+        if let existing = inFlight[segment.text] {
+            return try await existing.value
+        }
+        let task = Task<AVAudioPCMBuffer, Error> { [weak self] in
+            guard let self else { throw CancellationError() }
+            return try await self.render(segment, language: language)
+        }
+        inFlight[segment.text] = task
+        defer { inFlight[segment.text] = nil }
+        do {
+            let buffer = try await task.value
+            cache[segment.text] = buffer
+            cacheOrder.append(segment.text)
+            while cacheOrder.count > 4 {
+                let oldest = cacheOrder.removeFirst()
+                cache.removeValue(forKey: oldest)
+            }
+            return buffer
+        } catch {
+            // A failed render must not poison the cache slot for retries.
+            cache.removeValue(forKey: segment.text)
+            cacheOrder.removeAll { $0 == segment.text }
+            throw error
+        }
+    }
+
+    /// One page's synthesis window: normalized text → chunked →
+    /// synthesized → concatenated with a small inter-chunk gap. The
+    /// keep-alive is refcounted across windows and skipped entirely
+    /// while audio is playing (a playing page keeps the process alive
+    /// by itself).
+    private func render(_ segment: AudiobookSegment, language: String) async throws -> AVAudioPCMBuffer {
+        synthWindows += 1
+        if synthWindows == 1, !engine.isPlaying { synthKeepAlive.start() }
+        defer {
+            synthWindows -= 1
+            if synthWindows == 0 { synthKeepAlive.stop() }
+        }
+        let chunks = Self.sentenceChunks(Self.normalizeForSpeech(segment.text))
         var samples: [Float] = []
         var sampleRate = 44_100
-        for chunk in chunks {
+        for (n, chunk) in chunks.enumerated() {
             let (chunkSamples, rate) = try await synthesize(chunk, language: language)
             sampleRate = rate
             samples.append(contentsOf: chunkSamples)
+            // ~80 ms of silence between chunks: a hard splice of
+            // independently-generated audio clicks; a short gap reads as
+            // a natural inter-sentence pause. (Not after the last chunk.)
+            if n < chunks.count - 1 {
+                samples.append(contentsOf: [Float](repeating: 0, count: rate / 12))
+            }
         }
         guard !samples.isEmpty else {
             throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "no audio generated"])
         }
-        let buffer = Self.makeBuffer(samples, sampleRate: sampleRate)
-        // Multi-entry (4): the playing page's buffer must survive the
-        // next pages' prefetches — removeAll() evicted the just-played
-        // page while its successor was still synthesizing.
-        while cache.count >= 4 { cache.removeValue(forKey: cache.keys.first ?? "") }
-        cache[segment.text] = buffer
-        return buffer
+        return Self.makeBuffer(samples, sampleRate: sampleRate)
     }
 
     /// One chunk through the backend. The first call ensures the

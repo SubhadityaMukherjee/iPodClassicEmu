@@ -1429,14 +1429,17 @@ struct BookScreen: View {
                 moveListSelection(&panelSelection, count: panelRows.count, delta: d, settings: settings)
             } else if isPDFOriginal {
                 if d > 0 { pdfController.nextPage() } else { pdfController.prevPage() }
-                model.audiobook.readerMoved()
+                model.audiobook.readerMoved(to: pdfController.currentPageIndex)
                 // currentPage settles asynchronously; keep the progress
-                // bar honest.
+                // bar honest. The delayed echo reports the SETTLED page —
+                // if the loop is already speaking it, readerMoved(to:)
+                // ignores it (a same-page echo restarted the page
+                // mid-sentence).
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     if self.isPDFOriginal {
                         self.book?.chapterIndex = self.pdfController.currentPageIndex
                     }
-                    self.model.audiobook.readerMoved()
+                    self.model.audiobook.readerMoved(to: self.pdfController.currentPageIndex)
                 }
             } else {
                 // Instant viewport-fraction jumps track the wheel 1:1.
@@ -1454,8 +1457,15 @@ struct BookScreen: View {
                             self.exactPages(n, forChapter: self.chapterIndex(of: b))
                         }
                         // Wheel = seek while reading aloud: the loop
-                        // re-syncs to the page now showing.
-                        self.model.audiobook.readerMoved()
+                        // re-syncs to the page now showing — UNLESS the
+                        // loop already turned here itself (same-page echo
+                        // guard, see readerMoved(to:)).
+                        if let n, n > 0 {
+                            let shown = min(n - 1, max(0, Int((f * Double(n)).rounded())))
+                            self.model.audiobook.readerMoved(to: shown)
+                        } else {
+                            self.model.audiobook.readerMoved()
+                        }
                     }
                 }
             }

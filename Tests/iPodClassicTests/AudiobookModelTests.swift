@@ -31,6 +31,7 @@ final class AudiobookModelTests: XCTestCase {
         private(set) var played: [Int] = []      // frame lengths per play
         private(set) var pauseCount = 0
         private(set) var stopSeeks: [Bool] = []
+        private(set) var stopCount = 0
         private(set) var playing = false
         private(set) var interrupted = false
 
@@ -71,6 +72,7 @@ final class AudiobookModelTests: XCTestCase {
         }
 
         func stopPlayback() {
+            stopCount += 1
             playing = false
         }
     }
@@ -287,18 +289,112 @@ final class AudiobookModelTests: XCTestCase {
         XCTAssertGreaterThan(chunks.count, 1)
         // Reassembly is lossless — no dropped sentences.
         XCTAssertEqual(chunks.joined(), text)
-        // Every break is at a sentence boundary (the separator space
-        // rides at the head of the next chunk).
+        // Every break is at a sentence boundary. NLTokenizer sentence
+        // tokens carry the trailing separator whitespace, so a chunk
+        // STARTS cleanly at "The quick…" (never mid-sentence).
         for chunk in chunks.dropFirst() {
-            XCTAssertTrue(chunk.hasPrefix(" The quick"), "chunk started mid-sentence: \(chunk.prefix(30))")
+            XCTAssertTrue(chunk.hasPrefix("The quick"), "chunk started mid-sentence: \(chunk.prefix(30))")
         }
     }
 
-    func testSentenceChunksOversizedSingleSentenceStaysIntact() {
-        // One unbreakable sentence longer than the limit: keep it whole
-        // rather than splitting mid-word.
-        let text = String(repeating: "word ", count: 200)
-        XCTAssertEqual(AudiobookModel.sentenceChunks(text, limit: 100), [text])
+    /// NLTokenizer knows "Mr."/"Dr." are not sentence ends — the old
+    /// regex split chunks right after abbreviations and the voice
+    /// dropped to end-of-sentence intonation mid-sentence.
+    func testSentenceChunksDoesNotBreakAfterAbbreviations() {
+        let text = "Mr. Smith arrived at Dr. Jones' office. He waited."
+        let chunks = AudiobookModel.sentenceChunks(text, limit: 20)
+        XCTAssertFalse(chunks.contains("Mr."), "chunk ended right after 'Mr.': \(chunks)")
+        XCTAssertFalse(chunks.contains { $0.hasSuffix("Dr.") }, "chunk ended right after 'Dr.': \(chunks)")
+        XCTAssertEqual(chunks.joined(), text)
+    }
+
+    /// A single sentence longer than the limit is split at WORD
+    /// boundaries under the limit — never left oversized (an oversized
+    /// synthesis call truncates its tail = whole words vanish) and
+    /// never split mid-word.
+    func testSentenceChunksSplitsOversizedSentenceAtWordBoundaries() {
+        let text = String(repeating: "word ", count: 200) // 1000 chars, no terminators
+        let chunks = AudiobookModel.sentenceChunks(text, limit: 100)
+        XCTAssertGreaterThan(chunks.count, 1)
+        XCTAssertEqual(chunks.joined(), text, "reassembly must be lossless")
+        for chunk in chunks {
+            XCTAssertLessThanOrEqual(chunk.count, 101, "oversized chunk left intact: \(chunk.count)")
+            XCTAssertFalse(chunk.hasSuffix("wo") && !chunk.hasSuffix("word "),
+                           "split mid-word: …\(chunk.suffix(10))")
+        }
+    }
+
+    // MARK: Speech normalization (wrapped lines are hard stops to TTS)
+
+    func testNormalizeForSpeechJoinsWrappedLines() {
+        let pdfLineWrapped = "The quick brown\nfox jumps over\nthe lazy dog."
+        XCTAssertEqual(AudiobookModel.normalizeForSpeech(pdfLineWrapped),
+                       "The quick brown fox jumps over the lazy dog.")
+    }
+
+    func testNormalizeForSpeechRejoinsHyphenatedWords() {
+        XCTAssertEqual(AudiobookModel.normalizeForSpeech("the concen-\ntration of"),
+                       "the concentration of")
+    }
+
+    func testNormalizeForSpeechPreservesParagraphBreaks() {
+        XCTAssertEqual(AudiobookModel.normalizeForSpeech("First para.\n\nSecond para.\n\n\nThird."),
+                       "First para.\n\nSecond para.\n\nThird.")
+    }
+
+    func testNormalizeForSpeechStripsSoftHyphensAndSpaceRuns() {
+        XCTAssertEqual(AudiobookModel.normalizeForSpeech("be\u{00AD}autiful   wide     spaces"),
+                       "beautiful wide spaces")
+    }
+
+    /// The synthesized text must be normalized first — a hard newline
+    /// in a chunk makes the engine stop mid-sentence (PDFKit page.string
+    /// wraps every visual line).
+    func testSynthesisReceivesNormalizedText() async {
+        let synth = MockSynth()
+        let model = AudiobookModel(engine: MockEngine(), synthesis: synth)
+        let wrapped = Array(repeating: "A wrapped line of text\n", count: 30).joined()
+        let provider = FakeProvider(chapters: [[AudiobookSegment(page: 0, text: wrapped)]])
+        model.start(provider: provider.provider())
+        // Wait for the (mock) engine to synthesize, then stop the session.
+        var synthesized = false
+        for _ in 0..<150 {
+            if !synth.synthesized.isEmpty { synthesized = true; break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        model.stop()
+        XCTAssertTrue(synthesized, "synthesis never ran")
+        for chunk in synth.synthesized {
+            XCTAssertFalse(chunk.contains("\n"), "chunk carried a hard newline to the engine: \(chunk.prefix(40))…")
+        }
+    }
+
+    // MARK: Reader-echo guard
+
+    /// A delayed page-settling callback reporting the page the loop is
+    /// ALREADY speaking must not interrupt it — that same-page echo
+    /// restarted pages mid-sentence (audible break + repeat).
+    func testSamePageReaderEchoIsIgnored() async {
+        let engine = MockEngine()
+        let model = AudiobookModel(engine: engine, synthesis: MockSynth())
+        let provider = FakeProvider(chapters: [[AudiobookSegment(page: 3, text: "Page three's spoken text.")]])
+        model.start(provider: provider.provider())
+        // Wait until the loop is playing page 3.
+        for _ in 0..<200 {
+            if engine.playing, model.page == 3 { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(engine.playing, "loop never started playing")
+        let stopsBefore = engine.stopCount
+
+        model.readerMoved(to: 3)   // echo of our own page turn
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(engine.stopCount, stopsBefore, "same-page echo interrupted playback")
+        XCTAssertFalse(engine.seekRequested, "same-page echo raised a seek flag")
+
+        model.readerMoved(to: 4)   // a genuine move still seeks
+        XCTAssertTrue(engine.seekRequested, "genuine page move must seek")
+        model.stop()
     }
 
     // MARK: Language heuristic
