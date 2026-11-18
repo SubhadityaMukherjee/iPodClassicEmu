@@ -860,47 +860,58 @@ final class AudiobookModel {
     /// as the audio "stopping mid sentence" every few sentences.
     /// Sentences are grouped up to `limit`; a single sentence longer
     /// than `limit` is split at word boundaries (never left oversized —
-    /// an oversized call is exactly the tail-truncation bug). Slicing
-    /// the ORIGINAL string at token boundaries keeps reassembly
-    /// lossless: `chunks.joined() == input`.
+    /// an oversized call is exactly the tail-truncation bug).
+    ///
+    /// NO NEWLINE EVER REACHES THE ENGINE: a TTS engine reads "\n" as a
+    /// hard stop and drops intonation mid-flow, so paragraph breaks are
+    /// hard CHUNK boundaries (the inter-chunk gap renders the pause)
+    /// and every chunk is newline-free — even the short-page early
+    /// return strips them.
     static func sentenceChunks(_ text: String, limit: Int = 300) -> [String] {
-        guard text.count > limit else { return [text] }
-        // Contiguous sentence pieces (whitespace rides with the piece
-        // it follows, so joining is exact).
-        let tok = NLTokenizer(unit: .sentence)
-        tok.string = text
-        var sentences: [String] = []
-        var start = text.startIndex
-        tok.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
-            // A very long "sentence" (list, unpunctuated run) must still
-            // be split — at word boundaries, under the limit.
-            let piece = String(text[start..<range.upperBound])
-            if piece.count > limit {
-                sentences.append(contentsOf: Self.wordSplit(piece, limit: limit))
-            } else {
-                sentences.append(piece)
-            }
-            start = range.upperBound
-            return true
+        guard text.count > limit else {
+            return [text.replacingOccurrences(of: "\n", with: " ")]
         }
-        if start < text.endIndex {
-            let tail = String(text[start...])
-            sentences.append(contentsOf: tail.count > limit ? Self.wordSplit(tail, limit: limit) : [tail])
-        }
-        guard !sentences.isEmpty else { return [text] }
-
         var chunks: [String] = []
         var current = ""
-        for sentence in sentences {
-            if !current.isEmpty, current.count + sentence.count > limit {
+        func flush() {
+            if !current.isEmpty {
                 chunks.append(current)
-                current = sentence
-            } else {
-                current += sentence
+                current = ""
             }
         }
-        if !current.isEmpty { chunks.append(current) }
-        return chunks.isEmpty ? [text] : chunks
+        // Paragraph by paragraph: a paragraph break ends the chunk, so
+        // no chunk spans it and the gap supplies the pause.
+        for para in text.components(separatedBy: "\n\n") {
+            let paraText = para.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !paraText.isEmpty else { continue }
+            let tok = NLTokenizer(unit: .sentence)
+            tok.string = paraText
+            var sentences: [String] = []
+            var start = paraText.startIndex
+            tok.enumerateTokens(in: paraText.startIndex..<paraText.endIndex) { range, _ in
+                // A very long "sentence" (list, unpunctuated run) must
+                // still be split — at word boundaries, under the limit.
+                let piece = String(paraText[start..<range.upperBound])
+                sentences.append(contentsOf: piece.count > limit ? Self.wordSplit(piece, limit: limit) : [piece])
+                start = range.upperBound
+                return true
+            }
+            if start < paraText.endIndex {
+                let tail = String(paraText[start...])
+                sentences.append(contentsOf: tail.count > limit ? Self.wordSplit(tail, limit: limit) : [tail])
+            }
+            for sentence in sentences {
+                if !current.isEmpty, current.count + sentence.count > limit {
+                    flush()
+                }
+                current += sentence
+            }
+            flush()
+        }
+        if chunks.isEmpty {
+            return [text.replacingOccurrences(of: "\n", with: " ")]
+        }
+        return chunks
     }
 
     /// Splits an over-limit run at word boundaries into pieces of at
