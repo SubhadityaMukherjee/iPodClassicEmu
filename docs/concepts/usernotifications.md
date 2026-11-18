@@ -1,16 +1,16 @@
-# UserNotifications — scheduling alarms that fire when the app is dead
+# UserNotifications — scheduling when the app isn't running
 
 Local notifications are how iOS lets an app schedule something to happen
 at a future time *without the app running*. `UNUserNotificationCenter`
-(the singleton) manages permission, registration, and delivery.
+(the singleton) manages permission, registration, and delivery. This app
+uses them for the countdown **timer**.
 
-## Why alarms must use this (project invariant)
+## Why in-app timers are insufficient
 
-An in-app `Timer` dies with the process: force-quit, crash, reboot,
-memory pressure — any of them silently kills it. The "alarm says on but
-never rings" bug class exists precisely because in-app scheduling feels
-fine when it isn't. **Alarms fire from the OS**: the app only registers
-a *request* and renders UI when the system hands the notification back.
+A `Timer` dies with the process: force-quit, crash, memory pressure —
+any of them silently kills it. For the timer's "finished" moment the app
+registers a *request* with the system and renders UI when the system
+hands the notification back.
 
 ## The moving parts
 
@@ -18,63 +18,65 @@ a *request* and renders UI when the system hands the notification back.
 ```swift
 UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
 ```
-Denied permission is a first-class state — the alarm screen warns in
-red; the setup wizard batches this prompt with the others.
+Denied permission is a normal state; the setup wizard batches this
+prompt with the others.
 
 ### A request = trigger + content
 ```swift
 let content = UNMutableNotificationContent()
-content.title  = "Alarm"
+content.title = "Timer"
 content.sound = UNNotificationSound(named: "AlarmBeep.caf")   // ≤ 30 s
 
-var comps = DateComponents(); comps.hour = 7; comps.minute = 30
-comps.weekday = 2                       // Monday
-let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
-
-let req = UNNotificationRequest(identifier: "alarm-mon", content: content, trigger: trigger)
+let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+let req = UNNotificationRequest(identifier: "timer.fire", content: content, trigger: trigger)
 try await center.add(req)
 ```
-
-`UNCalendarNotificationTrigger` matches date components — a request with
-a weekday set and `repeats: true` fires weekly on that weekday.
-Date-component math (hour24 wrap, weekday bitmask) is Foundation
-Calendar work (see [foundation.md](foundation.md)).
+One-shot interval trigger — simple, cancelable by identifier.
 
 ### Delivery back into the app
-The `UNUserNotificationCenterDelegate` receives notifications while the
-app is foregrounded (default behavior would only banner it) —
-`AlarmNotifications` forwards to `RingerManager`, which loops the alarm
-sound via AVAudioPlayer ([avfoundation-playback.md](avfoundation-playback.md))
-and shows the ringer overlay **without covering the click wheel**
-(dismiss must always be reachable).
+The `UNUserNotificationCenterDelegate` (`TimerNotificationsDelegate`)
+receives notifications while the app is foregrounded and forwards them
+to `RingerManager` — the in-app overlay plus the **media-audio tone
+loop** (which plays through the hardware mute switch; the notification's
+own sound does not).
 
-## The sharp edges (all bit this project)
+## The hard lesson: why there is no alarm feature (removed 2026-11-18)
 
-- **Removing a repeating request kills EVERY future occurrence** — there
-  is no per-occurrence cancellation. So the in-app fire path must
-  *re-schedule*: remove → hop 0.5 s (this SDK has no completion callback
-  on removal) → `schedule()` again. Any exit that skips the re-schedule
-  leaves the alarm enabled-but-dead.
-- **Heal on foreground**: because a mid-cycle death (force-quit during
-  the ringer) can skip the re-schedule, `reconcile()` re-derives what
-  should be pending and repairs it at every `scenePhase .active` and at
-  keep-alive start.
-- **Verify, don't trust**: `pendingAlarmCount` is fetched back from the
-  center (async DispatchGroup) and published; the screen's red warning
-  when enabled-but-zero-pending is the UI expression of "the system says
-  nothing will fire."
-- Notification sounds must be ≤ 30 s and are referenced by name from the
-  bundle, not by URL.
+This project shipped a weekday alarm for months and went through every
+scheduling design (repeating `UNCalendarNotificationTrigger`s → an
+occurrence-window of one-shot triggers with verify-and-repair). The
+scheduling was eventually bulletproof — and irrelevant, because of two
+platform facts no third-party app can escape:
+
+1. **The notification sound obeys the hardware mute switch and Focus
+   modes.** A muted phone delivers the banner in total silence.
+2. **A force-quit kills every app path.** No process → no in-app media
+   audio; the muted notification is all that remains.
+
+Apple's Clock app is special-cased by the OS (mute-switch-immune,
+DND-breaking); no public API grants those powers. A wake-up alarm that
+can silently fail is worse than none, so the feature was removed by user
+decision — "cannot afford missing alarms" — and a launch-time sweep
+deletes any legacy `alarm.`-pending requests.
+
+Rules that survive that lesson:
+
+- Notification **sounds** must be ≤ 30 s, bundled, referenced by name —
+  and they obey the mute switch; never treat them as alarm-grade.
+- App-owned media audio (AVAudioPlayer on an active session) punches
+  through the mute switch — but only while the process lives.
+- `Time Sensitive` interruption level lets a notification through Focus
+  *only if* the user allows it per-app — check
+  `notificationSettings()`, warn in UI when it's off.
 
 ## Where to look
 
-- `Sources/Features/Clocks/AlarmStore.swift` — scheduling, reconcile,
-  checkFire, the 0.5 s re-schedule hop.
-- `Sources/Features/Clocks/AlarmRingerOverlay.swift` + `ClocksScreens`
-  — the ringing UI and its QA readouts.
+- `Sources/Features/Clocks/TimerStopwatchModels.swift` —
+  `TimerModel.scheduleNotification`, `RingerManager`,
+  `TimerNotificationsDelegate`.
 
 ## Related
 
-[activitykit-live-activities.md](activitykit-live-activities.md) — the
-other background-visible surface (timers/stopwatch/recording);
-[foundation.md](foundation.md) — Calendar math behind triggers.
+[avfoundation-audio-session.md](avfoundation-audio-session.md) — the
+session the tone loop plays on; [activitykit-live-activities.md](activitykit-live-activities.md)
+— the timer's lock-screen countdown.

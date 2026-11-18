@@ -1,5 +1,6 @@
 import Foundation
 import MusicKit
+import UIKit
 
 /// Playback over ApplicationMusicPlayer: queue bookkeeping, transport
 /// controls, volume, and scrubbing, with a timer polling player state.

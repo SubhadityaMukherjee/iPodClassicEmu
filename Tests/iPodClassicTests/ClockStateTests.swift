@@ -72,4 +72,26 @@ final class ClockStateTests: XCTestCase {
         XCTAssertEqual(stopwatch.elapsed, 0)
         XCTAssertTrue(stopwatch.laps.isEmpty)
     }
+
+    /// The ringer's tone loop must start REGARDLESS of notification
+    /// permission — the guard on `permissionDenied` was the "notification
+    /// comes, nothing rings" bug: with notifications authorized and the
+    /// hardware mute switch on, the notification sound was muted AND the
+    /// in-app loop was suppressed → total silence.
+    @MainActor
+    func testRingerAlwaysStartsTheToneLoop() {
+        let manager = RingerManager.shared
+        var started = 0
+        manager.soundStarter = { started += 1 }
+        defer { manager.soundStarter = { RingerManager.startToneLoop() } }
+
+        manager.startTimerRinger()
+        // startRinger hops to the main queue; drain it.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertGreaterThanOrEqual(started, 1,
+                                    "the tone loop must start even with notifications authorized")
+
+        manager.stop()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    }
 }

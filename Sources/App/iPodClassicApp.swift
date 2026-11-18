@@ -69,46 +69,29 @@ struct iPodClassicApp: App {
             diskPath: "artwork-urlcache"
         )
 
-        AlarmNotifications.configureDelegate()
+        TimerNotifications.configureDelegate()
         AppModelRouter.shared.model = self.model
         UIDevice.current.isBatteryMonitoringEnabled = true
     }
 
     /// The single window: the full-device iPod UI plus scene-phase
-    /// handling — persist the playback session and start the alarm
-    /// keep-alive on background; stop keep-alive, reconcile alarms, mark
-    /// activity, and refresh the music library on foreground.
+    /// handling — persist the playback session on background; mark
+    /// activity and refresh the music library on foreground.
     var body: some Scene {
         WindowGroup {
             DeviceView()
                 .environment(model)
                 .environmentObject(model.settings)
-                .environmentObject(model.alarms)
                 .preferredColorScheme(.dark)
                 .persistentSystemOverlays(.hidden)
                 .statusBarHidden()
                 .onChange(of: scenePhase) { _, phase in
-                    // While backgrounded with an armed alarm, keep the
-                    // process alive so the in-app ringer can fire (full
-                    // volume, silent-switch-proof). Killed-app fallback is
-                    // the system notification.
                     switch phase {
                     case .background:
                         // Persist what's playing so a relaunch restores it
                         // (queue, current track, position).
                         model.player.saveSession()
-                        if model.alarms.enabled { model.alarms.startKeepAlive() }
                     case .active:
-                        model.alarms.stopKeepAlive()
-                        // Heal the alarm on every foreground: if a fire/
-                        // dismiss cycle died mid-way (force-quit, crash,
-                        // reboot), the notification requests are gone while
-                        // the alarm still reads "on" — reconcile re-arms.
-                        // Unconditional: with the alarm OFF it cancels any
-                        // ghost requests installed earlier this session
-                        // (gating on `enabled` would leave those alive
-                        // until the next launch).
-                        model.alarms.reconcile()
                         // Returning to the foreground is activity. The
                         // process stays alive in the background (playback
                         // audio session), so idleSeconds keeps growing

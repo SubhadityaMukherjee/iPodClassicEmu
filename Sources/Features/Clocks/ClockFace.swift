@@ -1,15 +1,11 @@
 import SwiftUI
 
-/// Analog clock face: numerals, minute ticks, blue hands. Shows either live
-/// time (`date`) or a fixed time (`hour`/`minute`) for the alarm setter.
+/// Analog clock face: numerals, minute ticks, blue hands. Shows the live
+/// time supplied by the parent (AppModel's clockTick heartbeat).
 struct ClockFace: View {
-    /// Live mode: when non-nil the face renders this instant (second hand
-    /// included); nil switches to fixed-time mode for the alarm setter.
-    var date: Date? = nil
-    /// Fixed display time (alarm set), 24h.
-    var fixedHour24: Int? = nil
-    /// Fixed minutes for the alarm-set time (ignored in live mode).
-    var fixedMinute: Int? = nil
+    /// The instant to render (second hand included). The parent's
+    /// re-render supplies fresh Dates — there is no internal clock.
+    var date: Date = Date()
     /// Color of the second hand and center dot (matches the host page's
     /// accent so the clock blends into each screen).
     var accent: Color = Color(red: 0.22, green: 0.42, blue: 0.85)
@@ -17,9 +13,7 @@ struct ClockFace: View {
     var showNumerals = true
 
     /// Draws the whole face in one Canvas pass: rim, 60 minute ticks,
-    /// numerals, hands, center dot. There is no internal clock — in live
-    /// mode the parent's re-render (AppModel's clockTick heartbeat)
-    /// supplies fresh Dates, and fixed mode needs no ticking at all.
+    /// numerals, hands, center dot.
     ///
     /// Concept: SwiftUI views & state → docs/concepts/swiftui-views-and-state.md
     var body: some View {
@@ -31,13 +25,8 @@ struct ClockFace: View {
             let face = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
             ctx.stroke(face, with: .color(.black.opacity(0.55)), lineWidth: 1.2)
 
-            let comps: (hour: Int, minute: Int, second: Int)
-            if let date {
-                let c = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
-                comps = (c.hour ?? 0, c.minute ?? 0, c.second ?? 0)
-            } else {
-                comps = (fixedHour24 ?? 0, fixedMinute ?? 0, 0)
-            }
+            let c = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
+            let comps = (c.hour ?? 0, c.minute ?? 0, c.second ?? 0)
 
             // Minute ticks + numerals
             for i in 0..<60 {
@@ -86,15 +75,13 @@ struct ClockFace: View {
             }
 
             // Hour & minute (black), second hand (blue) when live.
-            let hourAngle = Double(comps.hour % 12) / 12 * 360 + Double(comps.minute) / 60 * 30
-            let minuteAngle = Double(comps.minute) / 60 * 360
+            let hourAngle = Double(comps.0 % 12) / 12 * 360 + Double(comps.1) / 60 * 30
+            let minuteAngle = Double(comps.1) / 60 * 360
             hand(angleDegrees: hourAngle, length: radius * 0.5, width: 2.6, color: .black)
             hand(angleDegrees: minuteAngle, length: radius * 0.74, width: 2.0, color: .black)
 
-            if date != nil {
-                let secondAngle = Double(comps.second) / 60 * 360
-                hand(angleDegrees: secondAngle, length: radius * 0.82, width: 1.1, color: accent)
-            }
+            let secondAngle = Double(comps.2) / 60 * 360
+            hand(angleDegrees: secondAngle, length: radius * 0.82, width: 1.1, color: accent)
 
             // Center dot
             let dot = Path(ellipseIn: CGRect(x: center.x - 2.5, y: center.y - 2.5, width: 5, height: 5))

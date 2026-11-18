@@ -231,20 +231,20 @@ final class StopwatchModel {
     }
 }
 
-/// Shows the in-app ringer overlay via AppModel. The alarm SOUND is the
-/// system notification (Ringer & Alerts volume — immune to media mute);
-/// the AVAudioPlayer loop here is only a fallback for the
-/// notifications-denied case, because app-owned audio ALWAYS plays at
-/// media volume (no session category changes that on iOS).
+/// Shows the in-app ringer overlay via AppModel AND always plays the
+/// audible tone loop (2026-11-18 fix). The loop is MEDIA audio: it plays
+/// through the hardware mute switch and Focus modes that silence the
+/// system notification's sound — with notifications authorized it used
+/// to be suppressed ("the notification already rang"), which made
+/// mute-switch mornings totally silent. The notification is now the
+/// redundant killed-app path; the app's own voice is the ringer. Note
+/// media audio follows MEDIA volume — the one variable an app cannot
+/// override (no public API plays at Ringer & Alerts volume).
 @Observable
 final class RingerManager {
     /// Process-wide instance — the timer model and the ringer UI both
     /// drive the same overlay.
     static let shared = RingerManager()
-
-    /// Looping fallback tone; only ever started when notifications are
-    /// denied (see `startSound`).
-    private var audioPlayer: AVAudioPlayer?
 
     /// Raises the ringer overlay for a finished countdown timer.
     func startTimerRinger() {
@@ -254,7 +254,7 @@ final class RingerManager {
     /// Raises the overlay via AppModel unless one is already up; hops to
     /// the main queue because AppModel state drives UI.
     ///
-    /// - Parameter context: what is ringing (alarm/timer) and its title.
+    /// - Parameter context: what is ringing and its title.
     private func startRinger(_ context: RingerContext) {
         DispatchQueue.main.async {
             guard AppModelRouter.shared.model?.ringer == nil else { return }
@@ -263,33 +263,142 @@ final class RingerManager {
         }
     }
 
-    /// Media-volume loop, ONLY when notifications are denied (no system
-    /// sound would exist at all). With notifications working, this is a
-    /// no-op — the notification already rang at ringer volume.
-    func startSound() {
-        guard AlarmStore.shared.permissionDenied else { return }
+    /// Media-volume loop. ALWAYS started when the ringer raises — this is
+    /// the app's own voice, and media audio punches through the hardware
+    /// mute switch that silences the notification sound (and through
+    /// Focus, which can still banner a time-sensitive alarm silently).
+    /// The system notification remains the redundant sound for the
+    /// killed-app case; when the process is alive, THIS is the ringer.
+    /// (The old shape guarded on `permissionDenied` — with notifications
+    /// authorized, mute-switch users got total silence: the muted
+    /// notification plus a deliberately-silent overlay. Reported as
+    /// "the notification comes, nothing rings".)
+    var soundStarter: () -> Void = { RingerManager.startToneLoop() }
+
+    /// Launches the looping alarm tone on the shared audio session.
+    /// Static + internal so tests can restore the injectable seam.
+    static func startToneLoop() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default, options: [.duckOthers])
         try? session.setActive(true)
         guard let url = Bundle.main.url(forResource: "AlarmTone", withExtension: "caf") else { return }
-        audioPlayer = try? AVAudioPlayer(contentsOf: url)
-        audioPlayer?.numberOfLoops = -1
-        audioPlayer?.volume = 1.0
-        audioPlayer?.play()
+        RingerManager.shared.tonePlayer = try? AVAudioPlayer(contentsOf: url)
+        RingerManager.shared.tonePlayer?.numberOfLoops = -1
+        RingerManager.shared.tonePlayer?.volume = 1.0
+        RingerManager.shared.tonePlayer?.play()
     }
 
-    /// Dismisses the ringer: stops the fallback tone, clears the overlay,
-    /// and re-arms the alarm schedule so tomorrow's request exists again
-    /// after the fire cycle.
+    /// Looping alarm tone player (media audio; see `soundStarter`).
+    var tonePlayer: AVAudioPlayer?
+
+    /// Raises the ringer overlay via AppModel and always starts the
+    /// audible tone loop.
+    func startSound() {
+        soundStarter()
+    }
+
+    /// Dismisses the ringer: stops the tone loop, clears the overlay, and
+    /// restores the un-ducked music-shaped session the ringer displaced.
     func stop() {
-        audioPlayer?.stop()
-        audioPlayer = nil
+        tonePlayer?.stop()
+        tonePlayer = nil
         DispatchQueue.main.async {
             AppModelRouter.shared.model?.ringer = nil
         }
-        // The ringer no longer reconfigures the audio session (no ducking
-        // to undo); the session stays active for music/background audio.
-        // Re-arm tomorrow's request after the ringer is dismissed.
-        AlarmStore.shared.schedule()
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .default, options: [])
+    }
+}
+
+import UIKit
+import UserNotifications
+
+/// Indirection so the notification delegate can reach the live AppModel.
+final class AppModelRouter {
+    static let shared = AppModelRouter()
+    /// The live AppModel, set at launch; weak so the router can reference
+    /// it without owning or keeping it alive.
+    weak var model: AppModel?
+}
+
+/// Notification delegate for the countdown timer: presents the in-app
+/// ringer when the timer's notification arrives while the app is open,
+/// and opens the ringer when the user taps it.
+///
+/// (The alarm feature was removed 2026-11-18 — a third-party iOS alarm
+/// cannot ring through the hardware mute switch or survive a force-quit,
+/// so it could never be trusted for wake-ups. This delegate now serves
+/// the timer only; a one-time sweep removes any legacy `alarm.`-prefixed
+/// pending requests from earlier installs.)
+final class TimerNotificationsDelegate: NSObject, UNUserNotificationCenterDelegate {
+    /// Set by `TimerNotifications.configure`; forwards ringer requests to
+    /// the live AppModel.
+    var onStartRinger: ((RingerContext) -> Void)?
+
+    /// Decides presentation while the app is open. Timer notifications
+    /// become the in-app ringer; returning `.sound` WITHOUT `.banner`
+    /// plays the system sound without stacking a banner on top of the
+    /// overlay that already offers Stop.
+    ///
+    /// Concept: UNUserNotificationCenter → docs/concepts/usernotifications.md
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        if notification.request.content.categoryIdentifier == "TIMER" {
+            let context = RingerContext(kind: .timer, title: "Timer")
+            DispatchQueue.main.async { self.onStartRinger?(context) }
+            completionHandler([.sound])
+        } else {
+            completionHandler([.banner, .sound])
+        }
+    }
+
+    /// Taps open the in-app ringer.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if response.notification.request.content.categoryIdentifier == "TIMER" {
+            let context = RingerContext(kind: .timer, title: "Timer")
+            DispatchQueue.main.async { self.onStartRinger?(context) }
+        }
+        completionHandler()
+    }
+}
+
+/// Namespace for the one-time notification wiring done at app start.
+enum TimerNotifications {
+    /// Shared delegate instance, retained here for the process lifetime —
+    /// UNUserNotificationCenter keeps its delegate only weakly.
+    static let delegate = TimerNotificationsDelegate()
+
+    /// Installs the delegate, wires ringer callbacks to the live
+    /// AppModel, and sweeps legacy alarm-era pending requests (the alarm
+    /// feature is gone; its notifications must not linger). Call once at
+    /// launch.
+    ///
+    /// Concept: UNUserNotificationCenter → docs/concepts/usernotifications.md
+    static func configureDelegate() {
+        let center = UNUserNotificationCenter.current()
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: "TIMER", actions: [],
+                                   intentIdentifiers: [], options: [])
+        ])
+        center.delegate = delegate
+        delegate.onStartRinger = { context in
+            DispatchQueue.main.async {
+                AppModelRouter.shared.model?.startRinger(context)
+            }
+        }
+        // One-time sweep of the removed alarm feature's pending requests.
+        center.getPendingNotificationRequests { requests in
+            let stale = requests.map { $0.identifier }.filter { $0.hasPrefix("alarm.") }
+            if !stale.isEmpty {
+                center.removePendingNotificationRequests(withIdentifiers: stale)
+            }
+        }
     }
 }

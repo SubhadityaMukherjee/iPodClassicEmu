@@ -49,24 +49,6 @@ final class WheelTapTests: XCTestCase {
         }
     }
 
-    @MainActor
-    func testAlarmWheelAdjustsHour() throws {
-        let app = XCUIApplication()
-        app.launchEnvironment["START_ROUTE"] = "alarm"
-        app.launchEnvironment["RESET_DEFAULTS"] = "1"
-        app.launch()
-
-        XCTAssertTrue(app.staticTexts["Set Hour"].waitForExistence(timeout: 5), "Alarm screen did not open")
-        XCTAssertTrue(app.staticTexts["07"].waitForExistence(timeout: 2), "Default alarm hour 07 missing")
-
-        // One clockwise tick on the scroll sector: hour 07 → 08.
-        let wheel = app.otherElements["clickwheel"]
-        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        origin.withOffset(CGVector(dx: 64, dy: 64))
-            .press(forDuration: 0.02, thenDragTo: origin.withOffset(CGVector(dx: 45, dy: 78)))
-
-        XCTAssertTrue(app.staticTexts["08"].waitForExistence(timeout: 3), "Wheel tick did not adjust the alarm hour")
-    }
 
     @MainActor
     func testAllSongsListScrolls() throws {
@@ -98,28 +80,6 @@ final class WheelTapTests: XCTestCase {
                       "Rows around the selection are missing at depth")
     }
 
-    @MainActor
-    func testAlarmRingerFiresAndDismisses() throws {
-        let app = XCUIApplication()
-        app.launchEnvironment["RESET_DEFAULTS"] = "1"
-        app.launchEnvironment["START_ROUTE"] = "alarm"
-        app.launchEnvironment["ALARM_FIRE_SECONDS"] = "5"
-        app.launch()
-
-        let wheel = app.otherElements["clickwheel"]
-        XCTAssertTrue(wheel.waitForExistence(timeout: 5))
-
-        // The ringer overlay must appear with its Snooze/Stop rows.
-        XCTAssertTrue(app.staticTexts["Snooze"].waitForExistence(timeout: 12),
-                      "Ringer overlay did not fire")
-
-        // Dismiss: center on "Snooze" (first row) also closes the overlay.
-        let origin = wheel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        origin.withOffset(CGVector(dx: 8, dy: 0)).tap()
-
-        XCTAssertTrue(app.staticTexts["Snooze"].waitForNonExistence(timeout: 5),
-                      "Ringer overlay did not dismiss")
-    }
 
     @MainActor
     func testSettingsSubmenuScrollsAndSelects() throws {

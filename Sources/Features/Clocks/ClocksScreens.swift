@@ -1,18 +1,17 @@
 import SwiftUI
 
-/// Clocks menu: Alarm Clock, Timer, Stopwatch.
+/// Clocks menu: Timer, Stopwatch.
 struct ClocksMenuScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
     @State private var selection = 0
 
     private let rows: [MenuItem] = [
-        MenuItem(id: "alarm", title: "Alarm Clock"),
         MenuItem(id: "timer", title: "Timer"),
         MenuItem(id: "stopwatch", title: "Stopwatch"),
     ]
 
-    /// The three-row Clocks menu list.
+    /// The two-row Clocks menu list.
     var body: some View {
         MenuList(items: rows, selection: selection)
             .onWheel { handle($0) }
@@ -26,7 +25,6 @@ struct ClocksMenuScreen: View {
             moveListSelection(&selection, count: rows.count, delta: d, settings: settings)
         case .select:
             switch rows[min(selection, rows.count - 1)].id {
-            case "alarm": model.push(.alarm)
             case "timer": model.push(.timer)
             case "stopwatch": model.push(.stopwatch)
             default: break
@@ -36,240 +34,6 @@ struct ClocksMenuScreen: View {
         default:
             break
         }
-    }
-}
-
-/// The classic alarm setter: analog face at the set time, hour/minute/AM-PM
-/// segments cycled with the wheel, center advances to the next segment.
-struct AlarmScreen: View {
-    @Environment(AppModel.self) private var model
-    @EnvironmentObject private var alarm: AlarmStore
-
-    /// The wheel's editable focus, in visit order: hour → minute → AM/PM →
-    /// repeat days → the on/off toggle.
-    enum Segment: Int, CaseIterable { case hour, minute, ampm, repeatDays, toggle }
-
-    /// Which segment the wheel currently edits; center advances it.
-    ///
-    /// Concept: SwiftUI @State → docs/concepts/swiftui-views-and-state.md
-    @State private var segment: Segment = .hour
-    /// Highlighted weekday letter while editing Repeat Days.
-    @State private var dayCursor = 0  // highlighted letter within Repeat Days
-
-    /// The setter page: segment caption, analog face at the set time,
-    /// editable time/day rows, toggle, and red health warnings (armed
-    /// but unscheduled, or notifications denied).
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(segmentTitle)
-                .font(Theme.font(12.5, .semibold))
-                .foregroundStyle(Theme.inkDim)
-                .padding(.top, 4)
-
-            ClockFace(fixedHour24: alarm.hour24, fixedMinute: alarm.minute)
-                .frame(maxHeight: 118)
-                .padding(.horizontal, 70)
-
-            timeRow
-
-            repeatRow
-
-            alarmToggle
-                .padding(.bottom, 8)
-
-            if alarm.enabled && alarm.permissionDenied {
-                Button {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    Text("Notifications are off — the alarm can only ring\nin-app. Tap to allow notifications in Settings.")
-                        .font(Theme.font(11, .semibold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Color.red.opacity(0.85))
-                        .underline()
-                        .padding(.bottom, 6)
-                }
-            } else if alarm.enabled && alarm.pendingAlarmCount == 0 {
-                // Armed but nothing pending: the alarm will not ring. This
-                // is the silent-death state — surface it instead of hiding it.
-                Text("Alarm is on but not scheduled — it may not ring.\nToggle it off and on to re-arm.")
-                    .font(Theme.font(11, .semibold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.red.opacity(0.85))
-                    .padding(.bottom, 6)
-            }
-            // QA hook: pending-request readout for the reschedule E2E.
-            if ProcessInfo.processInfo.environment["ALARM_DEBUG"] == "1" {
-                Text("QA pending: \(alarm.pendingAlarmCount.map(String.init) ?? "?")")
-                    .font(Theme.font(10, .medium))
-                    .foregroundStyle(Theme.inkDim)
-            }
-        }
-        .onWheel { handle($0) }
-        .onAppear {
-            // Ask for notification permission while the user is right here.
-            alarm.schedule()
-            // (ALARM_ENABLE arm/disarm now lives in AppModel.init so it
-            // applies on every launch, not just this screen.)
-            // QA hook: fire the ringer after N seconds for UI tests.
-            if let s = ProcessInfo.processInfo.environment["ALARM_FIRE_SECONDS"], let secs = Double(s), secs > 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + secs) {
-                    AppModelRouter.shared.model?.startRinger(RingerContext(kind: .alarm(id: UUID()), title: "Alarm"))
-                }
-            }
-            // QA hook: set the alarm to fire N seconds from now (the
-            // backgrounded keep-alive fire path — checkFire).
-            if let s = ProcessInfo.processInfo.environment["ALARM_SET_NOW_PLUS"], let secs = Double(s), secs > 0 {
-                let target = Date().addingTimeInterval(secs)
-                let c = Calendar.current.dateComponents([.hour, .minute], from: target)
-                if let h24 = c.hour, let m = c.minute {
-                    var h = h24 % 12
-                    if h == 0 { h = 12 }
-                    alarm.hour = h
-                    alarm.minute = m
-                    alarm.isPM = h24 >= 12
-                }
-            }
-        }
-    }
-
-    /// Caption naming the active segment; the days segment shows the
-    /// live repeat summary instead.
-    private var segmentTitle: String {
-        switch segment {
-        case .hour: return "Set Hour"
-        case .minute: return "Set Minute"
-        case .ampm: return "AM / PM"
-        case .repeatDays: return "Repeat: \(alarm.repeatLabel)"
-        case .toggle: return "Alarm"
-        }
-    }
-
-    /// HH : MM AM-PM row; the active segment gets the selection fill.
-    private var timeRow: some View {
-        HStack(spacing: 4) {
-            timeSegment(text: String(format: "%02d", alarm.hour), selected: segment == .hour, width: 34)
-            Text(":").font(Theme.font(22, .semibold))
-            timeSegment(text: String(format: "%02d", alarm.minute), selected: segment == .minute, width: 34)
-            timeSegment(text: alarm.isPM ? "PM" : "AM", selected: segment == .ampm, width: 30, fontSize: 13)
-        }
-    }
-
-    /// One boxed time field — white on the blue selection gradient while
-    /// its segment is active.
-    private func timeSegment(text: String, selected: Bool, width: CGFloat, fontSize: CGFloat = 20) -> some View {
-        Text(text)
-            .font(.system(size: fontSize, weight: .semibold, design: .default))
-            .foregroundStyle(selected ? Color.white : Theme.ink)
-            .padding(.vertical, 2)
-            .frame(width: width)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(selected ? AnyShapeStyle(SelectionGradient()) : AnyShapeStyle(Color.clear))
-            )
-    }
-
-    /// The Su–Sa letters. Selected days render as ink on a chip; the
-    /// wheel-focused letter gets the selection fill.
-    private var repeatRow: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<7, id: \.self) { i in
-                let focused = segment == .repeatDays && i == dayCursor
-                Text(Calendar.current.veryShortWeekdaySymbols[i])
-                    .font(Theme.font(12, .semibold))
-                    .foregroundStyle(focused ? Color.white : (alarm.repeatDays[i] ? Theme.ink : Theme.inkDim))
-                    .frame(width: 18, height: 18)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(focused
-                                  ? AnyShapeStyle(SelectionGradient())
-                                  : (alarm.repeatDays[i] ? AnyShapeStyle(Color.black.opacity(0.12)) : AnyShapeStyle(Color.clear)))
-                    )
-            }
-        }
-    }
-
-    /// The On/Off pill, highlighted while it is the active segment.
-    private var alarmToggle: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "alarm.clock")
-                .font(Theme.font(13, .semibold))
-            Text(alarm.enabled ? "Alarm On" : "Alarm Off")
-                .font(Theme.font(15, .semibold))
-        }
-        .foregroundStyle(segment == .toggle ? Color.white : Theme.inkDim)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(segment == .toggle ? AnyShapeStyle(SelectionGradient()) : AnyShapeStyle(Color.black.opacity(0.08)))
-        )
-    }
-
-    // MARK: Input
-
-    /// Wheel routing for the setter. Center behaves per segment: on the
-    /// toggle it arms/disarms, on the days row it flips the focused day,
-    /// otherwise it advances to the next segment (wrapping). MENU pops.
-    private func handle(_ event: ControlEvent) {
-        switch event {
-        case .tick(let d):
-            adjust(by: d)
-        case .select:
-            if segment == .toggle {
-                alarm.enabled.toggle()
-            } else if segment == .repeatDays {
-                alarm.repeatDays[dayCursor].toggle()
-            } else {
-                segment = Segment(rawValue: segment.rawValue + 1) ?? .hour
-            }
-            WheelHaptics.shared.ensureRunning()
-            WheelHaptics.shared.buttonPress(strength: 0.8)
-        case .menu:
-            model.pop()
-        default:
-            break
-        }
-    }
-
-    /// Applies a wheel delta to the active segment. Numbers wrap (1–12,
-    /// 0–59); AM/PM and the toggle flip on any non-zero delta; the day
-    /// cursor walks 0…6 and stepping past either edge hands the wheel to
-    /// the neighbouring segment — the whole setter reads as one
-    /// continuous strip, like the original iPod's column flow.
-    private func adjust(by delta: Int) {
-        switch segment {
-        case .hour:
-            alarm.hour = wrap(alarm.hour + delta, 1, 12)
-        case .minute:
-            alarm.minute = wrap(alarm.minute + delta, 0, 59)
-        case .ampm:
-            if delta != 0 { alarm.isPM.toggle() }
-        case .repeatDays:
-            // Wheel walks the day cursor; stepping past either edge moves on.
-            let next = dayCursor + delta
-            if next < 0 {
-                segment = .ampm
-                dayCursor = 6
-            } else if next > 6 {
-                segment = .toggle
-                dayCursor = 0
-            } else {
-                dayCursor = next
-            }
-        case .toggle:
-            if delta != 0 { alarm.enabled.toggle() }
-        }
-        WheelFeedback.tick(dir: delta)
-    }
-
-    /// Wraps `v` into lo…hi (inclusive) so wheel spins cycle instead of
-    /// clamping. The `range * 4` headroom keeps negative inputs correct
-    /// in a single modulo pass.
-    private func wrap(_ v: Int, _ lo: Int, _ hi: Int) -> Int {
-        let range = hi - lo + 1
-        return lo + ((v - lo + range * 4) % range)
     }
 }
 
@@ -570,8 +334,7 @@ struct TimerScreen: View {
         }
     }
 
-    /// Wraps `v` into lo…hi (inclusive) so wheel spins cycle (same
-    /// helper as AlarmScreen.wrap).
+    /// Wraps `v` into lo…hi (inclusive) so wheel spins cycle.
     private func wrap(_ v: Int, _ lo: Int, _ hi: Int) -> Int {
         let range = hi - lo + 1
         return lo + ((v - lo + range * 4) % range)
