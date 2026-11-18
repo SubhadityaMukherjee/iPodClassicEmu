@@ -50,21 +50,49 @@ and shows the ringer overlay **without covering the click wheel**
 
 ## The sharp edges (all bit this project)
 
+The app originally used `repeats: true` triggers (one daily, or one per
+weekday). Two structural traps forced a rewrite (2026-11-18) onto the
+pattern production alarm apps use — the **occurrence window**:
+
 - **Removing a repeating request kills EVERY future occurrence** — there
-  is no per-occurrence cancellation. So the in-app fire path must
-  *re-schedule*: remove → hop 0.5 s (this SDK has no completion callback
-  on removal) → `schedule()` again. Any exit that skips the re-schedule
-  leaves the alarm enabled-but-dead.
-- **Heal on foreground**: because a mid-cycle death (force-quit during
-  the ringer) can skip the re-schedule, `reconcile()` re-derives what
-  should be pending and repairs it at every `scenePhase .active` and at
-  keep-alive start.
-- **Verify, don't trust**: `pendingAlarmCount` is fetched back from the
-  center (async DispatchGroup) and published; the screen's red warning
-  when enabled-but-zero-pending is the UI expression of "the system says
-  nothing will fire."
-- Notification sounds must be ≤ 30 s and are referenced by name from the
-  bundle, not by URL.
+  is no per-occurrence cancellation. Every fire/edit/disable path had to
+  dance around never removing what it still wanted; one miss = "alarm
+  says on but never rings again."
+- **Cancel-then-add of the same identifier races in the notification
+  daemon** — the remove can land AFTER the add and silently delete the
+  fresh request, and `removePendingNotificationRequests` has no
+  completion callback to sequence against.
+- **Focus can mute the banner** ("notification comes, nothing rings"):
+  Sleep Focus suppresses standard notifications, and `.timeSensitive`
+  only breaks through if the user allows it per-app. The banner arriving
+  in the morning ≠ it ever having sounded.
+
+### The window model (`AlarmStore`, current)
+
+1. Schedule the **next seven occurrences** as one-shot,
+   fully-specified triggers with deterministic per-date ids
+   (`alarm.occ.<epoch>`). No repeating requests exist, so the first two
+  traps are structurally impossible; iOS replaces same-id requests, so
+   re-adding is idempotent; 7 slots stays far under the 64-pending cap.
+2. **The OS's pending list is the source of truth** — reconciliation
+   reads what is actually pending, sweeps `alarm.`-prefixed ids that are
+   no longer wanted (edited times, old-era weekday triggers, snoozes,
+   ghosts), adds what's missing, then **verifies by re-reading** and
+   repairs once. Runs at launch, every foreground, and after any edit.
+3. **One serialized maintenance slot**: every schedule/cancel/reconcile
+   pass runs as a single cancellable Task — a straggler install that
+   started while armed can't interleave past a disable's sweep and arm
+   a ghost.
+4. **Delivery diagnostics**: the verify pass also reads
+   `soundSetting`/`timeSensitiveSetting` and the alarm screen warns
+   (amber, tap-to-Settings) when iOS will deliver the banner silently —
+   the environmental failure the app cannot fix, it can only name it.
+5. **Notification sounds** must be ≤ 30 s and are referenced by name
+   from the bundle root; and note the in-app ringer is MEDIA audio —
+   audible under Focus and even the mute switch — which is why the
+   background keep-alive (process stays alive via silent audio) is the
+   primary overnight path, with the notification as the killed-app
+   fallback.
 
 ## Where to look
 
