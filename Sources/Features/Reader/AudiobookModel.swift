@@ -647,6 +647,23 @@ final class AudiobookModel {
             let maxPage = segments.map(\.page).max() ?? 0
             chapterNote = "chapter: \(segments.count) segs, \(total) chars, maxPage=\(maxPage)"
             writeStatus()
+            // QA hook: append every segment of this chapter to
+            // Documents/.audiobook_segments.txt — the ground truth for
+            // "is a sentence the reader shows actually in the spoken
+            // text?" (extraction-drop bugs look like skipped sentences).
+            if ProcessInfo.processInfo.environment["AUDIOBOOK_DUMP"] == "1" {
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let url = docs.appendingPathComponent(".audiobook_segments.txt")
+                var dump = "\n=== chapter pages \(segments.first?.page ?? -1)–\(maxPage): \(segments.count) segs, \(total) chars ===\n"
+                for s in segments { dump += "[p\(s.page)] \(s.text)\n" }
+                if let h = FileHandle(forWritingAtPath: url.path) {
+                    defer { try? h.close() }
+                    _ = try? h.seekToEndOfFile()
+                    h.write(Data(dump.utf8))
+                } else {
+                    try? dump.write(to: url, atomically: true, encoding: .utf8)
+                }
+            }
             Logger(subsystem: "com.ipodclassic.app", category: "tts")
                 .notice("chapter: \(segments.count, privacy: .public) segments, \(total, privacy: .public) chars, maxPage \(maxPage, privacy: .public)")
             guard !segments.isEmpty else {
