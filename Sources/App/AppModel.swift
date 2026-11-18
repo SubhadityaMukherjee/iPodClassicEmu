@@ -482,8 +482,9 @@ final class AppModel {
     /// - Parameter context: what is ringing (alarm vs timer) and its title.
     func startRinger(_ context: RingerContext) {
         ringer = context
-        // App-owned audio always plays at media volume; the loud, ringer-
-        // volume sound comes from the system notification (see RingerManager).
+        // Media-audio tone loop — plays through the hardware mute switch
+        // (the notification's sound is the redundant, switch-muteable
+        // path; see RingerManager).
         RingerManager.shared.startSound()
     }
 }
