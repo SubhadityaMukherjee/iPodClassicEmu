@@ -202,6 +202,7 @@ final class BinauralModel {
     /// main thread and the ticker fires on the main run loop.
     private func startPlayback() {
         guard let active else { return }
+        observeAudioSessionEvents()
         recents?.record(binaural: .init(id: active.name, title: active.name))
         elapsed = 0
         isPlaying = true
@@ -214,6 +215,39 @@ final class BinauralModel {
             elapsed += 1
             publishNowPlaying()
         }
+    }
+
+    /// Audio-session observers installed on first playback. The ghost-card
+    /// bug: an interruption (call, Siri, another app's session) or a
+    /// headphone unplug derails the AVAudioEngine silently — the model
+    /// keeps `isPlaying = true` and the ticker keeps refreshing the
+    /// lock-screen card, so a "playing" card sits there producing no
+    /// sound. Reality wins: any of these events while a session runs
+    /// ends the session (which also clears the card).
+    private var sessionObservers: [NSObjectProtocol] = []
+
+    private func observeAudioSessionEvents() {
+        guard sessionObservers.isEmpty else { return }
+        let nc = NotificationCenter.default
+        sessionObservers.append(nc.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard raw == AVAudioSession.InterruptionType.began.rawValue else { return }
+            self?.stop()
+        })
+        sessionObservers.append(nc.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.stop()
+        })
+        sessionObservers.append(nc.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            guard raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue else { return }
+            self?.stop()
+        })
     }
 }
 

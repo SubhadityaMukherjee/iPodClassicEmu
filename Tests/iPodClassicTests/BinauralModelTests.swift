@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 @testable import iPodClassic
 
 /// Binaural beats: preset set (Schumann 7.83 + the five EEG bands),
@@ -138,5 +139,46 @@ final class BinauralModelTests: XCTestCase {
         XCTAssertTrue(model.isPlaying)
         XCTAssertEqual(model.active?.name, "Gamma")
         XCTAssertEqual(engine.starts.count, 2)
+    }
+
+    // MARK: Ghost-card regression (session events end the session)
+
+    /// An audio-session interruption (call, Siri, another app's session)
+    /// derails the engine without telling the model — the ghost-lock-
+    /// screen-card bug: a "playing" card producing no sound forever.
+    /// The interruption must stop the session AND clear the card.
+    func testInterruptionStopsSessionAndClearsCard() {
+        model.toggle(preset("Schumann"))
+        XCTAssertTrue(model.isPlaying)
+
+        NotificationCenter.default.post(
+            name: AVAudioSession.interruptionNotification, object: nil,
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
+
+        XCTAssertFalse(model.isPlaying, "interruption must end the session")
+        XCTAssertEqual(engine.stops, 1, "interruption must stop the engine")
+        XCTAssertEqual(Self.lastPublished.last?.title, nil, "interruption must clear the Now Playing card")
+    }
+
+    /// Unplugging headphones (route change, old device unavailable) must
+    /// do the same — the engine loses its output and the card must not
+    /// linger as a silent "playing" ghost.
+    func testHeadphoneUnplugStopsSessionAndClearsCard() {
+        model.toggle(preset("Theta"))
+        NotificationCenter.default.post(
+            name: AVAudioSession.routeChangeNotification, object: nil,
+            userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue])
+        XCTAssertFalse(model.isPlaying)
+        XCTAssertEqual(Self.lastPublished.last?.title, nil)
+    }
+
+    /// And a media-services reset (rare, but terminal for audio) must
+    /// not leave the ghost either.
+    func testMediaServicesResetStopsSession() {
+        model.toggle(preset("Gamma"))
+        NotificationCenter.default.post(
+            name: AVAudioSession.mediaServicesWereResetNotification, object: nil)
+        XCTAssertFalse(model.isPlaying)
+        XCTAssertEqual(Self.lastPublished.last?.title, nil)
     }
 }
