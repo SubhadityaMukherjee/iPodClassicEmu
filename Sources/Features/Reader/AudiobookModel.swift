@@ -847,10 +847,10 @@ final class AudiobookModel {
         }
     }
 
-    /// Long pages are synthesized in sentence chunks and concatenated:
-    /// one giant synthesis call can truncate its tail (whole sentences
-    /// silently dropped at the engine's practical output length), and
-    /// smaller chunks also fill the pipeline faster between pages.
+    /// Long pages are synthesized in sentence chunks and concatenated —
+    /// with the limit far above real sentences (see `sentenceChunks`),
+    /// a normal page is ONE synthesis call; chunking only guards
+    /// pathological runs.
     ///
     /// Sentence boundaries come from `NLTokenizer` (unit: .sentence) —
     /// it knows "Mr.", "Dr.", "e.g." and initials are NOT sentence
@@ -862,12 +862,19 @@ final class AudiobookModel {
     /// than `limit` is split at word boundaries (never left oversized —
     /// an oversized call is exactly the tail-truncation bug).
     ///
-    /// NO NEWLINE EVER REACHES THE ENGINE: a TTS engine reads "\n" as a
-    /// hard stop and drops intonation mid-flow, so paragraph breaks are
-    /// hard CHUNK boundaries (the inter-chunk gap renders the pause)
-    /// and every chunk is newline-free — even the short-page early
-    /// return strips them.
-    static func sentenceChunks(_ text: String, limit: Int = 300) -> [String] {
+    /// Synthesis chunking. DEVICE-MEASURED (2026-11-18, iPhone 16e ANE
+    /// + simulator): a single 445-char call renders 30.7 s of complete
+    /// audio at rtf 0.02, and 861 chars render complete on the sim —
+    /// the old ≤300-char limit with word-boundary splitting cut this
+    /// book's 400–600-char scholarly sentences at arbitrary words, and
+    /// every cut edge sounded like the voice stopping mid-sentence
+    /// ("was ⏸ overwhelmed"). The default limit is therefore FAR above
+    /// any real sentence: chunks split at SENTENCE/paragraph boundaries
+    /// only, and word-boundary splitting exists solely as the ultimate
+    /// fallback for pathological runs (>1500 chars ≈ 100 s of audio).
+    /// No newline ever reaches the engine (a "\n" is a hard stop to
+    /// TTS); the short-page early return strips them too.
+    static func sentenceChunks(_ text: String, limit: Int = 1500) -> [String] {
         guard text.count > limit else {
             return [text.replacingOccurrences(of: "\n", with: " ")]
         }
