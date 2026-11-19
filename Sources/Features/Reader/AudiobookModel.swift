@@ -352,8 +352,12 @@ protocol AudiobookSynthesizerType: AnyObject {
     /// True when the engine chunks at SENTENCE level internally with
     /// seamless audio state (Pocket, Paradee) — `render` then feeds it
     /// whole pages. False for engines with a small internal chunk cap
-    /// (Supertonic's 70 chars), which need our `speechUnits` pipeline.
+    /// (Supertonic's 70 chars) which need our `speechUnits` pipeline.
     var feedsWholePages: Bool { get }
+    /// Character ceiling for one synthesis call on the units path —
+    /// engines with a per-call OUTPUT time budget need smaller units
+    /// than the 200-char default.
+    var maxUnitChars: Int { get }
     /// Synthesizes one text chunk to raw float samples.
     ///
     /// - Returns: mono samples and their sample rate.
@@ -364,9 +368,14 @@ protocol AudiobookSynthesizerType: AnyObject {
     func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int)
 }
 
+extension AudiobookSynthesizerType {
+    /// Units-path ceiling when an engine doesn't declare one.
+    var maxUnitChars: Int { 200 }
+}
+
 /// Audiobook mode for the book reader: on-device neural TTS (three
-/// English engines selectable in Settings → Read Aloud — Pocket 18m
-/// default, Pocket 100M, Paradee 8M; see ReadAloudTTS.swift) that reads
+/// English engines selectable in Settings → Read Aloud — Paradee 8M
+/// default, Pocket 18m, Pocket 100M; see ReadAloudTTS.swift) that reads
 /// the open book page by page through the same page-turn path as manual
 /// reading, so exiting mid-page leaves the reader exactly where
 /// listening stopped.
@@ -454,9 +463,11 @@ final class AudiobookModel {
     nonisolated static var voices: [String] { ReadAloudVoiceStore.voices }
     /// Count of the voice presets.
     nonisolated static var voiceCount: Int { voices.count }
-    /// Stored voice preset, persisted on change.
+    /// Stored voice preset for the selected engine, persisted on change.
     private var currentVoice: String {
-        didSet { AppSettings.shared.audiobookVoice = currentVoice }
+        didSet {
+            AppSettings.shared.setAudiobookVoice(currentVoice, engine: AppSettings.shared.readAloudEngine)
+        }
     }
 
     /// Audio backend (injected for tests).
@@ -504,7 +515,7 @@ final class AudiobookModel {
     init(engine: AudiobookAudioEngineType, synthesis: AudiobookSynthesizerType) {
         self.engine = engine
         self.synthesis = synthesis
-        let stored = AppSettings.shared.audiobookVoice
+        let stored = AppSettings.shared.audiobookVoice(engine: AppSettings.shared.readAloudEngine)
         self.currentVoice = Self.voices.first { $0 == stored } ?? Self.voices[0]
         self.engine.rate = Self.speeds[AppSettings.shared.audiobookSpeedIndex]
         let vol = AppSettings.shared.audiobookVolumeIndex
@@ -551,6 +562,9 @@ final class AudiobookModel {
     /// stopped first.
     func start(provider: AudiobookPageProvider) {
         stop()
+        // The selected engine may have changed since init (Settings) —
+        // revalidate the stored voice against the new engine's presets.
+        currentVoice = Self.voices.first { $0 == currentVoice } ?? Self.voices[0]
         self.provider = provider
         loop = Task { [weak self] in
             await self?.runLoop()
@@ -1161,7 +1175,7 @@ final class AudiobookModel {
             let (raw, rate) = try await synthesize(pageText, language: language)
             append(raw, rate: rate, chars: pageText.count)
         } else {
-            for unit in Self.speechUnits(segment.text) {
+            for unit in Self.speechUnits(segment.text, maxChars: synthesis.maxUnitChars) {
                 try Task.checkCancellation()
                 let (raw, rate) = try await synthesize(unit.text, language: language)
                 append(raw, rate: rate, chars: unit.text.count)
