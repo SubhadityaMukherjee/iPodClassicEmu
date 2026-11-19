@@ -14,15 +14,12 @@ import UIKit
 /// - **paradee** (default — device-verified on the 16e 2026-11-19):
 ///   Paradee-8M v1.2 (Kokoro-82M distilled) — 12 MB models + the Kokoro
 ///   English G2P frontend (~50 MB total), CPU-only by design, four voices
-///   (af_heart default, bf_isabella, am_puck, bm_fable).
+///   (bm_fable default, af_heart, bf_isabella, am_puck).
 /// - **pocketSmall**: Kyutai Pocket TTS 18m (Oct 2026) — ~145 MB,
 ///   FlowLM on the Neural Engine via one MLState package, 21 English
 ///   "literary" voices, 24 kHz. Sentence chunks of ≤50 tokens.
 /// - **pocket**: Kyutai Pocket TTS 100M, `english_2026-10` pack, int8 —
 ///   ~550 MB, richer prosody than the small models, same 26 voices.
-/// - **paradee**: Paradee-8M v1.2 (Kokoro-82M distilled) — 12 MB models +
-///   the Kokoro English G2P frontend (~50 MB total), CPU-only by design,
-///   four voices (af_heart, bf_isabella, am_puck, bm_fable).
 ///
 /// History — engines that are GONE and why (do not re-add without new
 /// evidence):
@@ -33,6 +30,13 @@ import UIKit
 ///   ~0.4–0.7 s of baked leading/trailing silence. Any sentence longer
 ///   than ~70 chars is cut mid-sentence with ~1 s of dead air — it can
 ///   never read books smoothly.
+/// - **Chatterbox Nano** (removed 2026-11-19): the pack downloads fine,
+///   but CoreML fails to build the model executable on the 16e/iOS 27.3
+///   ("failed to build model executable" with a complete pack) — the
+///   T3/GPT2 GPU graphs don't build on A18-class hardware; same
+///   graveyard as Kokoro. Also ~711 MB, over the user's size budget,
+///   and its ~9.9 s/call output bucket would have forced the small-unit
+///   pipeline.
 /// - **Kokoro (FluidAudio KokoroAne)**: on iOS 27 both CoreML routes
 ///   terminate the process (libBNNS/MPSGraph, FluidAudio #889); "there is
 ///   currently no OS version or routing on iOS that is demonstrated safe
@@ -40,7 +44,8 @@ import UIKit
 /// - **MLX engines (qwen/breeze)**: SIGKILL at synthesis start on the
 ///   16e/iOS 27.3 (removed 2026-11-19).
 ///
-/// The store's `init` sweeps the caches of all three dead engines.
+/// The store's `init` sweeps the caches of the dead engines (supertonic,
+/// MLX, and the lowercase-rooted chatterbox tree).
 @Observable
 @MainActor
 final class ReadAloudVoiceStore {
@@ -89,15 +94,23 @@ final class ReadAloudVoiceStore {
                     "michael", "paul", "peter_yearsley", "stuart_bell", "vera",
                 ]
             case .paradee:
-                return ["af_heart", "bf_isabella", "am_puck", "bm_fable"]
+                // bm_fable first = the default voice (user preference
+                // 2026-11-19).
+                return ["bm_fable", "af_heart", "bf_isabella", "am_puck"]
             }
         }
 
-        /// All three engines chunk at sentence level internally and keep
-        /// prosody/audio state across their own chunks — `render` feeds
-        /// them whole pages instead of our sentence units. (Supertonic
-        /// needed units because of its 70-char cap.)
+        /// True when the engine chunks at sentence level internally and
+        /// keeps prosody/audio state across its own chunks — `render`
+        /// feeds them whole pages. False for engines with a small
+        /// PER-CALL OUTPUT budget that need our `speechUnits` path with
+        /// a reduced unit size.
         var feedsWholePages: Bool { true }
+
+        /// Character ceiling for one synthesis call on the units path
+        /// (200 fits every current engine; a future output-budgeted
+        /// engine can lower it).
+        var maxUnitChars: Int { 200 }
     }
 
     /// Download/load lifecycle, mirrored into the Settings screen and
@@ -159,9 +172,18 @@ final class ReadAloudVoiceStore {
     nonisolated private static func cacheDirs(_ engine: Engine) -> [URL] {
         switch engine {
         case .pocketSmall:
-            return [ttsRoot.appendingPathComponent("Models/pocket-tts-coreml/v4/english_18m_2026-10")]
+            // The SDK writes the v4 pack under `Models/pocket-tts/` even
+            // though its repo id says pocket-tts-coreml — probe and purge
+            // BOTH names so the row can't lie and Delete can't leak.
+            return [
+                ttsRoot.appendingPathComponent("Models/pocket-tts/v4/english_18m_2026-10"),
+                ttsRoot.appendingPathComponent("Models/pocket-tts-coreml/v4/english_18m_2026-10"),
+            ]
         case .pocket:
-            return [ttsRoot.appendingPathComponent("Models/pocket-tts-coreml/v2.1/english_2026-10")]
+            return [
+                ttsRoot.appendingPathComponent("Models/pocket-tts/v2.1/english_2026-10"),
+                ttsRoot.appendingPathComponent("Models/pocket-tts-coreml/v2.1/english_2026-10"),
+            ]
         case .paradee:
             return [
                 ttsRoot.appendingPathComponent("paradee-8m-coreml"),
@@ -187,6 +209,18 @@ final class ReadAloudVoiceStore {
 
     /// Download button label for the currently selected engine (wizard).
     nonisolated static var downloadLabel: String { selectedEngine().downloadLabel }
+
+    /// Stored voice choice for an engine ("" = none; callers fall back
+    /// to the engine's first preset). Per-engine so switching engines
+    /// keeps each engine's chosen voice.
+    nonisolated static func storedVoice(_ engine: Engine) -> String {
+        AppSettings.shared.audiobookVoice(engine: engine.rawValue)
+    }
+
+    /// Persists the chosen voice for an engine (Settings → Voices panel).
+    nonisolated static func setStoredVoice(_ name: String, for engine: Engine) {
+        AppSettings.shared.setAudiobookVoice(name, engine: engine.rawValue)
+    }
 
     /// Removes the selected engine's downloaded weights (frees disk) and
     /// resets state so Settings rows re-render as "Not downloaded".
@@ -216,20 +250,29 @@ final class ReadAloudVoiceStore {
 
     /// Private: process-wide singleton (`ReadAloudVoiceStore.shared`).
     /// Sweeps the caches of the REMOVED engines — supertonic (~400 MB),
-    /// the MLX engines (up to ~3.7 GB) and their `MLXAudio` root — their
-    /// dirs are never written again, so deleting unconditionally hands the
-    /// disk straight back to the user. QA hook: `TTS_ENGINE=pocket18|
-    /// pocket100|paradee` overrides the persisted engine at launch so
-    /// each one can be exercised end-to-end from env (sim + devicectl).
+    /// the MLX engines (up to ~3.7 GB, `MLXAudio` root) and Chatterbox
+    /// Nano (~711 MB, under the SDK's lowercase `fluidaudio` root) —
+    /// their dirs are never written again, so deleting unconditionally
+    /// hands the disk straight back to the user. QA hooks:
+    /// `TTS_ENGINE=pocket18|pocket100|paradee` overrides the persisted
+    /// engine at launch; `TTS_PURGE=<engine>` deletes that engine's cache
+    /// at launch so a fresh download can be driven from env.
     private init() {
         if let raw = ProcessInfo.processInfo.environment["TTS_ENGINE"],
            let forced = Engine(rawValue: raw) {
             AppSettings.shared.readAloudEngine = forced.rawValue
         }
+        if let raw = ProcessInfo.processInfo.environment["TTS_PURGE"],
+           let purge = Engine(rawValue: raw) {
+            for dir in Self.cacheDirs(purge) {
+                try? FileManager.default.removeItem(at: dir)
+            }
+        }
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? fm.removeItem(at: Self.ttsRoot.appendingPathComponent("supertonic-3"))
         try? fm.removeItem(at: support.appendingPathComponent("MLXAudio"))
+        try? fm.removeItem(at: support.appendingPathComponent("fluidaudio/Models/chatterbox-nano-coreml"))
     }
 
     /// Download + load the selected engine once (idempotent,
@@ -278,17 +321,61 @@ final class ReadAloudVoiceStore {
             }
         }
         let log = Logger(subsystem: "com.ipodclassic.app", category: "tts")
+        /// Shared success bookkeeping for the load task below.
+        func succeed(_ via: String) {
+            state = .ready
+            if !wasCached { LiveActivityManager.shared.downloadFinished(success: true) }
+            log.notice("tts \(current.rawValue, privacy: .public) ready \(via, privacy: .public) cached=\(wasCached, privacy: .public)")
+        }
         let task = Task<Void, Never> { [weak self] in
             guard let self else { return }
             do {
                 try await self.loadBackend(current)
-                self.state = .ready
-                if !wasCached { LiveActivityManager.shared.downloadFinished(success: true) }
-                log.notice("tts \(current.rawValue, privacy: .public) ready cached=\(wasCached, privacy: .public)")
-            } catch {
-                self.state = .failed(error.localizedDescription)
+                succeed("direct")
+            } catch let firstError {
+                var finalError = firstError
+                if wasCached {
+                    // A CACHED pack that won't load is corrupt (truncated
+                    // resume, half-written bundle) — purging and
+                    // re-downloading from scratch is the only repair.
+                    log.notice("tts \(current.rawValue, privacy: .public) cached load failed, purging: \(firstError.localizedDescription, privacy: .public)")
+                    for dir in Self.cacheDirs(current) {
+                        try? FileManager.default.removeItem(at: dir)
+                    }
+                    self.pocketSmallBackend = nil
+                    self.pocketBackend = nil
+                    self.paradeeBackend = nil
+                    self.state = .downloading(progress: 0)
+                    LiveActivityManager.shared.downloadStarted()
+                    self.startProgressPolling(dirs: Self.cacheDirs(current))
+                    do {
+                        try await self.loadBackend(current)
+                        succeed("after purge")
+                        self.stopProgressPolling()
+                        return
+                    } catch let purgeError {
+                        finalError = purgeError
+                        Self.logDownloadFailure(current, purgeError)
+                    }
+                } else {
+                    // A fresh download failing is usually transient
+                    // (network blip, throttle); downloads resume, so one
+                    // immediate retry is cheap.
+                    log.notice("tts \(current.rawValue, privacy: .public) retrying after: \(firstError.localizedDescription, privacy: .public)")
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    do {
+                        try await self.loadBackend(current)
+                        succeed("after retry")
+                        self.stopProgressPolling()
+                        return
+                    } catch let retryError {
+                        finalError = retryError
+                        Self.logDownloadFailure(current, retryError)
+                    }
+                }
+                self.state = .failed(finalError.localizedDescription)
                 if !wasCached { LiveActivityManager.shared.downloadFinished(success: false) }
-                log.notice("tts \(current.rawValue, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                log.notice("tts \(current.rawValue, privacy: .public) failed: \(finalError.localizedDescription, privacy: .public)")
             }
             self.stopProgressPolling()
         }
@@ -397,6 +484,24 @@ final class ReadAloudVoiceStore {
         return total
     }
 
+    /// Appends a download failure to `Documents/.tts_download.log` —
+    /// the Settings row is transient, so this durable line is how a
+    /// user-driven failure gets diagnosed after the fact (pull the file
+    /// from the device and read the exact engine error).
+    nonisolated private static func logDownloadFailure(_ engine: Engine, _ error: Error) {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let url = docs.appendingPathComponent(".tts_download.log")
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let line = "\(stamp) \(engine.rawValue): \(error.localizedDescription)\n"
+        if let handle = FileHandle(forWritingAtPath: url.path) {
+            defer { try? handle.close() }
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+        } else {
+            try? Data(line.utf8).write(to: url)
+        }
+    }
+
     /// Synthesizes one page (or speech unit) of text with the selected
     /// engine. All engines are English — `language` is accepted for the
     /// seam and applied as the pack's own English frontend.
@@ -419,7 +524,7 @@ final class ReadAloudVoiceStore {
             guard let backend = paradeeBackend else {
                 throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "engine not ready"])
             }
-            let voice = ParadeeVoice(rawValue: voiceName) ?? .afHeart
+            let voice = ParadeeVoice(rawValue: voiceName) ?? .bmFable
             let samples = try await backend.synthesize(text: text, voice: voice)
             return (samples, 24_000)
         }
@@ -439,6 +544,10 @@ extension ReadAloudVoiceStore: AudiobookSynthesizerType {
     /// These engines chunk at sentence level themselves — the model feeds
     /// whole pages (see `Engine.feedsWholePages`).
     var feedsWholePages: Bool { engine.feedsWholePages }
+
+    /// Units-path ceiling for the selected engine (200 for all current
+    /// engines; an output-budgeted engine can lower it).
+    var maxUnitChars: Int { engine.maxUnitChars }
 
     /// Seam counterpart of `prepare()` (download + load, idempotent).
     func ensureReady() async throws {

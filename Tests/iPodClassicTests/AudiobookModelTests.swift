@@ -441,6 +441,21 @@ final class AudiobookModelTests: XCTestCase {
         }
     }
 
+    /// Engines with a per-call output budget (Chatterbox Nano, ~9.9 s)
+    /// pass a reduced unit ceiling; the splitter must honor it at
+    /// clause/word boundaries, never mid-word.
+    func testSpeechUnitsHonorReducedMaxChars() {
+        let long = "The committee deliberated extensively, weighing every possible consequence, before concluding that nothing whatsoever could be done about the situation that had developed over the previous decade."
+        let units = AudiobookModel.speechUnits(long, maxChars: 140)
+        XCTAssertFalse(units.isEmpty)
+        for u in units where !u.text.isEmpty {
+            XCTAssertLessThanOrEqual(u.text.count, 141, "unit oversized at maxChars 140: \(u.text.count)")
+        }
+        XCTAssertEqual(units.map(\.text).joined(separator: " ")
+            .replacingOccurrences(of: " ,", with: ","), long,
+            "units must reassemble the sentence without dropping words")
+    }
+
     /// Whole-page engines (Pocket, Paradee — sentence-level internal
     /// chunking with seamless audio state) get the ENTIRE normalized
     /// page in one call; our unit-splitting must not pre-chop their

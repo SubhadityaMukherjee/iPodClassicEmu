@@ -1,5 +1,6 @@
 import SwiftUI
 import MusicKit
+import AVFoundation
 
 /// Settings root: Apple Music status, Clickwheel, Display, Playback, About.
 struct SettingsScreen: View {
@@ -334,13 +335,31 @@ struct ReadAloudSettingsScreen: View {
     /// Short confirmation line under the list ("Download started",
     /// "Deleted"…); empty string hides it.
     @State private var toast = ""
+    /// Voices panel open (audition + pick the engine's default voice).
+    @State private var voicesOpen = false
+    /// Voices panel cursor.
+    @State private var voiceSel = 0
+    /// Sample player for the voices panel (one at a time).
+    @State private var samplePlayer: AVAudioPlayer?
+    /// Voice currently being synthesized/played in the panel ("").
+    @State private var sampling = ""
 
     /// The shared read-aloud engine/voice-model store this page manages.
     private var store: ReadAloudVoiceStore { .shared }
 
+    /// Voice presets of the selected engine (the panel lists these).
+    private var voices: [String] { store.engine.voices }
+
+    /// The engine's effective voice (stored choice, else the first).
+    private var currentVoice: String {
+        let stored = ReadAloudVoiceStore.storedVoice(store.engine)
+        return voices.first { $0 == stored } ?? voices[0]
+    }
+
     /// Rows: Engine (cycles the three engines), Voice Model (live
-    /// download progress or cached state for the SELECTED engine), and,
-    /// once a download exists, a Delete Model row to free its disk.
+    /// download progress or cached state for the SELECTED engine),
+    /// Voices (pick + audition the engine's default voice), and, once a
+    /// download exists, a Delete Model row to free its disk.
     private var items: [MenuItem] {
         var rows: [MenuItem] = []
         let engine = store.engine
@@ -363,12 +382,14 @@ struct ReadAloudSettingsScreen: View {
         }
         rows.append(MenuItem(id: "model", title: "Voice Model", detail: detail, showsChevron: false))
         if cached {
+            rows.append(MenuItem(id: "voices", title: "Voices", detail: currentVoice, showsChevron: true))
             rows.append(MenuItem(id: "delete", title: "Delete Model", detail: "Free Space", showsChevron: false))
         }
         return rows
     }
 
-    /// Paper-backed settings list with a transient toast line beneath.
+    /// Paper-backed settings list with a transient toast line beneath;
+    /// the Voices audition panel overlays everything when open.
     var body: some View {
         ZStack {
             PaperBackground()
@@ -384,24 +405,99 @@ struct ReadAloudSettingsScreen: View {
                 }
                 Spacer()
             }
+            if voicesOpen {
+                voicesPanel
+            }
         }
         .onWheel { handle($0) }
     }
 
+    /// Voice audition panel: every preset of the selected engine in a
+    /// windowed MenuList (21 Pocket voices exceed the LCD — the list
+    /// steps row-by-row with the wheel like every other menu); center
+    /// picks a voice AND plays a short sample through it, ✓ marks the
+    /// effective default, MENU closes.
+    private var voicesPanel: some View {
+        ModalPanel(title: "Voices — \(store.engine.title)", onClose: { voicesOpen = false }) {
+            VStack(spacing: 0) {
+                MenuList(items: voiceItems, selection: voiceSel, compact: true)
+                    .frame(height: min(Double(voices.count) * 34.0, 214))
+                    .padding(.horizontal, 6)
+                Text("Center previews & sets")
+                    .font(Theme.font(10, .semibold))
+                    .foregroundStyle(Theme.inkDim)
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
+            }
+        }
+    }
+
+    /// MenuList rows for the engine's voices: ✓ = effective default,
+    /// ▶ = sample currently synthesizing/playing.
+    private var voiceItems: [MenuItem] {
+        voices.map { name in
+            MenuItem(
+                id: name, title: name,
+                detail: sampling == name ? "▶" : (name == currentVoice ? "✓" : ""),
+                showsChevron: false)
+        }
+    }
+
     /// Wheel input: ticks move the selection, center activates the row,
-    /// MENU pops, MENU-hold pops straight to the home screen.
+    /// MENU pops, MENU-hold pops straight to the home screen. While the
+    /// Voices panel is open, input routes to the panel instead.
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
-            moveListSelection(&selection, count: items.count, delta: d, settings: settings)
+            if voicesOpen {
+                moveListSelection(&voiceSel, count: voices.count, delta: d, settings: settings)
+            } else {
+                moveListSelection(&selection, count: items.count, delta: d, settings: settings)
+            }
         case .select:
-            activate(items[min(selection, items.count - 1)].id)
+            if voicesOpen {
+                pickVoice(voices[min(voiceSel, voices.count - 1)])
+            } else {
+                activate(items[min(selection, items.count - 1)].id)
+            }
         case .menu:
-            model.pop()
+            if voicesOpen {
+                samplePlayer?.stop()
+                samplePlayer = nil
+                sampling = ""
+                voicesOpen = false
+            } else {
+                model.pop()
+            }
         case .menuHold:
             model.popToRoot()
         default:
             break
+        }
+    }
+
+    /// Makes `name` the engine's default voice and plays a short sample
+    /// through it (downloads/loads the engine first if needed).
+    private func pickVoice(_ name: String) {
+        ReadAloudVoiceStore.setStoredVoice(name, for: store.engine)
+        samplePlayer?.stop()
+        samplePlayer = nil
+        sampling = name
+        Task {
+            do {
+                let text = "This is how I sound when I read your books."
+                let (samples, rate) = try await store.synthesize(
+                    text: text, language: "en", voiceName: name)
+                let buffer = AudiobookModel.makeBuffer(samples, sampleRate: rate)
+                guard let wav = AudiobookAudioEngine.wavData(from: buffer) else { return }
+                let player = try AVAudioPlayer(data: wav)
+                player.volume = 1
+                samplePlayer = player
+                player.play()
+            } catch {
+                toast = String(error.localizedDescription.prefix(40))
+            }
+            if sampling == name { sampling = "" }
         }
     }
 
@@ -422,6 +518,9 @@ struct ReadAloudSettingsScreen: View {
                 toast = "Download started"
                 Task { try? await store.prepare() }
             }
+        case "voices":
+            voicesOpen = true
+            voiceSel = max(0, voices.firstIndex(of: currentVoice) ?? 0)
         case "delete":
             store.deleteDownloadedModel()
             toast = "Deleted"

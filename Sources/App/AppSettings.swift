@@ -48,7 +48,7 @@ final class AppSettings: ObservableObject {
         static let songSort = "music.sort.songs"      // 0 title 1 artist 2 duration 3 recent
         static let albumSort = "music.sort.albums"    // 0 title 1 artist 2 recent
         static let noteFont = "notes.fontSize"        // points; note editor text
-        static let audiobookVoice = "audiobook.voice"     // engine-specific preset name
+        static let audiobookVoicePrefix = "audiobook.voice."  // + engine id → per-engine voice
         static let audiobookSpeed = "audiobook.speed"     // index into AudiobookModel.speeds
         static let audiobookVolume = "audiobook.volume"  // index into AudiobookModel.volumes
         static let readAloudEngine = "readaloud.engine"  // "paradee" default; "pocket18"|"pocket100"
@@ -77,10 +77,16 @@ final class AppSettings: ObservableObject {
         get { d.string(forKey: K.readAloudEngine) ?? "paradee" }
         set { objectWillChange.send(); store(newValue, K.readAloudEngine) }
     }
-    /// Read Aloud voice preset name (engine-specific, e.g. "alba").
-    var audiobookVoice: String {
-        get { d.string(forKey: K.audiobookVoice) ?? "M1" }
-        set { objectWillChange.send(); store(newValue, K.audiobookVoice) }
+    /// Read Aloud voice preset for ONE engine (key `audiobook.voice.<engine>`)
+    /// so each engine remembers its own choice; "" = not chosen yet (use
+    /// the engine's first preset).
+    func audiobookVoice(engine: String) -> String {
+        d.string(forKey: K.audiobookVoicePrefix + engine) ?? ""
+    }
+    /// Persists the chosen voice for an engine (see `audiobookVoice(engine:)`).
+    func setAudiobookVoice(_ name: String, engine: String) {
+        objectWillChange.send()
+        store(name, K.audiobookVoicePrefix + engine)
     }
     /// Playback speed; index into AudiobookModel.speeds.
     var audiobookSpeedIndex: Int {
