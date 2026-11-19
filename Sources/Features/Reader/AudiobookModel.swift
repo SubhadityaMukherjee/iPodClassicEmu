@@ -52,8 +52,6 @@ enum AudiobookPlayOutcome {
 protocol AudiobookAudioEngineType: AnyObject {
     /// Playback rate (time-pitch).
     var rate: Float { get set }
-    /// Mixer output level 0–1 (read-aloud volume setting).
-    var outputVolume: Float { get set }
     /// Play diagnostics surface (wired to the model's status line).
     var onDebug: ((String) -> Void)? { get set }
     /// Makes sure the audio session is active before playing.
@@ -89,9 +87,9 @@ protocol AudiobookAudioEngineType: AnyObject {
 final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPlayerDelegate {
     /// Player for the current page (one player per page buffer).
     private var player: AVAudioPlayer?
-    /// Rate/volume remembered between players (applied on each start).
+    /// Rate remembered between players (applied on each start). Volume is
+    /// the DEVICE volume — pages render at the player's default (1.0).
     private var currentRate: Float = 1
-    private var currentVolume: Float = 1
     /// Token for the interruption observer (removed in deinit).
     private var interruptionObserver: NSObjectProtocol?
     /// Set when playback was interrupted for a reader seek; the loop
@@ -152,15 +150,6 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
         }
     }
 
-    /// Output level 0–1, applied to the live player and remembered.
-    var outputVolume: Float {
-        get { player?.volume ?? currentVolume }
-        set {
-            currentVolume = newValue
-            player?.volume = newValue
-        }
-    }
-
     /// Defensively re-activates the shared .playback session (an
     /// interruption may have deactivated it); activation failures are
     /// logged, not thrown.
@@ -215,12 +204,11 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
             let p = try AVAudioPlayer(data: data)
             p.enableRate = true
             p.rate = currentRate
-            p.volume = currentVolume
             p.delegate = self
             p.prepareToPlay()
             let ok = p.play()
             let seconds = Int(p.duration)
-            engineLog("start ok=\(ok) dur=\(seconds)s playing=\(p.isPlaying) rate=\(currentRate) vol=\(currentVolume)")
+            engineLog("start ok=\(ok) dur=\(seconds)s playing=\(p.isPlaying) rate=\(currentRate)")
             onDebug?("start ok=\(ok) dur=\(seconds)s playing=\(p.isPlaying)")
             Logger(subsystem: "com.ipodclassic.app", category: "tts")
                 .notice("start: \(seconds, privacy: .public)s ok=\(ok, privacy: .public) playing=\(p.isPlaying, privacy: .public)")
@@ -437,18 +425,6 @@ final class AudiobookModel {
     /// Speed cycle (indexed by `speedIndex`).
     static let speeds: [Float] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
-    /// Read-aloud volume (mixer output level); index into `volumes`. Wraps.
-    var volumeIndex: Int {
-        get { AppSettings.shared.audiobookVolumeIndex }
-        set {
-            let wrapped = (newValue + Self.volumes.count) % Self.volumes.count
-            AppSettings.shared.audiobookVolumeIndex = wrapped
-            engine.outputVolume = Self.volumes[wrapped]
-        }
-    }
-    /// Volume cycle (indexed by `volumeIndex`).
-    static let volumes: [Float] = [0.1, 0.25, 0.5, 0.75, 1.0]
-
     /// Voice presets of the SELECTED engine (Pocket: the 21 English
     /// "literary" voices; Paradee: bm_fable & co). The stored preference
     /// falls back to the first when the saved name doesn't exist.
@@ -503,15 +479,13 @@ final class AudiobookModel {
     }
 
     /// Test-friendly initializer (both backends are seams); restores the
-    /// persisted voice/speed/volume onto the engine.
+    /// persisted voice/speed onto the engine.
     init(engine: AudiobookAudioEngineType, synthesis: AudiobookSynthesizerType) {
         self.engine = engine
         self.synthesis = synthesis
         let stored = AppSettings.shared.audiobookVoice(engine: AppSettings.shared.readAloudEngine)
         self.currentVoice = Self.voices.first { $0 == stored } ?? Self.voices[0]
         self.engine.rate = Self.speeds[AppSettings.shared.audiobookSpeedIndex]
-        let vol = AppSettings.shared.audiobookVolumeIndex
-        self.engine.outputVolume = Self.volumes[min(max(vol, 0), Self.volumes.count - 1)]
         engine.onDebug = { [weak self] note in
             self?.noteEngine(note)
         }
@@ -531,12 +505,6 @@ final class AudiobookModel {
         let v = Self.speeds[min(max(speedIndex, 0), Self.speeds.count - 1)]
         return v == v.rounded() ? String(format: "%.0f×", v) : String(format: "%g×", v)
     }
-    /// Volume for the panel row, e.g. "75%".
-    var volumeLabel: String {
-        let v = Self.volumes[min(max(volumeIndex, 0), Self.volumes.count - 1)]
-        return "\(Int((v * 100).rounded()))%"
-    }
-
     /// What the audiobook is doing right now, for the panel row.
     var statusText: String {
         switch state {
