@@ -50,6 +50,11 @@ final class SetupUITests: XCTestCase {
         // Selection defaults to "Download Now" — MENU skips instead so the
         // test never starts a 600 MB download.
         menu(app)
+        XCTAssertTrue(app.staticTexts["Reading Voice"].waitForExistence(timeout: 3),
+                      "Reading Voice page did not appear")
+
+        // Same on the TTS step: MENU skips the (possibly large) download.
+        menu(app)
         XCTAssertTrue(app.staticTexts["Preferences Set"].waitForExistence(timeout: 3),
                       "Preferences page did not appear")
 
