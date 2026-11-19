@@ -246,16 +246,19 @@ final class AudiobookModelTests: XCTestCase {
         XCTAssertEqual(model.speedLabel, "2×")
     }
 
-    func testVoiceCyclesWrapAround() {
+    /// The Settings per-engine voice is the single source of truth: a
+    /// model created after the preference is set must adopt it, and an
+    /// unknown/empty stored name falls back to the first preset.
+    func testVoiceComesFromSettingsPerEngine() {
+        let engineID = AppSettings.shared.readAloudEngine
+        let presets = AudiobookModel.voices
+        AppSettings.shared.setAudiobookVoice(presets.last!, engine: engineID)
         let model = AudiobookModel(engine: MockEngine(), synthesis: MockSynth())
-        model.voiceIndex = 0
-        let first = model.voiceLabel
-        model.voiceIndex = AudiobookModel.voiceCount - 1
-        model.voiceIndex += 1
-        XCTAssertEqual(model.voiceIndex, 0)
-        XCTAssertEqual(model.voiceLabel, first)
-        model.voiceIndex -= 1
-        XCTAssertEqual(model.voiceIndex, AudiobookModel.voiceCount - 1)
+        XCTAssertEqual(model.voiceName, presets.last!)
+        AppSettings.shared.setAudiobookVoice("no-such-voice", engine: engineID)
+        let fallback = AudiobookModel(engine: MockEngine(), synthesis: MockSynth())
+        XCTAssertEqual(fallback.voiceName, presets[0])
+        AppSettings.shared.setAudiobookVoice("", engine: engineID)
     }
 
     func testSpeedIndexAppliesRateToEngine() {

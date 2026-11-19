@@ -960,7 +960,6 @@ struct BookScreen: View {
             if model.audiobook.isActive {
                 return [
                     MenuItem(id: "ttsState", title: model.audiobook.statusText, showsChevron: false),
-                    MenuItem(id: "voice", title: "Voice", detail: model.audiobook.voiceLabel, showsChevron: false),
                     MenuItem(id: "volume", title: "Volume", detail: model.audiobook.volumeLabel, showsChevron: false),
                     MenuItem(id: "speed", title: "Speed", detail: model.audiobook.speedLabel, showsChevron: false),
                     MenuItem(id: "ttsExit", title: "Exit Read Aloud", showsChevron: false),
@@ -1089,9 +1088,6 @@ struct BookScreen: View {
             return
         case "ttsState":
             // Status display row — nothing to cycle.
-            return
-        case "voice":
-            model.audiobook.voiceIndex += 1
             return
         case "volume":
             model.audiobook.volumeIndex += 1

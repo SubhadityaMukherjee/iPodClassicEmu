@@ -449,16 +449,8 @@ final class AudiobookModel {
     /// Volume cycle (indexed by `volumeIndex`).
     static let volumes: [Float] = [0.1, 0.25, 0.5, 0.75, 1.0]
 
-    /// Voice preset; index into `voices`. Wraps.
-    var voiceIndex: Int {
-        get { max(0, Self.voices.firstIndex(of: currentVoice) ?? 0) }
-        set {
-            let wrapped = (newValue + Self.voices.count) % Self.voices.count
-            currentVoice = Self.voices[wrapped] // didSet persists + invalidates
-        }
-    }
     /// Voice presets of the SELECTED engine (Pocket: the 21 English
-    /// "literary" voices; Paradee: af_heart & co). The stored preference
+    /// "literary" voices; Paradee: bm_fable & co). The stored preference
     /// falls back to the first when the saved name doesn't exist.
     nonisolated static var voices: [String] { ReadAloudVoiceStore.voices }
     /// Count of the voice presets.
@@ -531,8 +523,9 @@ final class AudiobookModel {
     /// Current playback rate (time-pitch).
     var rate: Float { engine.rate }
 
-    /// Panel labels.
-    var voiceLabel: String { currentVoice }
+    /// Current voice preset name (read-only — Settings → Read Aloud owns
+    /// voice edits; `start` re-reads the stored preference).
+    var voiceName: String { currentVoice }
     /// Speed for the panel row, e.g. "1.5×".
     var speedLabel: String {
         let v = Self.speeds[min(max(speedIndex, 0), Self.speeds.count - 1)]
@@ -562,9 +555,12 @@ final class AudiobookModel {
     /// stopped first.
     func start(provider: AudiobookPageProvider) {
         stop()
-        // The selected engine may have changed since init (Settings) —
-        // revalidate the stored voice against the new engine's presets.
-        currentVoice = Self.voices.first { $0 == currentVoice } ?? Self.voices[0]
+        // Settings → Read Aloud is the single voice editor: re-read the
+        // stored choice for the CURRENT engine every start (the in-book
+        // panel no longer cycles voices, so without this a Settings
+        // change would never reach an already-created model).
+        let stored = AppSettings.shared.audiobookVoice(engine: AppSettings.shared.readAloudEngine)
+        currentVoice = Self.voices.first { $0 == stored } ?? Self.voices[0]
         self.provider = provider
         loop = Task { [weak self] in
             await self?.runLoop()
