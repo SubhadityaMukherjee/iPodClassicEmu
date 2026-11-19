@@ -2,27 +2,45 @@ import AVFoundation
 import CoreML
 import FluidAudio
 import Foundation
-import HuggingFace
-import MLXAudioCore
-import MLXAudioTTS
 import Observation
 import os
+import UIKit
 
-/// Read Aloud voice engines, selected in Settings → Read Aloud.
+/// Read Aloud voice engines, selected in Settings → Read Aloud. All three
+/// are English-only (user decision 2026-11-19) and all three chunk text at
+/// SENTENCE level internally, so `AudiobookModel.render` feeds them whole
+/// pages (`feedsWholePages`).
 ///
-/// - **supertonic** (default): Supertonic3 CoreML via FluidAudio —
-///   ~400 MB, 44.1 kHz output, RTF ~0.30, **device-verified on the
-///   iPhone 16e**; voices M1–M5/F1–F5; multilingual (en/nl/de/fr/es/it).
-/// - **qwen** (WIP): Qwen3-TTS 0.6B Base 8-bit via MLX — ~700 MB,
-///   voices Ryan/Aiden. JETSAMMED the 16e at synthesis start (SIGKILL,
-///   model loads fine) — kept as an experiment for future devices/OSes.
-/// - **breeze** (WIP): Breeze TTS 2 3B 4-bit via MLX — ~3 GB. Crashed
-///   the 16e the same way.
+/// - **paradee** (default — device-verified on the 16e 2026-11-19):
+///   Paradee-8M v1.2 (Kokoro-82M distilled) — 12 MB models + the Kokoro
+///   English G2P frontend (~50 MB total), CPU-only by design, four voices
+///   (af_heart default, bf_isabella, am_puck, bm_fable).
+/// - **pocketSmall**: Kyutai Pocket TTS 18m (Oct 2026) — ~145 MB,
+///   FlowLM on the Neural Engine via one MLState package, 21 English
+///   "literary" voices, 24 kHz. Sentence chunks of ≤50 tokens.
+/// - **pocket**: Kyutai Pocket TTS 100M, `english_2026-10` pack, int8 —
+///   ~550 MB, richer prosody than the small models, same 26 voices.
+/// - **paradee**: Paradee-8M v1.2 (Kokoro-82M distilled) — 12 MB models +
+///   the Kokoro English G2P frontend (~50 MB total), CPU-only by design,
+///   four voices (af_heart, bf_isabella, am_puck, bm_fable).
 ///
-/// Only the SELECTED engine downloads. Supertonic caches under
-/// `Application Support/FluidAudio/TTS`; MLX engines under
-/// `Application Support/MLXAudio` (explicit HubCache — the default
-/// lives in evictable Library/Caches).
+/// History — engines that are GONE and why (do not re-add without new
+/// evidence):
+/// - **Supertonic3** (removed 2026-11-19): its CoreML text window caps
+///   every synthesis chunk at 70 Latin characters
+///   (`Supertonic3Constants.maxChunkLengthLatin` — WER degrades near the
+///   128-token window), and each chunk is an independent inference with
+///   ~0.4–0.7 s of baked leading/trailing silence. Any sentence longer
+///   than ~70 chars is cut mid-sentence with ~1 s of dead air — it can
+///   never read books smoothly.
+/// - **Kokoro (FluidAudio KokoroAne)**: on iOS 27 both CoreML routes
+///   terminate the process (libBNNS/MPSGraph, FluidAudio #889); "there is
+///   currently no OS version or routing on iOS that is demonstrated safe
+///   for long sessions".
+/// - **MLX engines (qwen/breeze)**: SIGKILL at synthesis start on the
+///   16e/iOS 27.3 (removed 2026-11-19).
+///
+/// The store's `init` sweeps the caches of all three dead engines.
 @Observable
 @MainActor
 final class ReadAloudVoiceStore {
@@ -30,95 +48,60 @@ final class ReadAloudVoiceStore {
 
     /// The selectable TTS engines (see the class doc for sizes/status).
     enum Engine: String, CaseIterable {
-        case supertonic
-        case qwen
-        case breeze
+        case pocketSmall = "pocket18"
+        case pocket = "pocket100"
+        case paradee = "paradee"
 
-        /// Settings-row label; WIP markers keep expectations honest.
+        /// Settings-row label.
         var title: String {
             switch self {
-            case .supertonic: return "Supertonic"
-            case .qwen: return "Qwen3 (WIP)"
-            case .breeze: return "Breeze (WIP)"
+            case .pocketSmall: return "Pocket 18m"
+            case .pocket: return "Pocket 100M"
+            case .paradee: return "Paradee 8M"
             }
         }
 
-        /// True for the MLX engines — used to keep them visually flagged.
-        var isExperimental: Bool { self != .supertonic }
-
-        /// MLX repo, or nil for the CoreML engine (FluidAudio manages
-        /// its own cache).
-        var repo: String? {
-            switch self {
-            case .supertonic: return nil
-            case .qwen: return "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit"
-            case .breeze: return "mlx-community/Breeze-TTS-2-mlx-4bit"
-            }
-        }
-
-        /// Approximate checkpoint size — download-progress denominator.
+        /// Approximate download size — progress denominator and labels.
         var expectedBytes: Int64 {
             switch self {
-            case .supertonic: return 400_000_000
-            case .qwen: return 700_000_000
-            case .breeze: return 3_010_000_000
+            case .pocketSmall: return 145_000_000
+            case .pocket: return 550_000_000
+            case .paradee: return 30_000_000  // 12 MB models + Kokoro G2P
             }
         }
 
         /// Download button label with the engine's approximate size.
         var downloadLabel: String {
-            switch self {
-            case .supertonic: return "Download Now (~400 MB)"
-            case .qwen: return "Download Now (~700 MB)"
-            case .breeze: return "Download Now (~3 GB)"
-            }
+            let mb = expectedBytes / 1_000_000
+            return "Download Now (~\(mb) MB)"
         }
 
-        /// Voice presets per engine.
+        /// Voice presets of the engine (the store validates on use).
         var voices: [String] {
             switch self {
-            case .supertonic: return Supertonic3Voice.allCases.map(\.rawValue)
-            case .qwen: return ["Ryan", "Aiden"]
-            case .breeze: return ["Narrator", "Warm", "British", "Crisp"]
-            }
-        }
-
-        /// The `voice:` parameter for the engine's generate call.
-        func instruction(named name: String) -> String? {
-            switch self {
-            case .supertonic:
-                return nil // voice travels as a Supertonic3Voice style
-            case .qwen:
-                return voices.contains(name) ? name : voices[0]
-            case .breeze:
-                let table = [
-                    "Narrator": "A clear and calm English narrator with an even, steady pace.",
-                    "Warm": "A warm, friendly storyteller with a relaxed English accent and unhurried pace.",
-                    "British": "A composed British narrator with a measured, articulate delivery.",
-                    "Crisp": "A crisp, energetic presenter with brisk pacing and a bright tone.",
+            case .pocketSmall, .pocket:
+                // The 21 English "literary" voices shared by every Kyutai
+                // pack (default "alba").
+                return [
+                    "alba", "anna", "azelma", "bill_boerst", "caro_davy",
+                    "charles", "cosette", "eponine", "eve", "fantine",
+                    "george", "jane", "javert", "jean", "marius", "mary",
+                    "michael", "paul", "peter_yearsley", "stuart_bell", "vera",
                 ]
-                return table[voices.contains(name) ? name : "Narrator"]!
+            case .paradee:
+                return ["af_heart", "bf_isabella", "am_puck", "bm_fable"]
             }
         }
 
-        /// The `language:` parameter: Supertonic takes an ISO code,
-        /// Qwen a language name, Breeze nothing.
-        func languageParameter(code: String) -> String? {
-            switch self {
-            case .supertonic: return code
-            case .qwen: return Self.languageNames[code] ?? "English"
-            case .breeze: return nil
-            }
-        }
-
-        static let languageNames = [
-            "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
-            "es": "Spanish", "it": "Italian",
-        ]
+        /// All three engines chunk at sentence level internally and keep
+        /// prosody/audio state across their own chunks — `render` feeds
+        /// them whole pages instead of our sentence units. (Supertonic
+        /// needed units because of its 70-char cap.)
+        var feedsWholePages: Bool { true }
     }
 
-    /// Download/load lifecycle of the selected engine, mirrored into the
-    /// Settings screen and the download Live Activity.
+    /// Download/load lifecycle, mirrored into the Settings screen and
+    /// the download Live Activity.
     enum DownloadState: Equatable {
         /// Nothing on disk and no attempt made.
         case notStarted
@@ -133,14 +116,17 @@ final class ReadAloudVoiceStore {
         case failed(String)
     }
 
-    /// Selected engine (persisted). Switching unloads whatever is in
-    /// memory — the new engine downloads/loads on next use.
+    /// Selected engine (persisted; defaults to paradee — device-verified
+    /// 2026-11-19). Switching drops whatever is in memory — the new
+    /// engine downloads/loads on next use.
     var engine: Engine {
-        get { Engine(rawValue: AppSettings.shared.readAloudEngine) ?? .supertonic }
+        get { Engine(rawValue: AppSettings.shared.readAloudEngine) ?? .paradee }
         set {
             guard newValue != engine else { return }
             AppSettings.shared.readAloudEngine = newValue.rawValue
-            mlxModel = nil
+            pocketSmallBackend = nil
+            pocketBackend = nil
+            paradeeBackend = nil
             readyTask = nil
             stopProgressPolling()
             state = Self.hasCachedModel(newValue) ? .ready : .notStarted
@@ -152,147 +138,210 @@ final class ReadAloudVoiceStore {
     /// shows a bogus "Downloading…" — the fix for warm starts being
     /// mislabeled as downloads.
     private(set) var state: DownloadState =
-        ReadAloudVoiceStore.hasCachedModel(Engine(rawValue: AppSettings.shared.readAloudEngine) ?? .supertonic) ? .ready : .notStarted
+        ReadAloudVoiceStore.hasCachedModel(
+            Engine(rawValue: AppSettings.shared.readAloudEngine) ?? .paradee) ? .ready : .notStarted
 
-    /// MLX weights live in Application Support (survives eviction) via an
-    /// explicit HubCache — the SDK default puts repos in evictable
-    /// Library/Caches, which iOS may purge under storage pressure and
-    /// silently break the engine.
-    nonisolated static var mlxCacheRoot: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("MLXAudio", isDirectory: true)
-    }
-
-    /// FluidAudio's TTS cache (the capital-case path the ASR models
-    /// already use — the SDK's lowercase default collides on
-    /// case-insensitive APFS).
-    nonisolated static var fluidTTSRoot: URL {
+    /// Shared cache root for every engine's downloads (the capital-case
+    /// `FluidAudio` path the ASR models already use — the SDK's lowercase
+    /// default collides on case-insensitive APFS).
+    nonisolated static var ttsRoot: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent("FluidAudio/TTS", isDirectory: true)
     }
 
-    /// Cached = the engine's weights are certainly on disk.
-    nonisolated static func hasCachedModel(_ engine: Engine) -> Bool {
+    /// Engine weights on disk, keyed by the directories each downloader
+    /// creates under `ttsRoot`. Pocket downloads land under
+    /// `Models/pocket-tts-coreml/<pack>/`; Paradee splits across
+    /// `paradee-8m-coreml/` (models, ~12 MB) and the shared Kokoro G2P
+    /// in `kokoro/` (roughly the same again) — probing only the repo
+    /// dir made a fully-downloaded Paradee read "Not downloaded"
+    /// (2026-11-19).
+    nonisolated private static func cacheDirs(_ engine: Engine) -> [URL] {
         switch engine {
-        case .supertonic:
-            // The loader reads these two once the tree fetch completes.
-            let repo = fluidTTSRoot.appendingPathComponent("supertonic-3")
-            let fm = FileManager.default
-            return fm.fileExists(atPath: repo.appendingPathComponent("tts.json").path)
-                && fm.fileExists(atPath: repo.appendingPathComponent("unicode_indexer.json").path)
-        case .qwen, .breeze:
-            let threshold: Int64 = engine == .qwen ? 400_000_000 : 1_000_000_000
-            return cacheBytes(repo: engine.repo!) > threshold
+        case .pocketSmall:
+            return [ttsRoot.appendingPathComponent("Models/pocket-tts-coreml/v4/english_18m_2026-10")]
+        case .pocket:
+            return [ttsRoot.appendingPathComponent("Models/pocket-tts-coreml/v2.1/english_2026-10")]
+        case .paradee:
+            return [
+                ttsRoot.appendingPathComponent("paradee-8m-coreml"),
+                ttsRoot.appendingPathComponent("kokoro"),
+            ]
         }
     }
 
-    /// Removes one engine's downloaded weights (frees disk).
-    nonisolated static func deleteModel(_ engine: Engine) {
-        switch engine {
-        case .supertonic:
-            try? FileManager.default.removeItem(
-                at: fluidTTSRoot.appendingPathComponent("supertonic-3", isDirectory: true))
-        case .qwen, .breeze:
-            let dir = mlxCacheRoot.appendingPathComponent("models--" + engine.repo!.replacingOccurrences(of: "/", with: "--"))
+    /// Cached = the engine's weights are mostly on disk (>50% of the
+    /// expected pack size; the SDK resumes partial downloads, so a
+    /// half-written pack legitimately re-enters `.downloading` later).
+    nonisolated static func hasCachedModel(_ engine: Engine = selectedEngine()) -> Bool {
+        cacheDirs(engine).reduce(Int64(0)) { $0 + dirBytes($1) } > engine.expectedBytes / 2
+    }
+
+    /// The persisted engine without touching actor-isolated state.
+    nonisolated private static func selectedEngine() -> Engine {
+        Engine(rawValue: AppSettings.shared.readAloudEngine) ?? .paradee
+    }
+
+    /// Voice presets of the currently selected engine (panel cycling).
+    nonisolated static var voices: [String] { selectedEngine().voices }
+
+    /// Download button label for the currently selected engine (wizard).
+    nonisolated static var downloadLabel: String { selectedEngine().downloadLabel }
+
+    /// Removes the selected engine's downloaded weights (frees disk) and
+    /// resets state so Settings rows re-render as "Not downloaded".
+    /// Paradee's delete also drops the shared Kokoro G2P (its only
+    /// consumer — the Pocket engines tokenize raw text).
+    func deleteDownloadedModel() {
+        for dir in Self.cacheDirs(engine) {
             try? FileManager.default.removeItem(at: dir)
         }
+        pocketSmallBackend = nil
+        pocketBackend = nil
+        paradeeBackend = nil
+        state = .notStarted
     }
 
-    /// The loaded MLX model, nil until `prepare()` succeeds (supertonic
-    /// uses its own backend instead).
-    private var mlxModel: (any SpeechGenerationModel)?
-    /// The loaded Supertonic backend (the default engine's object).
-    private var supertonicBackend: SupertonicSynthesis?
-    /// In-flight MLX load task — awaited by concurrent `prepare()` calls
-    /// so the download happens once (single-flight).
+    /// The loaded PocketTTS small backend (18m), nil until `prepare()`.
+    private var pocketSmallBackend: PocketTtsSmallManager?
+    /// The loaded PocketTTS 100M backend, nil until `prepare()`.
+    private var pocketBackend: PocketTtsManager?
+    /// The loaded Paradee backend, nil until `prepare()`.
+    private var paradeeBackend: ParadeeManager?
+    /// In-flight prepare task — awaited by concurrent `prepare()` calls so
+    /// the download happens once (single-flight).
     private var readyTask: Task<Void, Never>?
-    /// Directory-size poller driving download progress (see
-    /// `startProgressPolling`).
+    /// Directory-size poller driving download progress.
     private var progressTask: Task<Void, Never>?
 
     /// Private: process-wide singleton (`ReadAloudVoiceStore.shared`).
-    private init() {}
-
-    /// Voice presets of the currently selected engine.
-    var voices: [String] { engine.voices }
+    /// Sweeps the caches of the REMOVED engines — supertonic (~400 MB),
+    /// the MLX engines (up to ~3.7 GB) and their `MLXAudio` root — their
+    /// dirs are never written again, so deleting unconditionally hands the
+    /// disk straight back to the user. QA hook: `TTS_ENGINE=pocket18|
+    /// pocket100|paradee` overrides the persisted engine at launch so
+    /// each one can be exercised end-to-end from env (sim + devicectl).
+    private init() {
+        if let raw = ProcessInfo.processInfo.environment["TTS_ENGINE"],
+           let forced = Engine(rawValue: raw) {
+            AppSettings.shared.readAloudEngine = forced.rawValue
+        }
+        let fm = FileManager.default
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? fm.removeItem(at: Self.ttsRoot.appendingPathComponent("supertonic-3"))
+        try? fm.removeItem(at: support.appendingPathComponent("MLXAudio"))
+    }
 
     /// Download + load the selected engine once (idempotent,
-    /// single-flight). Manages state/Live-activity for all callers
-    /// (reader, setup wizard, settings, QA hook).
+    /// single-flight). Manages state/Live Activity for all callers
+    /// (reader, setup wizard, settings, QA hook). Compute routing:
+    /// Pocket 18m is cpuOnly on the simulator (its ANE-MLState package
+    /// can't run there — same lesson as supertonic's ANE buckets) and
+    /// ANE on device; Pocket 100M keeps FluidAudio's measured defaults
+    /// on device and avoids the ANE on the simulator; Paradee is
+    /// cpuOnly everywhere (its LSTMs abort on the GPU).
+    ///
+    /// A REAL download (not cached) brackets itself with the idle timer
+    /// disabled and a silent keep-alive player: a screen lock or app
+    /// switch suspends the process and kills an unprotected multi-minute
+    /// HuggingFace fetch (why the pocket models "didn't download" from
+    /// Settings while paradee's 60 MB made it — 2026-11-19).
     func prepare() async throws {
-        switch engine {
-        case .supertonic:
-            if supertonicBackend != nil { return }
-            // NOTE: Supertonic RUNS on the simulator (cpuOnly) — keeps
-            // sim QA and the Read Aloud panel testable, unlike MLX.
-            let wasCached = Self.hasCachedModel(.supertonic)
-            if wasCached {
-                state = .loading
-            } else {
-                state = .downloading(progress: 0)
-                LiveActivityManager.shared.downloadStarted()
-                startProgressPolling(repo: nil, expected: Engine.supertonic.expectedBytes,
-                                     dir: Self.fluidTTSRoot.appendingPathComponent("supertonic-3"))
+        if isLoaded { return }
+        if let readyTask {
+            await readyTask.value
+            if isLoaded { return }
+            throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: statusMessage])
+        }
+        let current = engine
+        let wasCached = Self.hasCachedModel(current)
+        if wasCached {
+            state = .loading
+        } else {
+            state = .downloading(progress: 0)
+            LiveActivityManager.shared.downloadStarted()
+            startProgressPolling(dirs: Self.cacheDirs(current))
+        }
+        // Suspension guards for real downloads only — cached loads take
+        // seconds and don't need the screen held on.
+        var downloadGuards: SilentKeepAlive?
+        if !wasCached {
+            await MainActor.run { UIApplication.shared.isIdleTimerDisabled = true }
+            let keepAlive = SilentKeepAlive()
+            keepAlive.start()
+            downloadGuards = keepAlive
+        }
+        defer {
+            if let downloadGuards {
+                downloadGuards.stop()
+                Task { @MainActor in UIApplication.shared.isIdleTimerDisabled = false }
             }
+        }
+        let log = Logger(subsystem: "com.ipodclassic.app", category: "tts")
+        let task = Task<Void, Never> { [weak self] in
+            guard let self else { return }
             do {
-                let backend = supertonicBackend ?? SupertonicSynthesis()
-                try await backend.ensureReady()
-                supertonicBackend = backend
-                state = .ready
+                try await self.loadBackend(current)
+                self.state = .ready
                 if !wasCached { LiveActivityManager.shared.downloadFinished(success: true) }
+                log.notice("tts \(current.rawValue, privacy: .public) ready cached=\(wasCached, privacy: .public)")
             } catch {
-                state = .failed(error.localizedDescription)
+                self.state = .failed(error.localizedDescription)
                 if !wasCached { LiveActivityManager.shared.downloadFinished(success: false) }
-                throw error
+                log.notice("tts \(current.rawValue, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
-            stopProgressPolling()
+            self.stopProgressPolling()
+        }
+        readyTask = task
+        await task.value
+        readyTask = nil
+        if !isLoaded {
+            throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: statusMessage])
+        }
+    }
 
-        case .qwen, .breeze:
-            if mlxModel != nil { return }
+    /// True when the selected engine's backend is resident in memory.
+    private var isLoaded: Bool {
+        switch engine {
+        case .pocketSmall: return pocketSmallBackend != nil
+        case .pocket: return pocketBackend != nil
+        case .paradee: return paradeeBackend != nil
+        }
+    }
+
+    /// Downloads (if needed) and loads the engine's backend. All engines
+    /// cache under the shared `ttsRoot`.
+    private func loadBackend(_ engine: Engine) async throws {
+        switch engine {
+        case .pocketSmall:
+            guard pocketSmallBackend == nil else { return }
             #if targetEnvironment(simulator)
-            let message = "This voice engine needs a real device (no MLX Metal in the simulator)"
-            state = .failed(message)
-            throw CocoaError(.featureUnsupported, userInfo: [NSLocalizedDescriptionKey: message])
+            let units: MLComputeUnits = .cpuOnly // no ANE in the simulator
+            #else
+            let units: MLComputeUnits = .cpuAndNeuralEngine
             #endif
-            if let readyTask {
-                await readyTask.value
-                if mlxModel != nil { return }
-                throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: statusMessage])
-            }
-            let repo = engine.repo!
-            let wasCached = Self.hasCachedModel(engine)
-            let log = Logger(subsystem: "com.ipodclassic.app", category: "tts")
-            if wasCached {
-                state = .loading
-            } else {
-                state = .downloading(progress: 0)
-                LiveActivityManager.shared.downloadStarted()
-                startProgressPolling(repo: repo, expected: engine.expectedBytes,
-                                     dir: nil)
-            }
-            let task = Task<Void, Never> { [weak self] in
-                guard let self else { return }
-                do {
-                    let loaded = try await TTS.loadModel(
-                        modelRepo: repo,
-                        cache: HubCache(location: .fixed(directory: Self.mlxCacheRoot)))
-                    self.mlxModel = loaded
-                    self.state = .ready
-                    if !wasCached { LiveActivityManager.shared.downloadFinished(success: true) }
-                    log.notice("tts model ready repo=\(repo, privacy: .public) cached=\(wasCached, privacy: .public)")
-                } catch {
-                    self.state = .failed(error.localizedDescription)
-                    if !wasCached { LiveActivityManager.shared.downloadFinished(success: false) }
-                    log.notice("tts load failed repo=\(repo, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                }
-                self.stopProgressPolling()
-            }
-            readyTask = task
-            await task.value
-            readyTask = nil
-            if mlxModel == nil {
-                throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: statusMessage])
-            }
+            let manager = PocketTtsSmallManager(model: .english18m, computeUnits: units)
+            try await manager.initialize(directory: Self.ttsRoot)
+            pocketSmallBackend = manager
+        case .pocket:
+            guard pocketBackend == nil else { return }
+            #if targetEnvironment(simulator)
+            let units = PocketTtsComputeUnits.avoidNeuralEngine
+            #else
+            let units = PocketTtsComputeUnits.default
+            #endif
+            let manager = PocketTtsManager(
+                defaultVoice: "alba", language: .english, directory: Self.ttsRoot,
+                precision: .int8, placement: .gpu, computeUnits: units)
+            try await manager.initialize()
+            pocketBackend = manager
+        case .paradee:
+            guard paradeeBackend == nil else { return }
+            let manager = ParadeeManager(
+                version: .v12, variant: .int8, directory: Self.ttsRoot,
+                computeUnits: .cpuOnly)
+            try await manager.initialize()
+            paradeeBackend = manager
         }
     }
 
@@ -308,23 +357,17 @@ final class ReadAloudVoiceStore {
         }
     }
 
-    /// The SDKs expose no download-progress callback; both stage files
-    /// into their cache dirs as they land, so poll directory size
-    /// against the known checkpoint size. Only runs for real
-    /// (non-cached) downloads.
-    private func startProgressPolling(repo: String?, expected: Int64, dir: URL?) {
+    /// The SDKs expose no download-progress callback; files stage into
+    /// the cache dirs as they land, so poll their combined size against
+    /// the pack's expected size. Only runs for real (non-cached)
+    /// downloads.
+    private func startProgressPolling(dirs: [URL]) {
         guard progressTask == nil else { return }
         progressTask = Task { [weak self] in
             while !Task.isCancelled {
-                let bytes: Int64
-                if let dir {
-                    bytes = Self.dirBytes(dir)
-                } else if let repo {
-                    bytes = Self.cacheBytes(repo: repo)
-                } else {
-                    bytes = 0
-                }
-                let fraction = Double(bytes) / Double(expected)
+                let bytes = dirs.reduce(Int64(0)) { $0 + Self.dirBytes($1) }
+                let expected = Self.selectedEngine().expectedBytes
+                let fraction = Double(bytes) / Double(max(expected, 1))
                 await MainActor.run {
                     guard case .downloading = self?.state else { return }
                     self?.state = .downloading(progress: min(0.999, fraction))
@@ -342,12 +385,6 @@ final class ReadAloudVoiceStore {
         progressTask = nil
     }
 
-    /// On-disk bytes of one MLX repo's cache (download-progress numerator).
-    nonisolated private static func cacheBytes(repo: String) -> Int64 {
-        let dir = mlxCacheRoot.appendingPathComponent("models--" + repo.replacingOccurrences(of: "/", with: "--"))
-        return dirBytes(dir)
-    }
-
     /// Recursively sums file sizes under `dir` via a FileManager
     /// enumerator (cheap metadata walk, no file reads).
     nonisolated private static func dirBytes(_ dir: URL) -> Int64 {
@@ -360,136 +397,32 @@ final class ReadAloudVoiceStore {
         return total
     }
 
-    /// Synthesizes one page of text with the selected engine.
+    /// Synthesizes one page (or speech unit) of text with the selected
+    /// engine. All engines are English — `language` is accepted for the
+    /// seam and applied as the pack's own English frontend.
     func synthesize(text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int) {
         try await prepare()
         switch engine {
-        case .supertonic:
-            guard let backend = supertonicBackend else {
+        case .pocketSmall:
+            guard let backend = pocketSmallBackend else {
                 throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "engine not ready"])
             }
-            return try await backend.synthesize(text, language: language, voiceName: voiceName)
-        case .qwen, .breeze:
-            guard let model = mlxModel else {
+            let samples = try await backend.synthesizeSamples(text: text, voice: voiceName)
+            return (samples, 24_000)
+        case .pocket:
+            guard let backend = pocketBackend else {
                 throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "engine not ready"])
             }
-            var samples: [Float] = []
-            for try await chunk in model.generateSamplesStream(
-                text: text,
-                voice: engine.instruction(named: voiceName),
-                refAudio: nil,
-                refText: nil,
-                language: engine.languageParameter(code: language)) {
-                samples.append(contentsOf: chunk)
+            let result = try await backend.synthesizeDetailed(text: text, voice: voiceName)
+            return (result.samples, 24_000)
+        case .paradee:
+            guard let backend = paradeeBackend else {
+                throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "engine not ready"])
             }
-            guard !samples.isEmpty else {
-                throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "no audio generated"])
-            }
-            return (samples, model.sampleRate)
+            let voice = ParadeeVoice(rawValue: voiceName) ?? .afHeart
+            let samples = try await backend.synthesize(text: text, voice: voice)
+            return (samples, 24_000)
         }
-    }
-}
-
-/// Supertonic-3 backend (FluidAudio CoreML): the engine that is
-/// DEVICE-VERIFIED on the iPhone 16e (~400 MB, RTF ~0.30, 44.1 kHz).
-/// Single-flight download with the case-collision workaround for the
-/// HF repo's duplicate `Config.json`/`config.json` pair.
-@MainActor
-final class SupertonicSynthesis {
-    /// The loaded FluidAudio manager; nil until `ensureReady()` succeeds.
-    private var manager: Supertonic3Manager?
-    /// Per-voice style resources (loaded lazily at first use of a voice).
-    private var styles: [String: Supertonic3VoiceStyle] = [:]
-    /// In-flight ensure task — single-flight guard for concurrent callers.
-    private var readyTask: Task<Void, Error>?
-
-    /// Fetches the repo tree and builds the CoreML pipeline. Skips the
-    /// colliding `Config.json` stub and the unneeded `.mlpackage`
-    /// sources; compute units are cpuOnly on the simulator (no ANE, and
-    /// ANE-bucketed compiles can stall there) and CPU+ANE on device.
-    private func downloadOnce() async throws {
-        let cache = ReadAloudVoiceStore.fluidTTSRoot
-        let repoDir = cache.appendingPathComponent("supertonic-3", isDirectory: true)
-        try? FileManager.default.createDirectory(at: repoDir, withIntermediateDirectories: true)
-        // The supertonic-3-coreml HF repo ships BOTH `Config.json` (a
-        // 2-byte stub) and `config.json` — a fatal collision on Apple's
-        // case-insensitive filesystem (downloader aborts, code 516).
-        // Fetch the tree with the stub + unneeded sources skipped; the
-        // loader then finds every required file present.
-        Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("supertonic tree fetch start")
-        _ = try await ModelHub.download(
-            .supertonic3, subdirectory: "", to: repoDir,
-            shouldSkip: { path in
-                if path == "Config.json" { return true }
-                if path.hasSuffix(".mlpackage") { return true }
-                return false
-            })
-        Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("supertonic tree fetch done")
-        // The simulator has no ANE; asking for one can stall CoreML's
-        // compile. CPU-only there, CPU+ANE on device.
-        #if targetEnvironment(simulator)
-        let units: MLComputeUnits = .cpuOnly
-        #else
-        let units: MLComputeUnits = .cpuAndNeuralEngine
-        #endif
-        manager = try await Supertonic3Manager.downloadAndCreate(cacheDirectory: cache, computeUnits: units)
-        Logger(subsystem: "com.ipodclassic.app", category: "tts").notice("supertonic pipeline ready")
-    }
-
-    /// Deletes the repo directory — used to clear half-written
-    /// downloads (stale `*.partial` staging files block the retry).
-    private func purgeRepo() {
-        try? FileManager.default.removeItem(
-            at: ReadAloudVoiceStore.fluidTTSRoot.appendingPathComponent("supertonic-3", isDirectory: true))
-    }
-
-    /// Downloads the pipeline once (idempotent, single-flight). A
-    /// failed attempt purges the half-written repo dir — interrupted
-    /// downloads leave `*.partial` staging files the next pass cannot
-    /// move over — and retries clean before surfacing the error.
-    func ensureReady() async throws {
-        if manager != nil { return }
-        if let readyTask { try await readyTask.value; return }
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await self.downloadOnce()
-            } catch {
-                self.purgeRepo()
-                try await self.downloadOnce()
-            }
-        }
-        readyTask = task
-        defer { readyTask = nil }
-        try await task.value
-    }
-
-    /// Synthesizes PCM samples for one text chunk with a cached voice
-    /// style (first use of a voice downloads its style resource).
-    ///
-    /// - Parameters:
-    ///   - text: chunk to speak (≤ ~380 chars — see the page pipeline).
-    ///   - language: ISO code; Supertonic maps it internally.
-    ///   - voiceName: one of the M1–M5/F1–F5 presets (default M1).
-    /// - Returns: Float samples at 44.1 kHz (the vocoder's fixed rate).
-    /// - Throws: `CocoaError` when the backend was never readied, or the
-    ///   underlying synthesis error.
-    func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int) {
-        guard let manager else {
-            throw CocoaError(.coderInvalidValue, userInfo: [NSLocalizedDescriptionKey: "engine not ready"])
-        }
-        let style: Supertonic3VoiceStyle
-        if let cached = styles[voiceName] {
-            style = cached
-        } else {
-            let voice = Supertonic3Voice(name: voiceName) ?? .m1
-            style = try await Supertonic3ResourceDownloader.loadVoiceStyle(
-                voice, directory: ReadAloudVoiceStore.fluidTTSRoot)
-            styles[voiceName] = style
-        }
-        let (samples, _) = try await manager.synthesize(text: text, language: language, style: style)
-        // Vocoder output rate (Supertonic3Constants.sampleRate).
-        return (samples, 44_100)
     }
 }
 
@@ -499,9 +432,13 @@ final class SupertonicSynthesis {
 /// which is exactly the contract AudiobookModel needs to distinguish a
 /// warm start from a download.
 extension ReadAloudVoiceStore: AudiobookSynthesizerType {
-    /// True when the selected engine's weights are loaded and cached —
-    /// from the init-time disk probe, so warm starts never read false.
+    /// True when the engine's weights are loaded and cached — from the
+    /// init-time disk probe, so warm starts never read false.
     var isReady: Bool { state == .ready }
+
+    /// These engines chunk at sentence level themselves — the model feeds
+    /// whole pages (see `Engine.feedsWholePages`).
+    var feedsWholePages: Bool { engine.feedsWholePages }
 
     /// Seam counterpart of `prepare()` (download + load, idempotent).
     func ensureReady() async throws {
