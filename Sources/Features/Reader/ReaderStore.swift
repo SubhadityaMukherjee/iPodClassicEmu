@@ -214,6 +214,76 @@ final class ReaderStore {
             persist()
             d.set(true, forKey: "reader.newBookStepMigrated")
         }
+        // Registry-loss self-heal: the registry lives in UserDefaults,
+        // which QA hooks (RESET_DEFAULTS=1) and other defaults resets can
+        // clear while the extracted files survive in Documents/Books —
+        // without this, those books vanish from the list until
+        // re-imported (a device lost its whole list with every file
+        // intact, 2026-11-19).
+        healOrphans()
+    }
+
+    /// Re-registers books whose files exist under `Books/` but are
+    /// missing from the registry, with default reading settings. EPUBs
+    /// are detected by their extracted `META-INF/container.xml` (a PDF's
+    /// reflow dir contains only `reflow/` and is owned by its `.pdf`
+    /// file); PDFs by the copied `<id>.pdf` file. Idempotent — books
+    /// already registered are left untouched.
+    func healOrphans() {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: Self.booksRoot, includingPropertiesForKeys: [.isDirectoryKey]) else { return }
+        var known = Set(books.map(\.id))
+        var healed = 0
+        for entry in entries {
+            let name = entry.lastPathComponent
+            if name.hasPrefix(".") { continue }
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: entry.path, isDirectory: &isDir) else { continue }
+            if isDir.boolValue {
+                guard !known.contains(name),
+                      fm.fileExists(atPath: entry.appendingPathComponent("META-INF/container.xml").path)
+                else { continue }
+                books.append(Book(id: name, kind: .epub, title: Self.epubTitle(in: entry) ?? name))
+                known.insert(name)
+                healed += 1
+            } else if name.hasSuffix(".pdf") {
+                let id = String(name.dropLast(4))
+                guard !known.contains(id) else { continue }
+                books.append(Book(id: id, kind: .pdf, title: id))
+                known.insert(id)
+                healed += 1
+            }
+        }
+        if healed > 0 { persist() }
+    }
+
+    /// Best-effort display title for a healed EPUB: the OPF's
+    /// `<dc:title>` (searched at the book root and in `OEBPS/`), decoded
+    /// for the common XML entities, falling back to nil when absent so
+    /// the caller can use the folder name.
+    private static func epubTitle(in dir: URL) -> String? {
+        let fm = FileManager.default
+        for base in [dir, dir.appendingPathComponent("OEBPS")] {
+            guard let names = try? fm.contentsOfDirectory(atPath: base.path) else { continue }
+            for name in names where name.hasSuffix(".opf") {
+                guard let text = try? String(contentsOf: base.appendingPathComponent(name), encoding: .utf8),
+                      let open = text.range(of: "<dc:title", options: .caseInsensitive)
+                else { continue }
+                var tail = text[open.upperBound...]
+                // Skip any tag attributes up to the closing bracket.
+                if let bracket = tail.range(of: ">") { tail = tail[bracket.upperBound...] }
+                guard let end = tail.range(of: "</dc:title>", options: .caseInsensitive) else { continue }
+                let title = tail[..<end.lowerBound]
+                    .replacingOccurrences(of: "&amp;", with: "&")
+                    .replacingOccurrences(of: "&#39;", with: "'")
+                    .replacingOccurrences(of: "&apos;", with: "'")
+                    .replacingOccurrences(of: "&quot;", with: "\"")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !title.isEmpty { return title }
+            }
+        }
+        return nil
     }
 
     /// Root folder for all imported books.

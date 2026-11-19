@@ -56,6 +56,37 @@ final class ReaderStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.addBook(from: file))
     }
 
+    /// Registry-loss self-heal (2026-11-19): files under Books/ that the
+    /// UserDefaults registry doesn't know about must come back after a
+    /// defaults wipe — EPUBs from their extracted folder (title from the
+    /// OPF), PDFs from the copied file. Idempotent on re-runs.
+    func testHealReregistersOrphanedBooks() throws {
+        let fm = FileManager.default
+        // Orphaned EPUB: extracted folder, no registry entry.
+        let epubDir = ReaderStore.booksRoot.appendingPathComponent("Heal Test Book")
+        try fm.createDirectory(at: epubDir.appendingPathComponent("META-INF"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: epubDir.appendingPathComponent("OEBPS"), withIntermediateDirectories: true)
+        try "container".write(to: epubDir.appendingPathComponent("META-INF/container.xml"),
+                              atomically: true, encoding: .utf8)
+        try "<package><metadata><dc:title>The Healed &amp; Title</dc:title></metadata></package>".write(
+            to: epubDir.appendingPathComponent("OEBPS/content.opf"), atomically: true, encoding: .utf8)
+        // Orphaned PDF: copied file, no registry entry.
+        let pdfURL = ReaderStore.booksRoot.appendingPathComponent("Heal Test PDF.pdf")
+        try Data("%PDF-1.4".utf8).write(to: pdfURL)
+
+        store.healOrphans()
+
+        let healed = store.book(id: "Heal Test Book")
+        XCTAssertEqual(healed?.kind, .epub)
+        XCTAssertEqual(healed?.title, "The Healed & Title", "OPF title with decoded entity")
+        let healedPDF = store.book(id: "Heal Test PDF")
+        XCTAssertEqual(healedPDF?.kind, .pdf)
+        // Healing again must not duplicate.
+        store.healOrphans()
+        XCTAssertEqual(store.books.filter { $0.id == "Heal Test Book" }.count, 1)
+        XCTAssertEqual(store.books.filter { $0.id == "Heal Test PDF" }.count, 1)
+    }
+
     func testDuplicateNamesGetSuffix() throws {
         let a = makeTempFile(name: "Dup Book QQ", ext: "pdf")
         let b = makeTempFile(name: "Dup Book QQ", ext: "pdf")
