@@ -320,12 +320,12 @@ struct AboutScreen: View {
     }
 }
 
-/// Read Aloud engine management: choose the TTS engine, download its
-/// voice model on demand, and free disk by deleting a downloaded model.
-/// Only the SELECTED engine downloads — Supertonic3 (~400 MB) is the
-/// default (device-verified); the MLX engines Qwen3 (~700 MB) and
-/// Breeze (~3 GB) are WIP — they load but die at synthesis start on
-/// current devices/iOS, kept selectable for future OSes.
+/// Read Aloud voice-model management: choose the TTS engine (Pocket 18m /
+/// Pocket 100M / Paradee 8M — all English, all sentence-chunked), download
+/// its voice model on demand, and free disk by deleting it. Only the
+/// SELECTED engine downloads. (Supertonic was removed 2026-11-19 — its
+/// 70-char chunk cap cut sentences mid-word with ~1 s pauses; Kokoro is
+/// process-killing on iOS 27.)
 struct ReadAloudSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var settings: AppSettings
@@ -338,33 +338,32 @@ struct ReadAloudSettingsScreen: View {
     /// The shared read-aloud engine/voice-model store this page manages.
     private var store: ReadAloudVoiceStore { .shared }
 
-    /// Rows: Engine (current selection), Voice Model (live download
-    /// progress or cached state for the SELECTED engine only), a Delete
-    /// Model row that appears only when a download exists, and an
-    /// experimental warning row for engines flagged as such.
+    /// Rows: Engine (cycles the three engines), Voice Model (live
+    /// download progress or cached state for the SELECTED engine), and,
+    /// once a download exists, a Delete Model row to free its disk.
     private var items: [MenuItem] {
         var rows: [MenuItem] = []
         let engine = store.engine
         rows.append(MenuItem(
             id: "engine", title: "Engine",
             detail: engine.title, showsChevron: false))
-        // Model row reflects the SELECTED engine's cache state.
         let cached = ReadAloudVoiceStore.hasCachedModel(engine)
         let detail: String
         switch store.state {
         case .downloading(let progress):
             detail = progress.map { String(format: "Downloading… %d%%", Int($0 * 100)) } ?? "Downloading…"
         case .loading: detail = "Loading…"
+        case .failed(let message):
+            // Keep the row one line: show the start of the error so a
+            // dead download is visible instead of masquerading as
+            // "Not downloaded" (the 2026-11-19 pocket mystery).
+            detail = String(message.prefix(40))
         default:
             detail = cached ? "Downloaded ✓" : "Not downloaded"
         }
         rows.append(MenuItem(id: "model", title: "Voice Model", detail: detail, showsChevron: false))
         if cached {
             rows.append(MenuItem(id: "delete", title: "Delete Model", detail: "Free Space", showsChevron: false))
-        }
-        if engine.isExperimental {
-            rows.append(MenuItem(
-                id: "warning", title: "Experimental — may crash this device", showsChevron: false))
         }
         return rows
     }
@@ -406,10 +405,10 @@ struct ReadAloudSettingsScreen: View {
         }
     }
 
-    /// Row actions: cycle the engine; start the voice-model download (a
-    /// no-op toast when already cached); or delete the cached model —
-    /// re-assigning `store.engine` afterwards re-probes its cache state
-    /// so the row labels update. The warning row does nothing.
+    /// Row actions: cycle the engine (the new engine downloads on next
+    /// use); start the voice-model download (a no-op toast when already
+    /// cached); or delete the cached model — deletion also resets the
+    /// store's state so the row labels update.
     private func activate(_ id: String) {
         switch id {
         case "engine":
@@ -424,12 +423,8 @@ struct ReadAloudSettingsScreen: View {
                 Task { try? await store.prepare() }
             }
         case "delete":
-            let engine = store.engine
-            ReadAloudVoiceStore.deleteModel(engine)
-            store.engine = engine // re-probe state for this engine
+            store.deleteDownloadedModel()
             toast = "Deleted"
-        case "warning":
-            break
         default:
             break
         }

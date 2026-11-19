@@ -301,7 +301,7 @@ final class AudiobookAudioEngine: NSObject, AudiobookAudioEngineType, AVAudioPla
 /// among the common reader languages. Falls back to English when the
 /// counts are inconclusive (short texts, names, numbers).
 enum AudiobookLanguage {
-    /// Codes the TTS engines accept (and `detect` can return).
+    /// Codes the TTS engine accepts (and `detect` can return).
     static let supported = ["en", "nl", "de", "fr", "es", "it"]
 
     /// Frequent-word sets per language; hit counts decide the winner.
@@ -339,8 +339,8 @@ enum AudiobookLanguage {
 }
 
 /// Synthesis seam: the real implementation is ReadAloudVoiceStore
-/// (engine-selectable — Supertonic3 CoreML by default, MLX engines WIP);
-/// tests supply a mock. Voice identity travels as its preset name string.
+/// (three English engines selectable in Settings → Read Aloud); tests
+/// supply a mock. Voice identity travels as its preset name string.
 @MainActor
 protocol AudiobookSynthesizerType: AnyObject {
     /// Download + load the pipeline once (idempotent).
@@ -349,6 +349,11 @@ protocol AudiobookSynthesizerType: AnyObject {
     /// from its disk probe) — lets callers label "Preparing" instead of
     /// "Downloading" for warm starts.
     var isReady: Bool { get }
+    /// True when the engine chunks at SENTENCE level internally with
+    /// seamless audio state (Pocket, Paradee) — `render` then feeds it
+    /// whole pages. False for engines with a small internal chunk cap
+    /// (Supertonic's 70 chars), which need our `speechUnits` pipeline.
+    var feedsWholePages: Bool { get }
     /// Synthesizes one text chunk to raw float samples.
     ///
     /// - Returns: mono samples and their sample rate.
@@ -359,11 +364,12 @@ protocol AudiobookSynthesizerType: AnyObject {
     func synthesize(_ text: String, language: String, voiceName: String) async throws -> (samples: [Float], sampleRate: Int)
 }
 
-/// Audiobook mode for the book reader: on-device neural TTS (engine per
-/// Settings → Read Aloud; Supertonic3 CoreML default, MLX engines WIP —
-/// see ReadAloudTTS.swift) that reads the open book page by page through
-/// the same page-turn path as manual reading, so exiting mid-page leaves
-/// the reader exactly where listening stopped.
+/// Audiobook mode for the book reader: on-device neural TTS (three
+/// English engines selectable in Settings → Read Aloud — Pocket 18m
+/// default, Pocket 100M, Paradee 8M; see ReadAloudTTS.swift) that reads
+/// the open book page by page through the same page-turn path as manual
+/// reading, so exiting mid-page leaves the reader exactly where
+/// listening stopped.
 @Observable
 @MainActor
 final class AudiobookModel {
@@ -442,21 +448,13 @@ final class AudiobookModel {
             currentVoice = Self.voices[wrapped] // didSet persists + invalidates
         }
     }
-    /// Voices of the SELECTED engine (Supertonic: M1–M5/F1–F5; Qwen:
-    /// Ryan/Aiden; Breeze: design presets). The stored preference falls
-    /// back to the first when the engine changes and the old name
-    /// doesn't exist.
-    nonisolated static var voices: [String] {
-        switch AppSettings.shared.readAloudEngine {
-        case "qwen": return ReadAloudVoiceStore.Engine.qwen.voices
-        case "breeze": return ReadAloudVoiceStore.Engine.breeze.voices
-        default: return ReadAloudVoiceStore.Engine.supertonic.voices
-        }
-    }
-    /// Count of the selected engine's voices.
+    /// Voice presets of the SELECTED engine (Pocket: the 21 English
+    /// "literary" voices; Paradee: af_heart & co). The stored preference
+    /// falls back to the first when the saved name doesn't exist.
+    nonisolated static var voices: [String] { ReadAloudVoiceStore.voices }
+    /// Count of the voice presets.
     nonisolated static var voiceCount: Int { voices.count }
-    /// Stored voice preset, persisted on change and re-validated when
-    /// the engine switches (`voices`).
+    /// Stored voice preset, persisted on change.
     private var currentVoice: String {
         didSet { AppSettings.shared.audiobookVoice = currentVoice }
     }
@@ -491,9 +489,9 @@ final class AudiobookModel {
     private var synthWindows = 0
     /// Silent loop during synthesis windows: nothing is playing while a
     /// page is being generated, and with the screen locked iOS suspends
-    /// the process — freezing MLX Metal work mid-generation (the QA run
-    /// stalled exactly here). Real page playback covers the gaps between
-    /// syntheses; this covers the syntheses themselves.
+    /// the process — freezing neural synthesis mid-generation (the QA
+    /// run stalled exactly here). Real page playback covers the gaps
+    /// between syntheses; this covers the syntheses themselves.
     private let synthKeepAlive = SilentKeepAlive()
 
     /// Production wiring: the real engine and voice store.
@@ -847,10 +845,15 @@ final class AudiobookModel {
         }
     }
 
-    /// Long pages are synthesized in sentence chunks and concatenated —
-    /// with the limit far above real sentences (see `sentenceChunks`),
-    /// a normal page is ONE synthesis call; chunking only guards
-    /// pathological runs.
+    /// Groups a page into chunks of whole sentences up to `limit`
+    /// (limit 1500 = one chunk for a normal page; grouping only guards
+    /// pathological runs).
+    ///
+    /// NOT used by the render path since 2026-11-19 — superseded by
+    /// `speechUnits` (one giant call per page let the engine re-chunk
+    /// internally mid-sentence, and every call bakes edge silence —
+    /// together heard as a pause mid-sentence every sentence). Kept
+    /// because the test suite pins its behavior.
     ///
     /// Sentence boundaries come from `NLTokenizer` (unit: .sentence) —
     /// it knows "Mr.", "Dr.", "e.g." and initials are NOT sentence
@@ -861,19 +864,6 @@ final class AudiobookModel {
     /// Sentences are grouped up to `limit`; a single sentence longer
     /// than `limit` is split at word boundaries (never left oversized —
     /// an oversized call is exactly the tail-truncation bug).
-    ///
-    /// Synthesis chunking. DEVICE-MEASURED (2026-11-18, iPhone 16e ANE
-    /// + simulator): a single 445-char call renders 30.7 s of complete
-    /// audio at rtf 0.02, and 861 chars render complete on the sim —
-    /// the old ≤300-char limit with word-boundary splitting cut this
-    /// book's 400–600-char scholarly sentences at arbitrary words, and
-    /// every cut edge sounded like the voice stopping mid-sentence
-    /// ("was ⏸ overwhelmed"). The default limit is therefore FAR above
-    /// any real sentence: chunks split at SENTENCE/paragraph boundaries
-    /// only, and word-boundary splitting exists solely as the ultimate
-    /// fallback for pathological runs (>1500 chars ≈ 100 s of audio).
-    /// No newline ever reaches the engine (a "\n" is a hard stop to
-    /// TTS); the short-page early return strips them too.
     static func sentenceChunks(_ text: String, limit: Int = 1500) -> [String] {
         guard text.count > limit else {
             return [text.replacingOccurrences(of: "\n", with: " ")]
@@ -951,6 +941,119 @@ final class AudiobookModel {
         return pieces.isEmpty ? [text] : pieces
     }
 
+    /// One speakable unit: a sentence (or a merged run of very short
+    /// ones), sized under the engine's own internal chunk limit, plus
+    /// the pause to append after it.
+    struct SpeechUnit: Equatable {
+        let text: String
+        /// Silence appended after this unit, in seconds.
+        let pauseAfter: Double
+    }
+
+    /// Splits a page into sentence-sized speech units (the render
+    /// pipeline's unit of synthesis since 2026-11-19).
+    ///
+    /// WHY unit-sized calls: FluidAudio chunks long synthesis calls
+    /// internally (~300 chars), and each internal split lands
+    /// MID-SENTENCE at an arbitrary word with the engine's own pause —
+    /// a one-call-per-page design (the 2026-11-18 `sentenceChunks`
+    /// doctrine) therefore read as the voice pausing mid-sentence every
+    /// sentence even though every word was spoken. Every call ALSO
+    /// bakes leading/trailing silence into its audio. Units are hence
+    /// kept under the internal chunk size (200 chars, safely below
+    /// ~300), split at sentence/clause boundaries ONLY (never
+    /// mid-word), `render` trims each call's baked-in silence, and the
+    /// only pauses left are the deliberate ones:
+    /// 0.08 s within a sentence split at a clause, 0.2 s between
+    /// sentences, 0.45 s at a paragraph end.
+    ///
+    /// Sentence boundaries come from `NLTokenizer` (knows "Mr."/
+    /// "Dr." are not ends); very short sentences merge into the next
+    /// call ("Yes." "No." alone are unnatural single-word utterances);
+    /// an over-long sentence splits at its last clause break
+    /// (comma/semicolon/dash) or space.
+    static func speechUnits(_ raw: String, maxChars: Int = 200) -> [SpeechUnit] {
+        var units: [SpeechUnit] = []
+        for para in normalizeForSpeech(raw).components(separatedBy: "\n\n") {
+            let para = para.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !para.isEmpty else { continue }
+            let tok = NLTokenizer(unit: .sentence)
+            tok.string = para
+            var sentences: [String] = []
+            var start = para.startIndex
+            tok.enumerateTokens(in: para.startIndex..<para.endIndex) { range, _ in
+                let piece = String(para[start..<range.upperBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !piece.isEmpty { sentences.append(piece) }
+                start = range.upperBound
+                return true
+            }
+            if start < para.endIndex {
+                let tail = String(para[start...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !tail.isEmpty { sentences.append(tail) }
+            }
+            // Merge a very short sentence forward into the next call.
+            var merged: [String] = []
+            for s in sentences {
+                if let last = merged.last, last.count < 25, last.count + 1 + s.count <= maxChars {
+                    merged[merged.count - 1] = last + " " + s
+                } else {
+                    merged.append(s)
+                }
+            }
+            for (si, sentence) in merged.enumerated() {
+                let pieces = splitLong(sentence, maxChars: maxChars)
+                for (k, piece) in pieces.enumerated() {
+                    let pause = k < pieces.count - 1 ? 0.08
+                        : (si == merged.count - 1 ? 0.45 : 0.2)
+                    units.append(SpeechUnit(text: piece, pauseAfter: pause))
+                }
+            }
+        }
+        return units
+    }
+
+    /// Splits an over-long sentence at the last clause break (or space)
+    /// within each window — never mid-word, never oversized for the
+    /// engine's internal chunker.
+    private static func splitLong(_ s: String, maxChars: Int) -> [String] {
+        guard s.count > maxChars else { return [s] }
+        var out: [String] = []
+        var rest = Substring(s)
+        while rest.count > maxChars {
+            let window = rest.prefix(maxChars)
+            let minCut = window.index(window.startIndex, offsetBy: maxChars / 3)
+            let clause = window.lastIndex(where: { ",;:—–".contains($0) }).flatMap { $0 >= minCut ? $0 : nil }
+            let cut = clause ?? window.lastIndex(of: " ") ?? window.index(before: window.endIndex)
+            let end = rest.index(after: cut)
+            out.append(String(rest[..<end]).trimmingCharacters(in: .whitespaces))
+            rest = rest[end...].drop(while: { $0 == " " })
+        }
+        if !rest.isEmpty { out.append(String(rest)) }
+        return out
+    }
+
+    /// Strips the model's baked-in leading/trailing silence (measured
+    /// in the hundreds of milliseconds per call — the second half of
+    /// the pauses-mid-sentence bug), keeping a `padMs` pad and applying
+    /// ~5 ms edge fades so the cut doesn't click.
+    ///
+    /// - Returns: the trimmed samples; empty when the input is all
+    ///   silence.
+    static func trimmed(_ x: [Float], sampleRate: Int, threshold: Float = 0.01, padMs: Int = 40) -> [Float] {
+        guard let first = x.firstIndex(where: { abs($0) > threshold }),
+              let last = x.lastIndex(where: { abs($0) > threshold }) else { return [] }
+        let pad = sampleRate * padMs / 1000
+        var y = Array(x[max(0, first - pad)...min(x.count - 1, last + pad)])
+        let fade = min(sampleRate / 200, y.count / 2)
+        for i in 0..<fade {
+            let g = Float(i) / Float(fade)
+            y[i] *= g
+            y[y.count - 1 - i] *= g
+        }
+        return y
+    }
+
     /// Normalizes extracted text for speech before chunking. Source
     /// text — especially PDFKit `page.string` — carries a hard newline
     /// at every VISUAL line wrap and hyphenated words split across
@@ -1022,11 +1125,15 @@ final class AudiobookModel {
         }
     }
 
-    /// One page's synthesis window: normalized text → chunked →
-    /// synthesized → concatenated with a small inter-chunk gap. The
-    /// keep-alive is refcounted across windows and skipped entirely
-    /// while audio is playing (a playing page keeps the process alive
-    /// by itself).
+    /// One page's synthesis window. Engines that chunk at sentence level
+    /// themselves (Pocket, Paradee — `feedsWholePages`) get the WHOLE
+    /// normalized page in one call and keep their own seamless audio
+    /// state across their internal chunks; engines with a small internal
+    /// chunk cap (Supertonic's 70 chars) instead get sentence-sized
+    /// `speechUnits` with per-call edge silence trimmed and explicit
+    /// pauses. The keep-alive is refcounted across windows and skipped
+    /// entirely while audio is playing (a playing page keeps the process
+    /// alive by itself).
     private func render(_ segment: AudiobookSegment, language: String) async throws -> AVAudioPCMBuffer {
         synthWindows += 1
         if synthWindows == 1, !engine.isPlaying { synthKeepAlive.start() }
@@ -1034,18 +1141,31 @@ final class AudiobookModel {
             synthWindows -= 1
             if synthWindows == 0 { synthKeepAlive.stop() }
         }
-        let chunks = Self.sentenceChunks(Self.normalizeForSpeech(segment.text))
         var samples: [Float] = []
-        var sampleRate = 44_100
-        for (n, chunk) in chunks.enumerated() {
-            let (chunkSamples, rate) = try await synthesize(chunk, language: language)
+        var sampleRate = 24_000
+        /// Logs and trims one synthesis call's baked edge silence.
+        func append(_ raw: [Float], rate: Int, chars: Int) {
             sampleRate = rate
-            samples.append(contentsOf: chunkSamples)
-            // ~80 ms of silence between chunks: a hard splice of
-            // independently-generated audio clicks; a short gap reads as
-            // a natural inter-sentence pause. (Not after the last chunk.)
-            if n < chunks.count - 1 {
-                samples.append(contentsOf: [Float](repeating: 0, count: rate / 12))
+            // Diagnostic: how much silence the model baked into this
+            // call's edges (Supertonic measured 342–661 ms lead /
+            // 391–713 ms trail — the pauses-mid-sentence culprit).
+            let lead = raw.firstIndex(where: { abs($0) > 0.01 }) ?? raw.count
+            let trail = raw.count - 1 - (raw.lastIndex(where: { abs($0) > 0.01 }) ?? max(0, raw.count - 1))
+            Logger(subsystem: "com.ipodclassic.app", category: "tts").notice(
+                "unit chars=\(chars, privacy: .public) lead=\(max(0, lead) * 1000 / max(rate, 1), privacy: .public)ms trail=\(max(0, trail) * 1000 / max(rate, 1), privacy: .public)ms")
+            samples.append(contentsOf: Self.trimmed(raw, sampleRate: rate))
+        }
+        if synthesis.feedsWholePages {
+            try Task.checkCancellation()
+            let pageText = Self.normalizeForSpeech(segment.text)
+            let (raw, rate) = try await synthesize(pageText, language: language)
+            append(raw, rate: rate, chars: pageText.count)
+        } else {
+            for unit in Self.speechUnits(segment.text) {
+                try Task.checkCancellation()
+                let (raw, rate) = try await synthesize(unit.text, language: language)
+                append(raw, rate: rate, chars: unit.text.count)
+                samples.append(contentsOf: [Float](repeating: 0, count: Int(unit.pauseAfter * Double(rate))))
             }
         }
         guard !samples.isEmpty else {
@@ -1118,8 +1238,8 @@ final class AudiobookModel {
         do {
             stage("download-start")
             // Keep the screen awake and the process runnable for the
-            // whole run: a locked phone suspends MLX Metal work and the
-            // download stalls silently.
+            // whole run: a locked phone suspends the download and it
+            // stalls silently.
             UIApplication.shared.isIdleTimerDisabled = true
             defer { UIApplication.shared.isIdleTimerDisabled = false }
             let keepAlive = SilentKeepAlive()

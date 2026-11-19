@@ -11,8 +11,11 @@ final class AudiobookModelTests: XCTestCase {
     // MARK: Mocks
 
     /// Always "ready"; distinct frame counts per text so assertions can
-    /// tell buffers apart.
+    /// tell buffers apart. `feedsWholePages` selects which render path
+    /// the test drives (false = the speechUnits pipeline, true = the
+    /// whole-page single call).
     private final class MockSynth: AudiobookSynthesizerType {
+        var feedsWholePages = false
         private(set) var synthesized: [String] = []
         var isReady: Bool { true }
         func ensureReady() async throws {}
@@ -350,6 +353,116 @@ final class AudiobookModelTests: XCTestCase {
             XCTAssertFalse(chunk.hasSuffix("wo") && !chunk.hasSuffix("word "),
                            "split mid-word: …\(chunk.suffix(10))")
         }
+    }
+
+    // MARK: Speech units (sentence-sized synthesis + pause schedule)
+
+    /// Units are sentence-sized and carry the deliberate pause schedule:
+    /// 0.2 s between sentences, 0.45 s at a paragraph end.
+    func testSpeechUnitsSplitPerSentenceWithPauseSchedule() {
+        let text = "He opened the door and walked into the hallway. The corridor stretched beyond what he had first expected.\n\nDownstairs the kitchen sat full of warm morning light."
+        let units = AudiobookModel.speechUnits(text)
+        XCTAssertEqual(units.map(\.text), [
+            "He opened the door and walked into the hallway.",
+            "The corridor stretched beyond what he had first expected.",
+            "Downstairs the kitchen sat full of warm morning light.",
+        ])
+        XCTAssertEqual(units.map(\.pauseAfter), [0.2, 0.45, 0.45])
+    }
+
+    /// Very short sentences merge into the next call ("Yes." "No."
+    /// alone are unnatural single-word utterances).
+    func testSpeechUnitsMergeVeryShortSentences() {
+        let units = AudiobookModel.speechUnits("Yes. No. Perhaps that was always the answer.")
+        XCTAssertEqual(units.count, 1)
+        XCTAssertEqual(units[0].text, "Yes. No. Perhaps that was always the answer.")
+    }
+
+    /// A pathological unpunctuated run still splits UNDER the engine's
+    /// internal chunk size (a bigger call gets re-chunked mid-sentence
+    /// by the engine itself) — and never loses a word.
+    func testSpeechUnitsSplitOversizedRunsUnderEngineLimit() {
+        let text = String(repeating: "word ", count: 200) // 1000 chars, no terminators
+        let units = AudiobookModel.speechUnits(text, maxChars: 200)
+        XCTAssertGreaterThan(units.count, 1)
+        for unit in units {
+            XCTAssertLessThanOrEqual(unit.text.count, 200, "oversized unit left intact: \(unit.text.count)")
+        }
+        let words = units.map(\.text).joined(separator: " ").split(separator: " ")
+        XCTAssertEqual(words.count, 200, "reassembly must be lossless")
+        XCTAssertTrue(units.contains { $0.pauseAfter == 0.08 }, "clause splits carry the short in-sentence pause")
+    }
+
+    /// An over-long sentence prefers its last clause break (comma,
+    /// semicolon…) over an arbitrary space — the cut reads as a natural
+    /// clause pause, not a stop.
+    func testSpeechUnitsPreferClauseBreaksWhenSplitting() {
+        let text = String(repeating: "plain ", count: 25) + ", " + String(repeating: "more ", count: 15) + "words."
+        let units = AudiobookModel.speechUnits(text, maxChars: 200)
+        XCTAssertEqual(units.count, 2)
+        XCTAssertTrue(units[0].text.hasSuffix(","), "first piece should end at the clause break: …\(units[0].text.suffix(20))")
+        XCTAssertTrue(units[1].text.hasPrefix("more"), "second piece starts after the break")
+        XCTAssertEqual(units[0].pauseAfter, 0.08)
+    }
+
+    /// The engine bakes silence into the edges of every call — the trim
+    /// removes it (keeping a pad), and all-silence input yields nothing.
+    func testTrimmedStripsBakedEdgeSilence() {
+        let rate = 24_000
+        let lead = [Float](repeating: 0, count: rate / 2)       // 0.5 s baked silence
+        let audible = [Float](repeating: 0.4, count: rate)       // 1 s speech
+        let trail = [Float](repeating: 0, count: rate * 3 / 4)   // 0.75 s baked silence
+        let out = AudiobookModel.trimmed(lead + audible + trail, sampleRate: rate)
+        // Audible span + two 40 ms pads, within rounding of the pad math.
+        XCTAssertEqual(Double(out.count), Double(rate + 2 * (rate * 40 / 1000)), accuracy: 300.0)
+        XCTAssertEqual(AudiobookModel.trimmed([Float](repeating: 0, count: 1_000), sampleRate: rate), [])
+    }
+
+    /// The render path synthesizes per SENTENCE UNIT, not one giant
+    /// call per page — one call per page let the engine re-chunk
+    /// internally mid-sentence (the pauses-every-sentence bug).
+    func testRenderSynthesizesSentenceUnitsNotWholePages() async {
+        let synth = MockSynth() // feedsWholePages = false
+        let engine = MockEngine()
+        let model = AudiobookModel(engine: engine, synthesis: synth)
+        let sentences = (0..<6).map { "Sentence number \($0) stands alone as a complete spoken sentence." }
+        let provider = FakeProvider(chapters: [[AudiobookSegment(page: 0, text: sentences.joined(separator: " "))]])
+        model.start(provider: provider.provider())
+        for _ in 0..<150 {
+            if engine.played.count == 1 { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        model.stop()
+        XCTAssertGreaterThanOrEqual(synth.synthesized.count, 5,
+                                    "page was synthesized as \(synth.synthesized.count) call(s)")
+        for text in synth.synthesized {
+            XCTAssertFalse(text.contains("\n"), "unit carried a hard newline to the engine")
+            XCTAssertLessThanOrEqual(text.count, 201, "unit oversized: \(text.count)")
+        }
+    }
+
+    /// Whole-page engines (Pocket, Paradee — sentence-level internal
+    /// chunking with seamless audio state) get the ENTIRE normalized
+    /// page in one call; our unit-splitting must not pre-chop their
+    /// prosody.
+    func testRenderFeedsWholePagesInOneCall() async {
+        let synth = MockSynth()
+        synth.feedsWholePages = true
+        let engine = MockEngine()
+        let model = AudiobookModel(engine: engine, synthesis: synth)
+        let sentences = (0..<6).map { "Sentence number \($0) stands alone as a complete spoken sentence." }
+        let wrapped = sentences.joined(separator: " ") + "\n\nFinal paragraph line wraps\nacross two lines."
+        let provider = FakeProvider(chapters: [[AudiobookSegment(page: 0, text: wrapped)]])
+        model.start(provider: provider.provider())
+        for _ in 0..<150 {
+            if engine.played.count == 1 { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        model.stop()
+        XCTAssertEqual(synth.synthesized.count, 1, "whole-page engine got \(synth.synthesized.count) calls")
+        XCTAssertEqual(synth.synthesized.first,
+                       AudiobookModel.normalizeForSpeech(wrapped),
+                       "engine must receive the page exactly as normalized (wrapped lines joined, paragraph break kept)")
     }
 
     // MARK: Speech normalization (wrapped lines are hard stops to TTS)

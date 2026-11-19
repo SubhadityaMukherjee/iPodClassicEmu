@@ -50,8 +50,8 @@ final class AppSettings: ObservableObject {
         static let noteFont = "notes.fontSize"        // points; note editor text
         static let audiobookVoice = "audiobook.voice"     // engine-specific preset name
         static let audiobookSpeed = "audiobook.speed"     // index into AudiobookModel.speeds
-        static let audiobookVolume = "audiobook.volume"   // index into AudiobookModel.volumes
-        static let readAloudEngine = "readaloud.engine"   // "qwen" | "breeze"
+        static let audiobookVolume = "audiobook.volume"  // index into AudiobookModel.volumes
+        static let readAloudEngine = "readaloud.engine"  // "paradee" default; "pocket18"|"pocket100"
     }
 
     // MARK: Display
@@ -71,13 +71,13 @@ final class AppSettings: ObservableObject {
 
     // MARK: Audiobook (read aloud)
 
-    /// Read Aloud TTS engine ("supertonic" default; "qwen"/"breeze"
-    /// experimental MLX engines).
+    /// Read Aloud TTS engine ("paradee" default — device-verified
+    /// 2026-11-19, af_heart voice; "pocket18"/"pocket100" selectable).
     var readAloudEngine: String {
-        get { d.string(forKey: K.readAloudEngine) ?? "supertonic" }
+        get { d.string(forKey: K.readAloudEngine) ?? "paradee" }
         set { objectWillChange.send(); store(newValue, K.readAloudEngine) }
     }
-    /// Read Aloud voice preset name (engine-specific, e.g. "M1").
+    /// Read Aloud voice preset name (engine-specific, e.g. "alba").
     var audiobookVoice: String {
         get { d.string(forKey: K.audiobookVoice) ?? "M1" }
         set { objectWillChange.send(); store(newValue, K.audiobookVoice) }
