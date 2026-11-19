@@ -53,13 +53,43 @@ final class BinauralModelTests: XCTestCase {
 
     func testPresetsCoverAllBands() {
         let names = BinauralModel.presets.map(\.name)
-        XCTAssertEqual(names, ["Delta", "Theta", "Schumann", "Alpha", "Beta", "Gamma"])
+        XCTAssertEqual(names, ["Delta", "Gateway", "Theta", "Schumann", "Alpha", "Beta", "Gamma",
+                               "Intuition", "Oneness"])
         XCTAssertEqual(preset("Schumann").beat, 7.83, accuracy: 0.001, "Schumann resonance is 7.83 Hz")
         XCTAssertEqual(preset("Delta").beat, 3)
         XCTAssertEqual(preset("Theta").beat, 6)
         XCTAssertEqual(preset("Alpha").beat, 10)
         XCTAssertEqual(preset("Beta").beat, 18)
         XCTAssertEqual(preset("Gamma").beat, 40)
+    }
+
+    func testGatewayPinsThe299And302EarFrequencies() {
+        let gateway = preset("Gateway")
+        XCTAssertEqual(gateway.beat, 3, accuracy: 0.001)
+        XCTAssertEqual(gateway.carrier ?? 0, 300.5, accuracy: 0.001,
+                       "carrier 300.5 ± 1.5 puts the ears exactly on 299/302 Hz")
+        model.toggle(gateway)
+        XCTAssertEqual(engine.starts.last?.carrier ?? 0, 300.5, accuracy: 0.001,
+                       "the pinned carrier reaches the engine, not the 200 Hz default")
+    }
+
+    func testSolfeggioPresetsArePureTonesAtTheirCarrier() {
+        // Beat 0 renders identical sines into both ears — a pure tone.
+        for (name, hz) in [("Intuition", 852.0), ("Oneness", 963.0)] {
+            let p = preset(name)
+            XCTAssertEqual(p.beat, 0, accuracy: 0.001, "\(name) is a pure tone, not a beat")
+            XCTAssertEqual(p.carrier ?? 0, hz, accuracy: 0.001)
+            model.toggle(p)
+            XCTAssertEqual(engine.starts.last?.beat ?? -1, 0, accuracy: 0.001)
+            XCTAssertEqual(engine.starts.last?.carrier ?? 0, hz, accuracy: 0.001)
+            model.stop()
+        }
+    }
+
+    func testClassicPresetsKeepTheDefaultCarrier() {
+        model.toggle(preset("Theta"))
+        XCTAssertEqual(engine.starts.last?.carrier ?? 0, 200, accuracy: 0.001,
+                       "presets without a pinned carrier stay on the classic 200 Hz")
     }
 
     func testToggleStartsAndStops() {

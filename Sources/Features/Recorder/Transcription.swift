@@ -14,10 +14,30 @@ struct TranscriptEntry: Codable, Equatable {
     var state: String         // "done" | "partial" | "failed"
     var date: Date
     var secondsDone: Double   // audio seconds transcribed so far
+    /// The decoder run's global token timings (word → audio position).
+    /// Kept in the sidecar so the custom-dictionary pass ("Fix Names")
+    /// can re-score an existing transcript against the CTC spotter
+    /// without re-listening. nil for transcripts saved before boosting
+    /// existed; optional so old sidecars decode unchanged.
+    var timings: [TokenTiming]? = nil
+    /// Whether the custom-dictionary pass ran AND changed the text (nil
+    /// = no dictionary was configured, or the run failed early). QA
+    /// evidence visible in the sidecar without device logs.
+    var boostApplied: Bool? = nil
 
     /// True only for a transcription that ran to completion; `partial` and
     /// `failed` entries don't count as done.
     var isDone: Bool { state == "done" }
+
+    /// Manual `==`: TokenTiming isn't Equatable, and timing arrays carry
+    /// thousands of samples nobody compares field-by-field — entries
+    /// count as equal when the transcript fields match and both carry
+    /// (or both lack) timings.
+    static func == (lhs: TranscriptEntry, rhs: TranscriptEntry) -> Bool {
+        lhs.file == rhs.file && lhs.text == rhs.text && lhs.state == rhs.state
+            && lhs.date == rhs.date && lhs.secondsDone == rhs.secondsDone
+            && (lhs.timings?.count ?? 0) == (rhs.timings?.count ?? 0)
+    }
 }
 
 /// All transcripts in one hidden JSON sidecar next to the recordings
@@ -210,6 +230,178 @@ final class TranscriptionManager {
     /// Recording file names currently transcribing.
     @MainActor private(set) var transcribing: Set<String> = []
 
+    // MARK: Custom dictionary (CTC vocabulary boosting)
+
+    /// UserDefaults key holding the boost terms.
+    private static let dictionaryKey = "transcription.dictionary"
+
+    /// Reads the persisted dictionary (empty on fresh installs).
+    private static func loadDictionary() -> [String] {
+        (UserDefaults.standard.stringArray(forKey: dictionaryKey) ?? []).filter { !$0.isEmpty }
+    }
+
+    /// The user's boost terms — names and jargon the ASR commonly
+    /// mishears. Each transcription runs one CTC rescoring pass over the
+    /// finished transcript with these; "Fix Names" re-runs it on demand.
+    /// Persisted in UserDefaults.
+    @MainActor private(set) var dictionaryTerms: [String] = TranscriptionManager.loadDictionary()
+
+    /// Adds a term (trimmed, deduped case-insensitively) and persists it.
+    /// - Parameter term: the word or name to boost.
+    @MainActor func addDictionaryTerm(_ term: String) {
+        let clean = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty,
+              !dictionaryTerms.contains(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) else { return }
+        dictionaryTerms.append(clean)
+        UserDefaults.standard.set(dictionaryTerms, forKey: Self.dictionaryKey)
+    }
+
+    /// Removes a term and persists the change.
+    /// - Parameter term: the exact stored term.
+    @MainActor func removeDictionaryTerm(_ term: String) {
+        dictionaryTerms.removeAll { $0 == term }
+        UserDefaults.standard.set(dictionaryTerms, forKey: Self.dictionaryKey)
+    }
+
+    /// Loaded CTC keyword-spotter models (the dictionary pass's second
+    /// model, ~100 MB download once, ~64 MB resident while loaded). Kept
+    /// across runs; `ensureVocabularyModels` reloads from disk as needed.
+    @MainActor private var ctcModels: CtcModels?
+
+    /// Dictionary-model lifecycle — same states as the ASR download,
+    /// seeded from a disk probe so a cached pack never shows
+    /// "Downloading" (mirrors `downloadState`).
+    @MainActor private(set) var vocabularyModelState: DownloadState =
+        TranscriptionManager.hasCachedCTCModels() ? .ready : .notStarted
+
+    /// True when the Parakeet CTC 110M keyword-spotter pack is fully
+    /// cached on disk — the custom-dictionary rescoring pass needs it.
+    nonisolated static func hasCachedCTCModels() -> Bool {
+        CtcModels.modelsExist(at: CtcModels.defaultCacheDirectory(for: .ctc110m))
+    }
+
+    /// Loads (downloading first if needed) the CTC models used to
+    /// rescore transcripts against the custom dictionary. A cached load
+    /// is silent and instant; a real download mirrors its progress into
+    /// `vocabularyModelState` (the Custom Dictionary screen shows it).
+    @MainActor
+    func ensureVocabularyModels() async throws -> CtcModels {
+        if let ctcModels { return ctcModels }
+        let cached = TranscriptionManager.hasCachedCTCModels()
+        if !cached {
+            vocabularyModelState = .downloading(file: "dictionary-model", progress: nil)
+        }
+        do {
+            let models = try await CtcModels.downloadAndLoad(variant: .ctc110m, progressHandler: { p in
+                Task { @MainActor in
+                    self.vocabularyModelState = .downloading(file: "dictionary-model", progress: p.fractionCompleted)
+                }
+            })
+            ctcModels = models
+            vocabularyModelState = .ready
+            return models
+        } catch {
+            vocabularyModelState = .failed(error.localizedDescription)
+            throw error
+        }
+    }
+
+    /// Builds a boosting session from the given terms: the session
+    /// tokenizes them with the CTC tokenizer and binds the keyword
+    /// spotter + rescorer. Cheap enough to rebuild per transcription run
+    /// (the models themselves are the expensive part and stay cached).
+    /// - Parameters:
+    ///   - terms: the user's dictionary words.
+    ///   - ctc: the loaded CTC models.
+    private func makeBoostSession(terms: [String], ctc: CtcModels) async throws -> VocabularyBoostingSession {
+        let vocabulary = CustomVocabularyContext(terms: terms.map { CustomVocabularyTerm(text: $0) })
+        return try await VocabularyBoostingSession(vocabulary: vocabulary, ctcModels: ctc)
+    }
+
+    /// The boosting pass over a finished transcript, with all bookkeeping:
+    /// ensures the CTC models, builds the session, runs the windowed
+    /// rescore, and logs. Throwing surfaces download/load failures (the
+    /// caller keeps the raw text); a quiet no-result pass just returns
+    /// the input.
+    /// - Parameters:
+    ///   - raw: the transcript text to boost.
+    ///   - timings: its global token timings (nil skips boosting).
+    ///   - url: the recording, read window-by-window.
+    ///   - terms: the dictionary to rescore against.
+    /// - Returns: the boosted text (== `raw` when nothing replaced).
+    nonisolated private func boostedText(
+        raw: String, timings: [TokenTiming]?, url: URL, terms: [String]
+    ) async throws -> String {
+        guard !terms.isEmpty else { return raw }
+        let logger = Logger(subsystem: "com.ipodclassic.app", category: "transcribe")
+        logger.notice("BOOST pass over \(raw.count) chars with \(terms.count) dictionary term(s)")
+        let ctc = try await ensureVocabularyModels()
+        let session = try await makeBoostSession(terms: terms, ctc: ctc)
+        let boosted = await TranscriptBoost.boosted(original: raw, timings: timings, url: url, session: session)
+        if boosted != raw {
+            logger.notice("BOOST applied dictionary replacements (\(terms.count) terms)")
+        }
+        return boosted
+    }
+
+    /// Re-runs ONLY the dictionary rescoring pass over an already-done
+    /// transcript ("Fix Names"): the stored token timings tell the
+    /// rescorer where every word sits, so no re-listening happens —
+    /// typically a few seconds of CTC inference per minute of audio.
+    /// The entry keeps its done state; text and date update on success
+    /// (no change → the sidecar is left untouched).
+    /// - Parameters:
+    ///   - file: recording file name (the sidecar key).
+    ///   - sourceURL: the recording's audio file.
+    @MainActor
+    func reboost(file: String, sourceURL: URL) {
+        guard transcribing.isEmpty, !dictionaryTerms.isEmpty,
+              let entry = TranscriptStore.entry(for: file),
+              entry.isDone,
+              let timings = entry.timings, !timings.isEmpty,
+              FileManager.default.fileExists(atPath: sourceURL.path) else { return }
+        transcribing.insert(file)
+        LiveActivityManager.shared.transcriptionStarted(file: file)
+        let terms = dictionaryTerms
+        Task.detached(priority: .userInitiated) { [weak self] in
+            await self?.runReboost(file: file, url: sourceURL, entry: entry,
+                                   timings: timings, terms: terms)
+        }
+    }
+
+    /// Background body of `reboost` — SilentKeepAlive covers a possible
+    /// first-time CTC model download; the done transcript is paragraph
+    /// formatted, and splicing preserves that formatting, so the result
+    /// is only re-formatted (idempotent) before saving.
+    nonisolated private func runReboost(
+        file: String, url: URL, entry: TranscriptEntry,
+        timings: [TokenTiming], terms: [String]
+    ) async {
+        let keepAlive = SilentKeepAlive()
+        keepAlive.start()
+        defer { keepAlive.stop() }
+        let logger = Logger(subsystem: "com.ipodclassic.app", category: "transcribe")
+        logger.notice("REBOOST start \(file, privacy: .public)")
+        var text = entry.text
+        do {
+            text = try await boostedText(raw: entry.text, timings: timings, url: url, terms: terms)
+        } catch {
+            logger.notice("REBOOST \(file, privacy: .public) model error: \(String(describing: error), privacy: .public)")
+        }
+        if text != entry.text {
+            TranscriptStore.save(TranscriptEntry(
+                file: file, text: TranscriptStore.formatParagraphs(text),
+                state: entry.state, date: Date(), secondsDone: entry.secondsDone,
+                timings: entry.timings))
+        }
+        logger.notice("REBOOST \(file, privacy: .public) done changed=\(text != entry.text)")
+        Task { @MainActor in
+            self.transcribing.remove(file)
+            LiveActivityManager.shared.transcriptionFinished(file: file, state: "done")
+        }
+    }
+
+
     /// The loaded ASR engine, kept once loaded so later runs are warm
     /// starts (no re-download, no re-compile for the ANE).
     private var asrManager: AsrManager?
@@ -334,15 +526,19 @@ final class TranscriptionManager {
         logger.notice("start \(file, privacy: .public)")
 
         /// Writes the final sidecar entry (done transcripts are
-        /// paragraph-formatted first), logs the QA RESULT line, then hops
-        /// to the main actor to clear bookkeeping and end the Live Activity.
-        func finish(state: String, text: String, seconds: Double) {
+        /// paragraph-formatted first, and carry the token timings so
+        /// "Fix Names" can re-boost later), logs the QA RESULT line, then
+        /// hops to the main actor to clear bookkeeping and end the Live
+        /// Activity.
+        func finish(state: String, text: String, seconds: Double, timings: [TokenTiming]?, boostApplied: Bool? = nil) {
             let stored = state == "done" ? TranscriptStore.formatParagraphs(text) : text
             TranscriptStore.save(TranscriptEntry(file: file, text: stored, state: state,
-                                                 date: Date(), secondsDone: seconds))
+                                                 date: Date(), secondsDone: seconds,
+                                                 timings: state == "done" ? timings : nil,
+                                                 boostApplied: boostApplied))
             let headroom = os_proc_available_memory() / 1_048_576
             let elapsed = max(1, Date().timeIntervalSince(startedAt))
-            let line = "RESULT \(file) state=\(state) chars=\(text.count) sec=\(Int(seconds)) rtf=\(String(format: "%.2f", elapsed / max(1, seconds))) headroomMB=\(Int(headroom))"
+            let line = "RESULT \(file) state=\(state) chars=\(text.count) sec=\(Int(seconds)) rtf=\(String(format: "%.2f", elapsed / max(1, seconds))) boost=\(boostApplied.map { String($0) } ?? "off") headroomMB=\(Int(headroom))"
             logger.notice("\(line, privacy: .public)")
             Task { @MainActor in
                 self.transcribing.remove(file)
@@ -354,7 +550,7 @@ final class TranscriptionManager {
         do {
             let mgr = try await self.ensureModels()
             if cancel.isCancelled {
-                finish(state: "partial", text: TranscriptStore.entry(for: file)?.text ?? "", seconds: 0)
+                finish(state: "partial", text: TranscriptStore.entry(for: file)?.text ?? "", seconds: 0, timings: nil)
                 return
             }
             // Observe the SDK's chunked-decode progress (0…1) for the
@@ -373,18 +569,31 @@ final class TranscriptionManager {
             // ~1.2 MB constant memory, so hour-long memos are safe.
             var decoderState = TdtDecoderState.make()
             let result = try await mgr.transcribe(url, decoderState: &decoderState)
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let raw = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Custom dictionary: one post-transcription rescoring pass
+            // (CTC keyword spotter vs. the user's terms). Best-effort —
+            // a download or load failure keeps the raw transcript.
+            let terms = await MainActor.run { self.dictionaryTerms }
+            var text = raw
+            var boostApplied: Bool? = nil
+            if !terms.isEmpty {
+                let boosted = (try? await boostedText(raw: raw, timings: result.tokenTimings,
+                                                     url: url, terms: terms)) ?? raw
+                text = boosted
+                boostApplied = boosted != raw
+            }
             let seconds = TranscriptStore.entry(for: file).map { entry in
                 max(entry.secondsDone, 0)
             } ?? 0
             let duration = (try? AVAudioFile(forReading: url)).map {
                 Double($0.length) / $0.processingFormat.sampleRate
             } ?? seconds
-            finish(state: "done", text: text, seconds: duration)
+            finish(state: "done", text: text, seconds: duration, timings: result.tokenTimings,
+                   boostApplied: boostApplied)
         } catch {
             let msg = String(describing: error)
             logger.notice("ERROR \(file, privacy: .public): \(msg, privacy: .public)")
-            finish(state: "failed", text: "", seconds: 0)
+            finish(state: "failed", text: "", seconds: 0, timings: nil)
         }
     }
 }

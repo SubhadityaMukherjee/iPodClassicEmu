@@ -105,6 +105,8 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
     dependencies:
       - target: iPodClassic
+      - package: FluidAudio
+        product: FluidAudio
 
   iPodClassicUITests:
     type: bundle.ui-testing
