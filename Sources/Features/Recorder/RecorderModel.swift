@@ -38,6 +38,12 @@ final class RecorderModel {
 
     private(set) var recordings: [RecordingFile] = []
 
+    /// Trashed recordings (Documents/Recordings/.trash), newest first —
+    /// browsed by the Recently Deleted screen; restorable until deleted
+    /// forever. Transcript sidecar entries survive trashing so a restore
+    /// brings the memo back WITH its transcript.
+    private(set) var trash: [RecordingFile] = []
+
     // Playback
     /// File id (`RecordingFile.id`) of the memo loaded in the player, if any.
     private(set) var playingID: String?
@@ -70,6 +76,16 @@ final class RecorderModel {
     var recordingsURL: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Recordings", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Documents/Recordings/.trash — where deleted memos wait. The
+    /// leading dot hides the folder from the Files app (same trick as the
+    /// notes trash), so trashed recordings are visible only in the
+    /// app's Recently Deleted screen.
+    var trashURL: URL {
+        let dir = recordingsURL.appendingPathComponent(".trash", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -268,15 +284,145 @@ final class RecorderModel {
         recordings = loaded.sorted { $0.date > $1.date }
     }
 
+    /// Moves a memo to the recoverable trash (Recently Deleted screen)
+    /// instead of destroying it: stops playback if it's the playing one,
+    /// relocates the file into .trash, and KEEPS the transcript sidecar
+    /// entry — restoring brings the memo back with its transcript.
+    /// All in-app deletes go through here; `delete(_:)` is the
+    /// direct-remove primitive for callers that truly mean it.
+    /// - Parameter file: the recording to trash.
+    func trash(_ file: RecordingFile) {
+        if playingID == file.id { stopPlayback() }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: file.url.path) else { return }
+        let target = uniquedURL(for: file.name, in: trashURL)
+        try? fm.moveItem(at: file.url, to: target)
+        loadRecordings()
+        loadTrash()
+    }
+
+    /// Moves a trashed memo back into Recordings, uniquifying the name on
+    /// clash. If the name changed, the transcript sidecar entry is
+    /// re-keyed so the restored memo keeps its transcript.
+    /// - Parameter file: the trashed recording to restore.
+    func restore(_ file: RecordingFile) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: file.url.path) else { return }
+        let target = uniquedURL(for: file.name, in: recordingsURL)
+        try? fm.moveItem(at: file.url, to: target)
+        if target.lastPathComponent != file.id,
+           var entry = TranscriptStore.entry(for: file.id) {
+            entry.file = target.lastPathComponent
+            TranscriptStore.save(entry)
+            TranscriptStore.remove(for: file.id)
+        }
+        loadRecordings()
+        loadTrash()
+    }
+
+    /// Deletes a trashed memo for good — the only unrecoverable delete
+    /// reachable from the UI: removes the file AND its transcript sidecar
+    /// entry, then reloads the trash list.
+    /// - Parameter file: the trashed recording to destroy.
+    func deleteForever(_ file: RecordingFile) {
+        if playingID == file.id { stopPlayback() }
+        try? FileManager.default.removeItem(at: file.url)
+        TranscriptStore.remove(for: file.id)
+        loadTrash()
+    }
+
+    /// Rebuilds `trash` from the .trash folder — the same shape as
+    /// `loadRecordings()` (names, durations, newest first) so the
+    /// Recently Deleted screen renders like the recordings list.
+    func loadTrash() {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: trashURL, includingPropertiesForKeys: [.creationDateKey]) else { return }
+        let loaded = files.filter { $0.pathExtension == "m4a" }.map { url -> RecordingFile in
+            var date = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
+            let name = url.deletingPathExtension().lastPathComponent
+            let parsed = Self.date(fromName: name)
+            if let parsed { date = parsed }
+            return RecordingFile(url: url, name: name, duration: Self.duration(of: url), date: date)
+        }
+        trash = loaded.sorted { $0.date > $1.date }
+    }
+
+    /// Returns `<name>.m4a` inside `directory`, appending " 2"/" 3"… when
+    /// the name is taken (both the trash and restore uniquify this way —
+    /// nothing is ever silently overwritten).
+    private func uniquedURL(for name: String, in directory: URL) -> URL {
+        let fm = FileManager.default
+        var target = directory.appendingPathComponent(name).appendingPathExtension("m4a")
+        var n = 2
+        while fm.fileExists(atPath: target.path) {
+            target = directory.appendingPathComponent("\(name) \(n)").appendingPathExtension("m4a")
+            n += 1
+        }
+        return target
+    }
+
     /// Deletes a memo: stops playback if it's the playing one, removes the
     /// file AND its transcript sidecar entry (no orphaned transcripts),
-    /// then reloads the list.
+    /// then reloads the list. The screens don't call this — in-app
+    /// deletes go through `trash(_:)` so they stay recoverable. This is
+    /// the direct-remove primitive for callers that truly mean it.
     /// - Parameter file: the recording to delete.
     func delete(_ file: RecordingFile) {
         if playingID == file.id { stopPlayback() }
         try? FileManager.default.removeItem(at: file.url)
         TranscriptStore.remove(for: file.id)
         loadRecordings()
+    }
+
+    // MARK: QA seeding
+
+    /// UI-test seeding (REC_SEED=1): writes two tiny silent memos with
+    /// fixed names — one live in Recordings/, one already in the trash —
+    /// plus done sidecar entries, so the recordings list, delete flow,
+    /// and Recently Deleted screen have stable rows to assert on.
+    /// Deterministic: any "QA Recording…" leftovers from earlier runs
+    /// (trashed, restored, suffixed) are purged first, from both folders
+    /// and the sidecar.
+    nonisolated static func seedQAIfRequested() {
+        guard ProcessInfo.processInfo.environment["REC_SEED"] == "1" else { return }
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let recordings = docs.appendingPathComponent("Recordings", isDirectory: true)
+        let trash = recordings.appendingPathComponent(".trash", isDirectory: true)
+        try? fm.createDirectory(at: trash, withIntermediateDirectories: true)
+        for dir in [recordings, trash] {
+            let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+            for file in files where file.lastPathComponent.hasPrefix("QA Recording") {
+                try? fm.removeItem(at: file)
+                TranscriptStore.remove(for: file.lastPathComponent)
+            }
+        }
+        let writeFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                        sampleRate: 44_100, channels: 1, interleaved: false)!
+        for (name, trashed) in [("QA Recording One", false), ("QA Recording Two", true)] {
+            let url = (trashed ? trash : recordings)
+                .appendingPathComponent(name).appendingPathExtension("m4a")
+            guard !fm.fileExists(atPath: url.path) else { continue }
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 44_100.0,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.low.rawValue,
+            ]
+            guard let file = try? AVAudioFile(forWriting: url, settings: settings),
+                  let buf = AVAudioPCMBuffer(pcmFormat: writeFormat, frameCapacity: 22_050) else { continue }
+            buf.frameLength = 22_050  // half a second of silence
+            try? file.write(from: buf)
+        }
+        // Done sidecar entries so trashed rows show the ✓ transcript
+        // marker; timings stay nil (Fix Names is not part of these flows).
+        for name in ["QA Recording One.m4a", "QA Recording Two.m4a"] {
+            if TranscriptStore.entry(for: name) == nil {
+                TranscriptStore.save(TranscriptEntry(
+                    file: name, text: "meeting with saurabh about the gateway project",
+                    state: "done", date: Date(), secondsDone: 0.5, timings: nil))
+            }
+        }
     }
 
     /// Parses the capture date out of a recording's file name.

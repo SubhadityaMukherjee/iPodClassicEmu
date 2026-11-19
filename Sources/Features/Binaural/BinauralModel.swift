@@ -20,19 +20,29 @@ final class BinauralModel {
         let beat: Double
         /// Subtitle under the name in the list (e.g. "6 Hz · meditation").
         let detail: String
+        /// Base frequency both ears sit around; nil uses the classic
+        /// 200 Hz generator carrier. Gateway and the Solfeggio tones pin
+        /// their own carriers so the ears land on exact frequencies.
+        var carrier: Double? = nil
         /// Identity derived from `name`; Recents stores it to jump back to a preset.
         var id: String { name }
     }
 
     /// Factory presets from deep sleep up to high focus; Schumann is the
-    /// classic 7.83 Hz "earth resonance" web-generator frequency.
+    /// classic 7.83 Hz "earth resonance" web-generator frequency. Gateway
+    /// is the Monroe-style 299/302 Hz pair (a 3 Hz beat around a 300.5 Hz
+    /// carrier); the two Solfeggio rows are PURE TONES (beat 0 — both ears
+    /// the same frequency, no beat at all) at the classic 852/963 Hz.
     static let presets: [Preset] = [
         Preset(name: "Delta", beat: 3, detail: "3 Hz · deep sleep"),
+        Preset(name: "Gateway", beat: 3, detail: "3 Hz · 299/302 Hz", carrier: 300.5),
         Preset(name: "Theta", beat: 6, detail: "6 Hz · meditation"),
         Preset(name: "Schumann", beat: 7.83, detail: "7.83 Hz · earth resonance"),
         Preset(name: "Alpha", beat: 10, detail: "10 Hz · relaxed focus"),
         Preset(name: "Beta", beat: 18, detail: "18 Hz · alert"),
         Preset(name: "Gamma", beat: 40, detail: "40 Hz · high focus"),
+        Preset(name: "Intuition", beat: 0, detail: "852 Hz · inner strength", carrier: 852),
+        Preset(name: "Oneness", beat: 0, detail: "963 Hz · higher self", carrier: 963),
     ]
 
     /// The discrete volume steps the Volume row cycles through.
@@ -206,7 +216,7 @@ final class BinauralModel {
         recents?.record(binaural: .init(id: active.name, title: active.name))
         elapsed = 0
         isPlaying = true
-        engine.start(beat: active.beat, carrier: Self.carrierHz, volume: volume)
+        engine.start(beat: active.beat, carrier: active.carrier ?? Self.carrierHz, volume: volume)
         installRemoteCommands()
         publishNowPlaying()
         ticker?.invalidate()
@@ -278,7 +288,8 @@ final class BinauralAudioEngine: NSObject, BinauralEngineType {
     /// Guards the render parameters below — the only state shared between
     /// the main thread and the real-time audio render callback.
     private let lock = NSLock()
-    /// Beat frequency in Hz (clamped to 0.1–40 in `start`).
+    /// Beat frequency in Hz (clamped to 0–40 in `start`; 0 = pure tone,
+    /// both ears the same frequency — the Solfeggio presets).
     private var beat = 0.0
     /// Carrier frequency in Hz (clamped to 50–2000 in `start`).
     private var carrier = BinauralModel.carrierHz
@@ -305,8 +316,10 @@ final class BinauralAudioEngine: NSObject, BinauralEngineType {
     func start(beat: Double, carrier: Double, volume: Float) {
         stopWork?.cancel()
         lock.lock()
-        // The classic generators clamp beat 0.1–40 Hz, carrier 50–2000 Hz.
-        self.beat = min(40, max(0.1, beat))
+        // The classic generators clamp beat 0.1–40 Hz, carrier 50–2000 Hz;
+        // beat 0 is allowed through as a pure tone (Solfeggio presets) —
+        // both phase accumulators step identically, so L == R.
+        self.beat = min(40, max(0, beat))
         self.carrier = min(2000, max(50, carrier))
         self.volume = volume
         targetGain = 1
