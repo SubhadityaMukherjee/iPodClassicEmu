@@ -2,34 +2,31 @@ import XCTest
 import AVFoundation
 @testable import iPodClassic
 
-/// Binaural beats: preset set (Schumann 7.83 + the five EEG bands),
-/// toggle semantics, preset switching, and volume cycling — against a
-/// mock engine so no audio hardware is involved.
+/// Binaural beats: preset set (Schumann 7.83 + the five EEG bands +
+/// Gateway + the Solfeggio pure tones), toggle semantics, preset
+/// switching, and the fixed render gain — against a mock engine so no
+/// audio hardware is involved. Loudness is the device volume; there is
+/// deliberately no in-app volume control.
 final class BinauralModelTests: XCTestCase {
     final class MockEngine: BinauralEngineType {
         var starts: [(beat: Double, carrier: Double, volume: Float)] = []
-        var volumes: [Float] = []
         var stops = 0
         func start(beat: Double, carrier: Double, volume: Float) { starts.append((beat, carrier, volume)) }
-        func setVolume(_ volume: Float) { volumes.append(volume) }
         func stop() { stops += 1 }
     }
 
     private var engine: MockEngine!
     private var model: BinauralModel!
     private var recents: RecentActivity!
-    private let defaultsName = "binaural-test-\(UUID().uuidString)"
     private let recentsName = "binaural-recents-test-\(UUID().uuidString)"
 
     override func setUp() {
         super.setUp()
         engine = MockEngine()
-        let d = UserDefaults(suiteName: defaultsName)!
-        d.removePersistentDomain(forName: defaultsName)
         let rd = UserDefaults(suiteName: recentsName)!
         rd.removePersistentDomain(forName: recentsName)
         recents = RecentActivity(defaults: rd)
-        model = BinauralModel(engine: engine, defaults: d, recents: recents)
+        model = BinauralModel(engine: engine, recents: recents)
         model.usesSystemRemoteCommands = false
         var published: [(title: String?, elapsed: TimeInterval)] = []
         model.nowPlayingPublisher = { title, elapsed in
@@ -42,7 +39,6 @@ final class BinauralModelTests: XCTestCase {
     static var lastPublished: [(title: String?, elapsed: TimeInterval)] = []
 
     override func tearDown() {
-        UserDefaults(suiteName: defaultsName)!.removePersistentDomain(forName: defaultsName)
         UserDefaults(suiteName: recentsName)!.removePersistentDomain(forName: recentsName)
         super.tearDown()
     }
@@ -112,14 +108,15 @@ final class BinauralModelTests: XCTestCase {
         XCTAssertEqual(engine.starts.last?.beat ?? 0, 40)
     }
 
-    func testVolumeCyclesAndPersists() {
-        let first = model.volumeIndex
-        model.cycleVolume()
-        XCTAssertEqual(model.volumeIndex, (first + 1) % BinauralModel.volumeLevels.count)
-        XCTAssertEqual(engine.volumes.last, model.volume, "volume change reaches the engine")
-        // A fresh model reads the persisted index.
-        let again = BinauralModel(engine: engine, defaults: UserDefaults(suiteName: defaultsName)!)
-        XCTAssertEqual(again.volumeIndex, model.volumeIndex)
+    func testRenderGainIsFixedAndReachesTheEngine() {
+        // Loudness is the device volume; the model renders every preset
+        // at the same fixed amplitude.
+        model.toggle(preset("Schumann"))
+        XCTAssertEqual(engine.starts.last?.volume ?? 0, BinauralModel.renderGain, accuracy: 0.001)
+        model.toggle(preset("Gateway"))
+        XCTAssertEqual(engine.starts.last?.volume ?? 0, BinauralModel.renderGain, accuracy: 0.001)
+        XCTAssertGreaterThan(BinauralModel.renderGain, 0)
+        XCTAssertLessThanOrEqual(BinauralModel.renderGain, 1)
     }
 
     func testStopWhenIdleIsANoop() {

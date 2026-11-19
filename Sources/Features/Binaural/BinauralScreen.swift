@@ -11,10 +11,10 @@ struct BinauralScreen: View {
     /// Menu row the wheel cursor is on; ticks move it through `items`.
     @State private var selection = 0
 
-    /// Rows in order: an Off/Stop action row, one row per preset (the
-    /// active one shows its live elapsed time and a waveform symbol
-    /// instead of the preset's subtitle), then a Volume row whose subtitle
-    /// is the current volume step.
+    /// Rows in order: an Off/Stop action row, then one row per preset
+    /// (the active one shows its live elapsed time and a waveform symbol
+    /// instead of the preset's subtitle). Loudness is the device volume —
+    /// there is deliberately no in-app volume control.
     private var items: [MenuItem] {
         var rows = [
             MenuItem(id: "stop", title: model.binaural.isPlaying ? "Stop" : "Off",
@@ -29,9 +29,6 @@ struct BinauralScreen: View {
                 symbol: isActive ? "waveform" : nil,
                 showsChevron: false))
         }
-        rows.append(MenuItem(id: "volume", title: "Volume",
-                             detail: "\(Int(model.binaural.volume * 100))%",
-                             showsChevron: false, isActionRow: true))
         return rows
     }
 
@@ -68,10 +65,10 @@ struct BinauralScreen: View {
         }
     }
 
-    /// Wheel input: ticks move the selection; center stops the session,
-    /// cycles the volume, or toggles a preset — starting one pauses music
-    /// first, since two beat sources don't mix; MENU pops (playback keeps
-    /// running — like leaving music playing on a real iPod).
+    /// Wheel input: ticks move the selection; center stops the session or
+    /// toggles a preset — starting one pauses music first, since two beat
+    /// sources don't mix; MENU pops (playback keeps running — like
+    /// leaving music playing on a real iPod).
     private func handle(_ event: ControlEvent) {
         switch event {
         case .tick(let d):
@@ -81,8 +78,6 @@ struct BinauralScreen: View {
             switch item.id {
             case "stop":
                 model.binaural.stop()
-            case "volume":
-                model.binaural.cycleVolume()
             default:
                 guard let preset = BinauralModel.presets.first(where: { $0.id == item.id }) else { return }
                 // Starting a session pauses music — two beat sources don't mix.

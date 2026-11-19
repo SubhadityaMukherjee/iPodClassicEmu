@@ -29,7 +29,6 @@ final class AudiobookModelTests: XCTestCase {
     /// the loop polls isPlaying, exactly like the real AVAudioPlayer.
     private final class MockEngine: AudiobookAudioEngineType {
         var rate: Float = 1
-        var outputVolume: Float = 1
         var onDebug: ((String) -> Void)?
         private(set) var played: [Int] = []      // frame lengths per play
         private(set) var pauseCount = 0
@@ -265,20 +264,6 @@ final class AudiobookModelTests: XCTestCase {
         let model = AudiobookModel(engine: MockEngine(), synthesis: MockSynth())
         model.speedIndex = 3 // 1.5×
         XCTAssertEqual(model.rate, 1.5, accuracy: 0.001)
-    }
-
-    func testVolumeCyclesWrapAroundAndAppliesToEngine() {
-        let engine = MockEngine()
-        let model = AudiobookModel(engine: engine, synthesis: MockSynth())
-        model.volumeIndex = AudiobookModel.volumes.count - 1
-        model.volumeIndex += 1
-        XCTAssertEqual(model.volumeIndex, 0)
-        XCTAssertEqual(model.volumeLabel, "10%")
-        model.volumeIndex -= 1
-        XCTAssertEqual(model.volumeIndex, AudiobookModel.volumes.count - 1)
-        XCTAssertEqual(model.volumeLabel, "100%")
-        model.volumeIndex = 2 // 50%
-        XCTAssertEqual(engine.outputVolume, 0.5, accuracy: 0.001)
     }
 
     // MARK: Sentence chunking (long-page synthesis)

@@ -45,8 +45,10 @@ final class BinauralModel {
         Preset(name: "Oneness", beat: 0, detail: "963 Hz · higher self", carrier: 963),
     ]
 
-    /// The discrete volume steps the Volume row cycles through.
-    static let volumeLevels: [Float] = [0.25, 0.5, 0.75, 1.0]
+    /// Fixed render amplitude of the tones (0–1). Loudness is the DEVICE
+    /// volume's job — no in-app volume control: the hardware buttons scale
+    /// the session output exactly like music playback.
+    static let renderGain: Float = 0.4
     /// Base frequency both ears sit around; 200 Hz, as in the classic generators.
     static let carrierHz = 200.0
 
@@ -62,8 +64,6 @@ final class BinauralModel {
     private let engine: BinauralEngineType
     /// 1 Hz timer that advances `elapsed` while a session runs.
     private var ticker: Timer?
-    /// UserDefaults suite persisting the volume index (injectable for tests).
-    private let defaults: UserDefaults
     /// Home-screen Recents store; every session start records the preset
     /// so the home screen can jump back. Injectable so unit tests can
     /// redirect it (nil disables recording).
@@ -71,13 +71,10 @@ final class BinauralModel {
 
     /// Creates the model; every dependency is injectable for unit tests.
     /// - Parameter engine: audio backend (the real AVAudioEngine-based one by default).
-    /// - Parameter defaults: persistence for the volume index.
     /// - Parameter recents: home-screen Recents store; nil disables session recording.
     init(engine: BinauralEngineType = BinauralAudioEngine(),
-         defaults: UserDefaults = .standard,
          recents: RecentActivity? = RecentActivity.shared) {
         self.engine = engine
-        self.defaults = defaults
         self.recents = recents
     }
 
@@ -150,24 +147,6 @@ final class BinauralModel {
         }
     }
 
-    // MARK: Volume
-
-    /// Persisted index into `volumeLevels`.
-    var volumeIndex: Int {
-        get { min(Self.volumeLevels.count - 1, max(0, defaults.integer(forKey: "binaural.volume"))) }
-        set { defaults.set(newValue, forKey: "binaural.volume") }
-    }
-
-    /// Absolute volume of the current step in `volumeLevels`.
-    var volume: Float { Self.volumeLevels[volumeIndex] }
-
-    /// Advances to the next volume step (wrapping to the first) and
-    /// applies it to the engine immediately.
-    func cycleVolume() {
-        volumeIndex = (volumeIndex + 1) % Self.volumeLevels.count
-        engine.setVolume(volume)
-    }
-
     // MARK: Playback
 
     /// Center on a preset row: starts it, stops it, or switches presets.
@@ -216,7 +195,7 @@ final class BinauralModel {
         recents?.record(binaural: .init(id: active.name, title: active.name))
         elapsed = 0
         isPlaying = true
-        engine.start(beat: active.beat, carrier: active.carrier ?? Self.carrierHz, volume: volume)
+        engine.start(beat: active.beat, carrier: active.carrier ?? Self.carrierHz, volume: Self.renderGain)
         installRemoteCommands()
         publishNowPlaying()
         ticker?.invalidate()
@@ -270,10 +249,9 @@ protocol BinauralEngineType: AnyObject {
     /// Begins (or switches to) a beat/carrier pair at the given volume.
     /// - Parameter beat: beat frequency in Hz.
     /// - Parameter carrier: base frequency in Hz.
-    /// - Parameter volume: amplitude, 0–1.
+    /// - Parameter volume: amplitude, 0–1 (the model's fixed render gain;
+    ///   loudness itself is the device volume).
     func start(beat: Double, carrier: Double, volume: Float)
-    /// Changes volume while running; takes effect on the next render call.
-    func setVolume(_ volume: Float)
     /// Stops rendering; implementations should fade out to avoid a click.
     func stop()
 }
@@ -293,8 +271,8 @@ final class BinauralAudioEngine: NSObject, BinauralEngineType {
     private var beat = 0.0
     /// Carrier frequency in Hz (clamped to 50–2000 in `start`).
     private var carrier = BinauralModel.carrierHz
-    /// Peak amplitude 0–1, pushed in from the model.
-    private var volume: Float = 0.75
+    /// Peak amplitude 0–1, pushed in from the model at `start`.
+    private var volume: Float = BinauralModel.renderGain
     /// Current amplitude after ramping; moves toward `targetGain` every frame.
     private var gain: Float = 0
     /// Amplitude the ramp aims at: 1 while playing, 0 while stopping.
@@ -332,13 +310,8 @@ final class BinauralAudioEngine: NSObject, BinauralEngineType {
         }
     }
 
-    /// Stores the new volume under the lock; the render loop snapshots it
-    /// on its next callback.
-    func setVolume(_ volume: Float) {
-        lock.lock()
-        self.volume = volume
-        lock.unlock()
-    }
+    /// Stops rendering; fades out via the pending delayed stop (see
+    /// `stop()`) so the tone never clicks.
 
     /// Fades toward silence, then stops the engine ~0.3 s later on the
     /// main queue so the fade is actually heard; a restart during that

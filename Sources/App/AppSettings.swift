@@ -50,7 +50,6 @@ final class AppSettings: ObservableObject {
         static let noteFont = "notes.fontSize"        // points; note editor text
         static let audiobookVoicePrefix = "audiobook.voice."  // + engine id → per-engine voice
         static let audiobookSpeed = "audiobook.speed"     // index into AudiobookModel.speeds
-        static let audiobookVolume = "audiobook.volume"  // index into AudiobookModel.volumes
         static let readAloudEngine = "readaloud.engine"  // "paradee" default; "pocket18"|"pocket100"
     }
 
@@ -89,14 +88,10 @@ final class AppSettings: ObservableObject {
         store(name, K.audiobookVoicePrefix + engine)
     }
     /// Playback speed; index into AudiobookModel.speeds.
+    /// Read-aloud speed; index into AudiobookModel.speeds.
     var audiobookSpeedIndex: Int {
         get { int(K.audiobookSpeed, 1) }
         set { objectWillChange.send(); store(newValue, K.audiobookSpeed) }
-    }
-    /// Read-aloud volume; index into AudiobookModel.volumes.
-    var audiobookVolumeIndex: Int {
-        get { int(K.audiobookVolume, 2) }
-        set { objectWillChange.send(); store(newValue, K.audiobookVolume) }
     }
 
     // MARK: Clickwheel
