@@ -1,13 +1,14 @@
 #!/bin/bash
-# ship.sh — build iPodClassic (Release) and ship it: install on the iPhone
-# AND upload to TestFlight. TestFlight is the DEFAULT because dev-signed
-# installs die whenever Apple invalidates their Xcode-managed provisioning
-# profile (the 2026-11-20 overnight "app no longer available" incident);
-# TestFlight builds carry App Store profiles and are immune to that churn.
+# ship.sh — build iPodClassic (Release) and install it on the iPhone.
+#
+# NOTE: TestFlight is NOT used for this app (it emulates Apple hardware
+# too closely for App Review — user decision 2026-11-20). The default
+# flow is a verified dev-signed install; pass --tf if a TestFlight
+# upload is ever wanted anyway.
 #
 # Usage:
-#   scripts/ship.sh            # phone install + TestFlight upload (default)
-#   scripts/ship.sh --dev      # phone install only (QA; no TF upload)
+#   scripts/ship.sh            # build + install on the phone (verified)
+#   scripts/ship.sh --tf       # additionally archive + upload to TestFlight
 #
 # Team: the Apple Developer Program is enrolled on team 365U99GNTQ (the
 # personal team was upgraded in place when the membership was purchased).
@@ -29,12 +30,12 @@ if [ -z "$UDID" ]; then
 fi
 [ -n "$UDID" ] || { echo "no connected iPhone found (set IPOD_DEVICE_UDID to override)"; exit 1; }
 
-want_dev=false
+want_tf=false
 for arg in "$@"; do
   case "$arg" in
-    --dev) want_dev=true ;;
-    --tf) echo "note: TestFlight is now the default; --tf is a no-op" ;;
-    *) echo "unknown flag: $arg (supported: --dev)"; exit 1 ;;
+    --tf) want_tf=true ;;
+    --dev) echo "note: dev install is already the default; --dev is a no-op" ;;
+    *) echo "unknown flag: $arg (supported: --tf)"; exit 1 ;;
   esac
 done
 
@@ -45,16 +46,6 @@ set_team() {
 
 TEAM=$(grep -o 'DEVELOPMENT_TEAM: [0-9A-Z]*' project.yml | awk '{print $2}')
 if [ "$TEAM" != "$TEAM_PAID" ]; then set_team "$TEAM_PAID"; TEAM=$TEAM_PAID; fi
-
-if ! $want_dev; then
-  # Bump the build number BEFORE building so the phone install and the
-  # TestFlight archive are the same build.
-  BUILD=$(grep -o 'CURRENT_PROJECT_VERSION: "[0-9]*"' project.yml | grep -o '[0-9]*')
-  NEW=$((BUILD + 1))
-  sed -i '' "s/CURRENT_PROJECT_VERSION: \"$BUILD\"/CURRENT_PROJECT_VERSION: \"$NEW\"/" project.yml
-  xcodegen generate >/dev/null
-  echo "==> TestFlight build $NEW"
-fi
 
 echo "==> Building Release (team $TEAM)..."
 xcodebuild -project $PROJ -scheme $SCHEME -configuration Release \
@@ -113,12 +104,18 @@ else
   echo "    WARNING: could not decode embedded.mobileprovision — check signing manually."
 fi
 
-if $want_dev; then
-  echo "Done — dev install on the phone (QA only; expires with its provisioning profile)."
+if ! $want_tf; then
+  echo "Done — dev install on the phone (expires with its provisioning profile; see the verified date above)."
   exit 0
 fi
 
-echo "==> Archiving for TestFlight..."
+# Bump the build number for the TestFlight upload.
+BUILD=$(grep -o 'CURRENT_PROJECT_VERSION: "[0-9]*"' project.yml | grep -o '[0-9]*')
+NEW=$((BUILD + 1))
+sed -i '' "s/CURRENT_PROJECT_VERSION: \"$BUILD\"/CURRENT_PROJECT_VERSION: \"$NEW\"/" project.yml
+xcodegen generate >/dev/null
+
+echo "==> Archiving for TestFlight (build $NEW)..."
 mkdir -p build
 xcodebuild archive -project $PROJ -scheme $SCHEME \
   -destination 'generic/platform=iOS' \
