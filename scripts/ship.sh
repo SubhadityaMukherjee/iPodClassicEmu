@@ -54,10 +54,49 @@ APP=$(ls -d ~/Library/Developer/Xcode/DerivedData/iPodClassic-*/Build/Products/R
 echo "==> Installing on phone..."
 xcrun devicectl device install app --device "$UDID" "$APP" | grep -E "Installed|error" || true
 
-if [ "$TEAM" = "$TEAM_PAID" ]; then
-  echo "Done — installed with the paid team (valid ~1 year)."
+# VERIFY what actually got embedded — never just assert validity. A
+# dev-signed install dies the day its provisioning profile or any bound
+# certificate expires (or is invalidated server-side — Xcode-managed
+# "iOS Team Provisioning Profile" instances get regenerated, and old
+# installs stop launching). Effective lifetime = min(profile, certs).
+echo "==> Verifying provisioning..."
+EMBED="$APP/embedded.mobileprovision"
+if security cms -D -i "$EMBED" > /tmp/ship_prov.plist 2>/dev/null; then
+  PNAME=$(plutil -extract Name raw /tmp/ship_prov.plist)
+  PUUID=$(plutil -extract UUID raw /tmp/ship_prov.plist)
+  PEXP=$(plutil -extract ExpirationDate raw /tmp/ship_prov.plist)
+  echo "    profile: $PNAME ($PUUID) expires $PEXP"
+  MIN_DATE=$(python3 - << 'PY'
+import plistlib, subprocess, tempfile, os, datetime
+pl = plistlib.loads(open('/tmp/ship_prov.plist','rb').read())
+best = pl.get('ExpirationDate')
+if isinstance(best, str):
+    best = datetime.datetime.fromisoformat(best.replace('Z', '+00:00'))
+if best.tzinfo is None:  # plistlib returns naive datetimes in UTC
+    best = best.replace(tzinfo=datetime.timezone.utc)
+for c in pl.get('DeveloperCertificates', []):
+    der = c if isinstance(c, bytes) else c.data
+    with tempfile.NamedTemporaryFile(suffix='.der', delete=False) as f:
+        f.write(der); p = f.name
+    end = subprocess.run(['openssl', 'x509', '-in', p, '-noout', '-enddate'],
+                         capture_output=True, text=True).stdout.strip().split('=')[1]
+    e = datetime.datetime.strptime(end, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=datetime.timezone.utc)
+    os.unlink(p)
+    if e < best:
+        best = e
+print(best.strftime('%Y-%m-%d'))
+PY
+)
+  THRESH=$(date -v+30d +%s)
+  ACTUAL=$(date -j -f "%Y-%m-%d" "$MIN_DATE" "+%s")
+  if [ "$ACTUAL" -lt "$THRESH" ]; then
+    echo "    WARNING: this install dies by $MIN_DATE (within 30 days)."
+    echo "    Rebuild with -allowProvisioningUpdates (fresh profile) or ship --tf for stable installs."
+  else
+    echo "    OK — dev-signed install valid until $MIN_DATE (profile ∩ signing certs)."
+  fi
 else
-  echo "Done — installed (non-paid team; expires in 7 days)."
+  echo "    WARNING: could not decode embedded.mobileprovision — check signing manually."
 fi
 
 if $want_tf; then
