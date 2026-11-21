@@ -20,7 +20,6 @@
 		183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06464256EE519A5BD50EA73F /* iPodClassicApp.swift */; };
 		19DEF858E4721571709A6227 /* Tick.caf in Resources */ = {isa = PBXBuildFile; fileRef = B7CEBDD3E18661EEC5335B6E /* Tick.caf */; };
 		1B31A15D4D1FE4BC30860312 /* LetterSnapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B913734CF9998D90D60B58 /* LetterSnapTests.swift */; };
-		23FDD4B66196B9DA77256CAD /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 5AB07D2DE45F5B24DB7C7CED /* FluidAudio */; };
 		2448D01DF2C37F417EE051CB /* PDFReflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A06C23A4AB3B056577E9965 /* PDFReflowTests.swift */; };
 		248C4E3AF18DF139E23AF446 /* TickSoft.caf in Resources */ = {isa = PBXBuildFile; fileRef = B9E142990608C64F576307AC /* TickSoft.caf */; };
 		24F45E26E21D677BC0E9E080 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC3AA5879EA27E592945C2 /* AppSettings.swift */; };
@@ -36,7 +35,6 @@
 		4BD1E8D4B100E2FDCBF6BCD1 /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7523D39BD43BC86DA36A65DF /* TranscriptStoreTests.swift */; };
 		4C705C26710B6749CAF056D5 /* ClockStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53777219020A6ED4B6227EC2 /* ClockStateTests.swift */; };
 		54710389A162814D393AAE41 /* MenuComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F9F9D030FECE8C1639FE2E6 /* MenuComponents.swift */; };
-		54F2DCC20A9E16A1B65DF09D /* VocabularyBoostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB244766F832DA07CAA20D14 /* VocabularyBoostTests.swift */; };
 		56BE29D96A4FF46D3EBF2E5B /* PhotosScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = D17DE565AD80520CFE579A08 /* PhotosScreens.swift */; };
 		58033FFEF60260FBB8E71E00 /* ArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA84631978E21F3027590F4 /* ArtworkView.swift */; };
 		5B255760AE753977C0205906 /* ClickWheelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A7AB9F78390A8680299570 /* ClickWheelView.swift */; };
@@ -47,7 +45,6 @@
 		6B80BBFAE72E9948F3B17307 /* BinauralModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F96604B2BA5F0E6E4B917A /* BinauralModelTests.swift */; };
 		6C661E39B1A9BD3290C72BFD /* RingerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB809661C7F4E3128DB4A37E /* RingerOverlay.swift */; };
 		6CBA67E33C845F4D22F2422D /* MusicScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D783A264CBB399887431ACB /* MusicScreens.swift */; };
-		7056AB3012036347A67F77AE /* VocabularyBoost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B1B3C37CFDD76A50E291206 /* VocabularyBoost.swift */; };
 		7329DE1397D725EDB894E00A /* TourScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEAA91BB4F824B867C611B9E /* TourScreen.swift */; };
 		73FA6EAAFE03B6950EF38587 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 9FA83B1241C42CB2EE7E1529 /* FluidAudio */; };
 		7B50BFDA85F41723706F0125 /* iPodClassicWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CD6F565DF47F4CC5E35EA0A3 /* iPodClassicWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -177,7 +174,6 @@
 		56BA4CAA0AC9BF279FB702C7 /* SetupUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupUITests.swift; sourceTree = "<group>"; };
 		59116EF21FFA3688484F038F /* RecorderScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderScreens.swift; sourceTree = "<group>"; };
 		5A3EF486F7ABF2C6D08FD432 /* ReadAloudTTS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAloudTTS.swift; sourceTree = "<group>"; };
-		5B1B3C37CFDD76A50E291206 /* VocabularyBoost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyBoost.swift; sourceTree = "<group>"; };
 		5B9F5916057A060F4412A059 /* DefaultPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultPreferencesTests.swift; sourceTree = "<group>"; };
 		5F9F9D030FECE8C1639FE2E6 /* MenuComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuComponents.swift; sourceTree = "<group>"; };
 		674DFC06B8F7A1B1F904D34D /* RubberBand.caf */ = {isa = PBXFileReference; path = RubberBand.caf; sourceTree = "<group>"; };
@@ -234,7 +230,6 @@
 		E6386B4A55E1B30CAE0EA14D /* PhotoLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryModel.swift; sourceTree = "<group>"; };
 		E8B1633CF255A1D13A05CF03 /* SongHoldStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongHoldStateTests.swift; sourceTree = "<group>"; };
 		E9E2682BB477DCB67B68B3A2 /* MediaVolumeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaVolumeController.swift; sourceTree = "<group>"; };
-		EB244766F832DA07CAA20D14 /* VocabularyBoostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyBoostTests.swift; sourceTree = "<group>"; };
 		F0A7AB9F78390A8680299570 /* ClickWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickWheelView.swift; sourceTree = "<group>"; };
 		F4B913734CF9998D90D60B58 /* LetterSnapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LetterSnapTests.swift; sourceTree = "<group>"; };
 		F7FED67D3F30FA6A3281E80C /* PDFReflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFReflow.swift; sourceTree = "<group>"; };
@@ -243,14 +238,6 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		2300906BB9B6AA9DEC4442A8 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				23FDD4B66196B9DA77256CAD /* FluidAudio in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		E2B366EFEA944221A3866D7A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -294,7 +281,6 @@
 				0C9168F602DF28123A3C7389 /* RecorderModel.swift */,
 				59116EF21FFA3688484F038F /* RecorderScreens.swift */,
 				49FE71F60BC7953CF4C99B25 /* Transcription.swift */,
-				5B1B3C37CFDD76A50E291206 /* VocabularyBoost.swift */,
 			);
 			path = Recorder;
 			sourceTree = "<group>";
@@ -458,7 +444,6 @@
 				BB7E4FB13F9B6539FC052F5D /* RouteTests.swift */,
 				E8B1633CF255A1D13A05CF03 /* SongHoldStateTests.swift */,
 				7523D39BD43BC86DA36A65DF /* TranscriptStoreTests.swift */,
-				EB244766F832DA07CAA20D14 /* VocabularyBoostTests.swift */,
 			);
 			path = iPodClassicTests;
 			sourceTree = "<group>";
@@ -588,7 +573,6 @@
 			buildConfigurationList = 395CB53842CD4A97A7B4B733 /* Build configuration list for PBXNativeTarget "iPodClassicTests" */;
 			buildPhases = (
 				C31B4C2037E59325F16AC26E /* Sources */,
-				2300906BB9B6AA9DEC4442A8 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -597,7 +581,6 @@
 			);
 			name = iPodClassicTests;
 			packageProductDependencies = (
-				5AB07D2DE45F5B24DB7C7CED /* FluidAudio */,
 			);
 			productName = iPodClassicTests;
 			productReference = 2252FD3DDEC10A47D988C6D3 /* iPodClassicTests.xctest */;
@@ -788,7 +771,6 @@
 				7329DE1397D725EDB894E00A /* TourScreen.swift in Sources */,
 				E954CC287B67D09481ED552D /* TrackActivityAttributes.swift in Sources */,
 				0DC95624122FD47CA5C41E5F /* Transcription.swift in Sources */,
-				7056AB3012036347A67F77AE /* VocabularyBoost.swift in Sources */,
 				A9F654255BFADEC171E5E1BE /* WheelHaptics.swift in Sources */,
 				0ADDDACB18BA7302F69083ED /* WheelInput.swift in Sources */,
 				183384F67E2B128FE3524A10 /* iPodClassicApp.swift in Sources */,
@@ -831,7 +813,6 @@
 				BDCFE1DC543919A4192B71E2 /* RouteTests.swift in Sources */,
 				FEE979444A845DCA3D51C8FE /* SongHoldStateTests.swift in Sources */,
 				4BD1E8D4B100E2FDCBF6BCD1 /* TranscriptStoreTests.swift in Sources */,
-				54F2DCC20A9E16A1B65DF09D /* VocabularyBoostTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -901,7 +882,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1025,7 +1006,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 365U99GNTQ;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -1191,11 +1172,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		5AB07D2DE45F5B24DB7C7CED /* FluidAudio */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */;
-			productName = FluidAudio;
-		};
 		9FA83B1241C42CB2EE7E1529 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C76CB8F9B9F1B7F08D694C0C /* XCRemoteSwiftPackageReference "FluidAudio" */;

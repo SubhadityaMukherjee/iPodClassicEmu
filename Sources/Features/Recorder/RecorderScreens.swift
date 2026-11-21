@@ -17,8 +17,7 @@ struct RecorderScreen: View {
 
     /// Menu rows adapt to recorder state: idle → Record, recording → Pause,
     /// paused → Resume (Stop & Save and All Recordings are always present).
-    /// Idle also lists Recently Deleted (with its count) and the Custom
-    /// Dictionary (with its term count).
+    /// Idle also lists Recently Deleted (with its count).
     private var rows: [MenuItem] {
         if recorder.isRecording {
             let mid = recorder.isPaused ? "Resume" : "Pause"
@@ -35,9 +34,6 @@ struct RecorderScreen: View {
         let trashed = recorder.trash.count
         rows.append(MenuItem(id: "trash", title: "Recently Deleted",
                              detail: trashed > 0 ? "\(trashed)" : nil, showsChevron: false))
-        let terms = TranscriptionManager.shared.dictionaryTerms.count
-        rows.append(MenuItem(id: "dict", title: "Custom Dictionary",
-                             detail: terms > 0 ? "\(terms)" : nil, showsChevron: false))
         return rows
     }
 
@@ -115,7 +111,7 @@ struct RecorderScreen: View {
     }
 
     /// Runs the highlighted row's action (Record / Pause / Resume /
-    /// Stop & Save / All Recordings / Recently Deleted / Custom Dictionary).
+    /// Stop & Save / All Recordings / Recently Deleted).
     private func activateCurrent() {
         let row = rows[min(selection, rows.count - 1)]
         switch row.id {
@@ -133,8 +129,6 @@ struct RecorderScreen: View {
             model.push(.recordings)
         case "trash":
             model.push(.recordingsTrash)
-        case "dict":
-            model.push(.recordingsDictionary)
         default:
             break
         }
@@ -340,8 +334,7 @@ struct RecordingsListScreen: View {
     @State private var shareText: String?
 
     /// Hold-menu rows depend on the recording's transcript state:
-    /// transcription / view / retry / share text, fix-names (when the
-    /// dictionary can rescore a done transcript), then share audio /
+    /// transcription / view / retry / share text, then share audio /
     /// delete / cancel.
     private var holdRows: [String] {
         guard let file = holdItem else { return [] }
@@ -357,14 +350,6 @@ struct RecordingsListScreen: View {
         if let entry, entry.text.isEmpty == false {
             rows.append("View Transcript")
             rows.append("Share Text")
-        }
-        // Dictionary pass over the stored transcript — only a done
-        // transcript carrying token timings can be re-scored without
-        // re-listening, and there must be dictionary words to apply.
-        if let entry, entry.isDone, !entry.text.isEmpty,
-           let timings = entry.timings, !timings.isEmpty,
-           !transcription.dictionaryTerms.isEmpty {
-            rows.append("Fix Names")
         }
         rows.append("Share")
         rows.append("Delete")
@@ -390,12 +375,6 @@ struct RecordingsListScreen: View {
         case "Share Text":
             shareTranscript(file)
             holdItem = nil
-        case "Fix Names":
-            // Rescore the stored transcript against the dictionary —
-            // runs in the background; the row shows "transcribing…" while
-            // busy, exactly like a transcription run.
-            holdItem = nil
-            transcription.reboost(file: file.id, sourceURL: file.url)
         case "Share":
             shareItem = file.url
             holdItem = nil
@@ -933,235 +912,3 @@ struct RecordingsTrashScreen: View {
     }
 }
 
-/// The transcription custom dictionary: names and jargon the ASR
-/// commonly mishears, rescored against the CTC keyword spotter after
-/// every transcription ("Fix Names" re-runs it on old transcripts).
-/// "Add Word" opens a touch-keyboard entry row; hold a word to delete.
-/// The first word kicks off the one-time CTC model download (~100 MB),
-/// with its progress shown as a status row.
-struct DictionaryScreen: View {
-    @Environment(AppModel.self) private var model
-    @EnvironmentObject private var settings: AppSettings
-    /// Highlighted row index.
-    @State private var selection = 0
-    /// Whether the add-word entry bar is showing.
-    @State private var adding = false
-    /// Text of the word being typed.
-    @State private var term = ""
-    /// Keyboard focus for the entry field. Tracked separately so MENU
-    /// dismisses the keyboard first and only pops on a second press.
-    @FocusState private var focused: Bool
-    /// Word awaiting the delete-confirm panel.
-    @State private var deleteCandidate: String?
-    /// Delete-panel row: 0 = Delete, 1 = Cancel (preselected so a stray
-    /// center press can't remove a word).
-    @State private var deleteSelection = 1
-
-    /// Shortcut to the shared transcription manager (terms + model state).
-    private var transcription: TranscriptionManager { TranscriptionManager.shared }
-
-    /// Rows: the add-word action on top, then the dictionary words, then
-    /// (while downloading or failed) a speech-model status row.
-    private var items: [MenuItem] {
-        var rows = [MenuItem(id: "hdr.add", title: "Add Word", symbol: "plus.circle.fill", showsChevron: false, isActionRow: true)]
-        rows += transcription.dictionaryTerms.map { word in
-            MenuItem(id: word, title: word, showsChevron: false)
-        }
-        switch transcription.vocabularyModelState {
-        case .downloading:
-            let progress: String
-            if case .downloading(_, let fraction) = transcription.vocabularyModelState,
-               let fraction {
-                progress = " \(Int(fraction * 100))%"
-            } else {
-                progress = ""
-            }
-            rows.append(MenuItem(id: "model.busy", title: "Speech Model",
-                                 detail: "Downloading\(progress)", showsChevron: false, isActionRow: true))
-        case .failed(let message):
-            rows.append(MenuItem(id: "model.retry", title: "Retry Download",
-                                 detail: message, showsChevron: false, isActionRow: true))
-        default:
-            break
-        }
-        return rows
-    }
-
-    /// Word list with the entry bar, delete panel layered above.
-    var body: some View {
-        ZStack {
-            VStack(spacing: 4) {
-                if adding {
-                    entryBar
-                }
-                MenuList(items: items, selection: selection, emptyText: "No Words")
-                    .frame(maxHeight: .infinity)
-            }
-            .padding(.top, 4)
-            if deleteCandidate != nil {
-                ModalHost { deletePanel }
-                    .zIndex(2)
-            }
-        }
-        .onWheel { handle($0) }
-    }
-
-    /// Word entry row (touch keyboard): plus icon, field, clear button.
-    private var entryBar: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "text.badge.plus")
-                .font(Theme.font(13, .semibold))
-                .foregroundStyle(Theme.inkDim)
-            TextField("Add a name or word", text: $term)
-                .focused($focused)
-                .font(Theme.font(13, .medium))
-                .foregroundStyle(Theme.ink)
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-                .submitLabel(.go)
-                .padding(.vertical, 4)
-                .environment(\.colorScheme, .dark)
-                .onSubmit { commitAdd() }
-            if !term.isEmpty {
-                Button {
-                    term = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(Theme.font(13))
-                        .foregroundStyle(Theme.inkDim)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color(white: 0.92))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.black.opacity(0.18), lineWidth: 0.8))
-        )
-        .padding(.horizontal, 6)
-        .onTapGesture { focused = true }
-    }
-
-    /// Delete / Cancel confirm for the held word — rows take taps as
-    /// well as the wheel (Cancel preselected either way).
-    private var deletePanel: some View {
-        ModalPanel(title: "Remove Word", onClose: { deleteCandidate = nil }) {
-            VStack(spacing: 0) {
-                MenuRow(item: MenuItem(id: "del.yes", title: "Delete", showsChevron: false), selected: deleteSelection == 0)
-                    .frame(height: 30.5)
-                    .onTapGesture { confirmRemove() }
-                MenuRow(item: MenuItem(id: "del.no", title: "Cancel", showsChevron: false), selected: deleteSelection == 1)
-                    .frame(height: 30.5)
-                    .onTapGesture { deleteCandidate = nil }
-            }
-            .padding(.top, 2)
-        }
-    }
-
-    /// Confirms the open Remove Word panel. Shared by the wheel's center
-    /// press and the panel row's tap.
-    private func confirmRemove() {
-        if let word = deleteCandidate {
-            transcription.removeDictionaryTerm(word)
-            if selection >= items.count { selection = max(0, items.count - 1) }
-        }
-        deleteCandidate = nil
-    }
-
-    /// Reveals the entry bar, cleared for a fresh word. Focusing during
-    /// the push transition corrupts the layout engine (SIGABRT in
-    /// NSISEngine) — same delayed-focus guard as the music search and
-    /// the article list.
-    private func beginAdd() {
-        adding = true
-        term = ""
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            focused = true
-        }
-    }
-
-    /// Commits the typed word: stored in the dictionary, the field
-    /// clears and stays open for the next one, and the one-time CTC
-    /// model download starts if it hasn't already (boosting needs it).
-    /// REC_DICT_NODOWNLOAD=1 (UI tests) skips the download kick-off.
-    private func commitAdd() {
-        let word = term.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !word.isEmpty else { return }
-        transcription.addDictionaryTerm(word)
-        term = ""
-        if transcription.vocabularyModelState != .ready,
-           ProcessInfo.processInfo.environment["REC_DICT_NODOWNLOAD"] != "1" {
-            Task { try? await transcription.ensureVocabularyModels() }
-        }
-    }
-
-    /// Wheel/button routing: open panels take precedence (delete → the
-    /// keyboard → the list). MENU steps back one level at a time
-    /// (keyboard first), center commits the word or opens panels.
-    private func handle(_ event: ControlEvent) {
-        if deleteCandidate != nil {
-            switch event {
-            case .tick(let d):
-                _ = d
-                deleteSelection = deleteSelection == 0 ? 1 : 0
-                WheelFeedback.tick(dir: d)
-            case .select:
-                if deleteSelection == 0 {
-                    confirmRemove()
-                } else {
-                    deleteCandidate = nil
-                }
-            case .menu, .menuHold:
-                deleteCandidate = nil
-            default:
-                break
-            }
-            return
-        }
-        if adding, focused {
-            // Keyboard up: wheel does nothing, center commits, MENU
-            // drops the keyboard (a second press pops).
-            switch event {
-            case .select:
-                commitAdd()
-            case .menu, .menuHold:
-                focused = false
-            default:
-                break
-            }
-            return
-        }
-        switch event {
-        case .tick(let d):
-            moveListSelection(&selection, count: items.count, delta: d, settings: settings)
-        case .select:
-            let item = items[min(selection, items.count - 1)]
-            switch item.id {
-            case "hdr.add":
-                beginAdd()
-            case "model.retry":
-                Task { try? await transcription.ensureVocabularyModels() }
-            default:
-                break
-            }
-        case .centerHold:
-            let item = items[min(selection, items.count - 1)]
-            if transcription.dictionaryTerms.contains(item.id) {
-                WheelHaptics.shared.ensureRunning()
-                WheelHaptics.shared.buttonPress(strength: 0.85)
-                deleteCandidate = item.id
-                deleteSelection = 1
-            }
-        case .menu:
-            if adding {
-                adding = false
-                focused = false
-            } else {
-                model.pop()
-            }
-        default:
-            break
-        }
-    }
-}

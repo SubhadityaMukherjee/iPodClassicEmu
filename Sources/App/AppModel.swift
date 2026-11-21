@@ -75,7 +75,6 @@ enum Route: Hashable {
     case recorder
     case recordings
     case recordingsTrash
-    case recordingsDictionary
     case recordingDetail(String)
     case transcript(String)
 
@@ -186,20 +185,11 @@ final class AppModel {
     let ringerBus = PassthroughSubject<ControlEvent, Never>()
 
     /// Creates the model and decides the launch state, in order: QA hooks
-    /// (READER_IMPORT, QA_DICT, QA_TRANSCRIBE, QA_TTS, START_ROUTE,
-    /// ALARM_ENABLE), first-run routing (tour → setup → home;
+    /// (READER_IMPORT, QA_TRANSCRIBE, QA_TTS, START_ROUTE, ALARM_ENABLE),
+    /// first-run routing (tour → setup → home;
     /// RESET_DEFAULTS skips the one-time screens), then either AUTOPLAY's
     /// shuffle play or the paused restore of the last playback session.
     init() {
-        // QA hook: QA_DICT=<comma-separated words> preloads the custom
-        // dictionary so QA_TRANSCRIBE exercises the boosting pass without
-        // keyboard entry on the device.
-        if let words = ProcessInfo.processInfo.environment["QA_DICT"] {
-            for word in words.split(separator: ",").map({ String($0).trimmingCharacters(in: .whitespaces) })
-            where !word.isEmpty {
-                TranscriptionManager.shared.addDictionaryTerm(word)
-            }
-        }
         // QA hook: READER_IMPORT imports a book from Documents before the
         // first frame (simulator checks against real EPUBs).
         if let name = ProcessInfo.processInfo.environment["READER_IMPORT"] {
@@ -318,7 +308,6 @@ final class AppModel {
         case "recorder": return .recorder
         case "recordings": return .recordings
         case "recordingsTrash": return .recordingsTrash
-        case "recordingsDictionary": return .recordingsDictionary
         case "transcript": return .transcript(QASeed.transcriptFileName)
         case "notes": return .notes
         case "noteEditor": return .noteEditor(QASeed.qaNoteName)

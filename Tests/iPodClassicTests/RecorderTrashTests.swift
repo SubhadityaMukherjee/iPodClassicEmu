@@ -55,7 +55,7 @@ final class RecorderTrashTests: XCTestCase {
         buf.frameLength = 22_050
         try! file.write(from: buf)
         TranscriptStore.save(TranscriptEntry(file: url.lastPathComponent, text: "hello from \(name)",
-                                             state: "done", date: Date(), secondsDone: 0.5, timings: nil))
+                                             state: "done", date: Date(), secondsDone: 0.5))
         recorder.loadRecordings()
         recorder.loadTrash()
         return RecordingFile(url: url, name: name, duration: 0.5, date: Date())
