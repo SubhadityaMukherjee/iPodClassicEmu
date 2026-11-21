@@ -804,10 +804,10 @@ struct BookScreen: View {
         let side: Double = sides[min(max(book?.margin ?? 1, 0), 2)]
         let lineHeights = [1.4, 1.55, 1.75]
         let lineHeight: Double = lineHeights[min(max(book?.lineSpacing ?? 1, 0), 2)]
-        let fontSize = Double(book?.fontSize ?? 17)
+        let fontSize = Double(book?.fontSize ?? 15)
         let viewW = epubController.webView?.bounds.width ?? 384
         let viewH = epubController.webView?.bounds.height ?? 251
-        let vPad = Double((book?.fontSize ?? 17) / 2 + 8)
+        let vPad = Double((book?.fontSize ?? 15) / 2 + 8)
         let pageW = max(120, viewW - 2 * side)
         let pageH = max(120, viewH - 2 * vPad)
         let charsPerLine = max(8, pageW / (fontSize * 0.44))
@@ -926,7 +926,7 @@ struct BookScreen: View {
             var rows = [readAloud, BookSetting(id: "view", title: "View", values: ["Continuous", "One Page", "Reflowed"],
                                     index: min(max(book.pdfMode, 0), 2))]
             if isReflow {
-                let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
+                let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 2
                 rows += [
                     BookSetting(id: "size", title: "Font Size", values: Self.fontSizes.map { "\($0) px" }, index: sizeIndex),
                     BookSetting(id: "family", title: "Font", values: ReaderStore.Book.fontFamilyNames,
@@ -940,7 +940,7 @@ struct BookScreen: View {
                                     index: min(max(book.dim, 0), 2)))
             return rows
         }
-        let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 3
+        let sizeIndex = Self.fontSizes.firstIndex(of: book.fontSize) ?? 2
         return [
             readAloud,
             BookSetting(id: "size", title: "Font Size", values: Self.fontSizes.map { "\($0) px" }, index: sizeIndex),

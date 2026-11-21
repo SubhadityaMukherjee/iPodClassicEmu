@@ -414,13 +414,12 @@ final class RecorderModel {
             buf.frameLength = 22_050  // half a second of silence
             try? file.write(from: buf)
         }
-        // Done sidecar entries so trashed rows show the ✓ transcript
-        // marker; timings stay nil (Fix Names is not part of these flows).
+        // Done sidecar entries so trashed rows show the ✓ transcript marker.
         for name in ["QA Recording One.m4a", "QA Recording Two.m4a"] {
             if TranscriptStore.entry(for: name) == nil {
                 TranscriptStore.save(TranscriptEntry(
                     file: name, text: "meeting with saurabh about the gateway project",
-                    state: "done", date: Date(), secondsDone: 0.5, timings: nil))
+                    state: "done", date: Date(), secondsDone: 0.5))
             }
         }
     }

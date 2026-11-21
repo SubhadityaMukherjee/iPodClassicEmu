@@ -1,7 +1,7 @@
 import XCTest
 
 /// End-to-end checks over real wheel/touch events for the recorder's
-/// Recently Deleted screen and the transcription Custom Dictionary.
+/// Recently Deleted screen E2E (delete → restore, delete-forever).
 /// Seeded via REC_SEED=1 (two fixed QA memos); navigation happens with
 /// START_ROUTE. List rows are wheel-driven (no touch handlers), while
 /// the modal panels' rows accept taps — the tests mirror that split.
@@ -123,35 +123,5 @@ final class RecordingsE2ETests: XCTestCase {
         // A fresh launch confirms nothing came back.
         let again = launch(start: "recordingsTrash")
         XCTAssertTrue(again.staticTexts["Trash Empty"].waitForExistence(timeout: 5))
-    }
-
-    // MARK: Custom Dictionary
-
-    @MainActor
-    func testDictionaryAddAndRemoveWord() {
-        // REC_DICT_NODOWNLOAD keeps the ~100 MB CTC download out of the
-        // test run — the screen logic is what's under test here.
-        let app = launch(start: "recordingsDictionary",
-                         extra: ["REC_DICT_NODOWNLOAD": "1"])
-        XCTAssertTrue(app.staticTexts["Add Word"].waitForExistence(timeout: 5),
-                      "dictionary screen did not render")
-        // Center tap on "Add Word" (row 0) opens the touch entry bar.
-        centerTap(wheel(app))
-        let field = app.textFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 3), "entry bar did not appear")
-        field.tap()
-        app.typeText("Saurabh\n")
-        XCTAssertTrue(app.staticTexts["Saurabh"].waitForExistence(timeout: 3),
-                      "committed word did not become a row")
-        // Drop the keyboard (MENU with focus = dismiss only), then move
-        // the wheel selection onto the word and hold center for the
-        // Remove Word panel.
-        menu(wheel(app))
-        tick(wheel(app))
-        centerHold(wheel(app))
-        XCTAssertTrue(app.staticTexts["Delete"].waitForExistence(timeout: 3),
-                      "remove panel did not open")
-        app.staticTexts["Delete"].firstMatch.tap()
-        XCTAssertFalse(app.staticTexts["Saurabh"].exists, "word was not removed")
     }
 }

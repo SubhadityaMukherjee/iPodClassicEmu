@@ -63,11 +63,12 @@ final class ReaderStore {
             case pdfContinuousLegacy = "pdfContinuous"
         }
 
-        /// Creates a record with reading defaults: start of book, 17 px
-        /// body text, normal spacing/margins — and `scrollStep` 0 (one
-        /// page per wheel tick; larger defaults made fresh books skip).
+        /// Creates a record with reading defaults: start of book, 15 px
+        /// Iowan body text (user preference, 2026-11-21), normal
+        /// spacing/margins — and `scrollStep` 0 (one page per wheel tick;
+        /// larger defaults made fresh books skip).
         init(id: String, kind: Kind, title: String, chapterIndex: Int = 0,
-             scrollFraction: Double = 0, fontSize: Int = 17, fontFamily: Int = 0,
+             scrollFraction: Double = 0, fontSize: Int = 15, fontFamily: Int = 2,
              lineSpacing: Int = 1, margin: Int = 1, scrollStep: Int = 0,
              pdfMode: Int = 0, reflowChapter: Int = 0, reflowFraction: Double = 0,
              dim: Int = 0, sourceURL: String? = nil) {
@@ -95,8 +96,8 @@ final class ReaderStore {
             title = try c.decode(String.self, forKey: .title)
             chapterIndex = try c.decodeIfPresent(Int.self, forKey: .chapterIndex) ?? 0
             scrollFraction = try c.decodeIfPresent(Double.self, forKey: .scrollFraction) ?? 0
-            fontSize = try c.decodeIfPresent(Int.self, forKey: .fontSize) ?? 17
-            fontFamily = try c.decodeIfPresent(Int.self, forKey: .fontFamily) ?? 0
+            fontSize = try c.decodeIfPresent(Int.self, forKey: .fontSize) ?? 15
+            fontFamily = try c.decodeIfPresent(Int.self, forKey: .fontFamily) ?? 2
             lineSpacing = try c.decodeIfPresent(Int.self, forKey: .lineSpacing) ?? 1
             margin = try c.decodeIfPresent(Int.self, forKey: .margin) ?? 1
             scrollStep = try c.decodeIfPresent(Int.self, forKey: .scrollStep) ?? 0
@@ -213,6 +214,18 @@ final class ReaderStore {
             }
             persist()
             d.set(true, forKey: "reader.newBookStepMigrated")
+        }
+        // One-time: the reading defaults moved to 15 px Iowan (user
+        // preference, 2026-11-21). Books still sitting on the old default
+        // (17 px Serif) adopt it; books the user set differently keep
+        // their choice.
+        if !d.bool(forKey: "reader.fontDefaultMigrated") {
+            for i in books.indices where books[i].fontSize == 17 && books[i].fontFamily == 0 {
+                books[i].fontSize = 15
+                books[i].fontFamily = 2
+            }
+            persist()
+            d.set(true, forKey: "reader.fontDefaultMigrated")
         }
         // Registry-loss self-heal: the registry lives in UserDefaults,
         // which QA hooks (RESET_DEFAULTS=1) and other defaults resets can
@@ -406,7 +419,7 @@ final class ReaderStore {
         }
 
         let book = Book(id: id, kind: kind, title: base,
-                        chapterIndex: 0, scrollFraction: 0, fontSize: 17,
+                        chapterIndex: 0, scrollFraction: 0,
                         pdfMode: pdfMode)
         books.insert(book, at: 0)
         persist()
